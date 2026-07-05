@@ -1,0 +1,2024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homepage YAML Editor</title>
+    <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
+    <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --container-bg: #2d2d2d;
+            --text-color: #e0e0e0;
+            --tab-bg: #3c3c3c;
+            --tab-active-bg: #4CAF50;
+            --tab-active-text: white;
+            --border-color: #555;
+            --preview-bg: #3a3a3a;
+            --config-item-bg: #404040;
+            --group-title-color: #ffffff;
+            --error-color: #ff6b6b;
+            --button-bg: #2196F3;
+            --button-hover: #1e88e5;
+            --syntax-key: #7dd3fc;
+            --syntax-string: #86efac;
+            --syntax-number: #fbbf24;
+            --syntax-boolean: #c4b5fd;
+            --syntax-comment: #9ca3af;
+            --syntax-marker: #f87171;
+        }
+
+        .light-mode {
+            --bg-color: #f5f5f5;
+            --container-bg: white;
+            --text-color: #333;
+            --tab-bg: #f8f9fa;
+            --tab-active-bg: #4CAF50;
+            --tab-active-text: white;
+            --border-color: #ddd;
+            --preview-bg: #f9f9f9;
+            --config-item-bg: white;
+            --group-title-color: #333;
+            --error-color: red;
+            --button-bg: #4CAF50;
+            --button-hover: #45a049;
+            --syntax-key: #0f766e;
+            --syntax-string: #15803d;
+            --syntax-number: #b45309;
+            --syntax-boolean: #7c3aed;
+            --syntax-comment: #6b7280;
+            --syntax-marker: #dc2626;
+        }
+
+        html,
+        body {
+            background-color: #1a1a1a;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            background-image: linear-gradient(135deg, rgba(0,0,0,0.02) 25%, transparent 25%), 
+                              linear-gradient(225deg, rgba(0,0,0,0.02) 25%, transparent 25%),
+                              linear-gradient(315deg, rgba(0,0,0,0.02) 25%, transparent 25%),
+                              linear-gradient(45deg, rgba(0,0,0,0.02) 25%, transparent 25%);
+            background-size: 20px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: var(--container-bg);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 25px;
+        }
+        .preview-container {
+            background-color: var(--preview-bg);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        h1 {
+            color: var(--text-color);
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            font-weight: 600;
+        }
+        .editor-container {
+            display: flex;
+            gap: 25px;
+            margin-top: 25px;
+            align-items: stretch;
+        }
+        .editor-section {
+            background-color: var(--config-item-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border: 1px solid var(--border-color);
+        }
+        .editor-options {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        .editor-options label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .editor-wrapper {
+            display: flex;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            background-color: var(--container-bg);
+        }
+        .editor-code-pane {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+            background-color: var(--container-bg);
+        }
+        .line-numbers {
+            width: 44px;
+            padding: 12px 4px 12px 6px;
+            border-right: 1px solid var(--border-color);
+            background-color: var(--preview-bg);
+            color: var(--text-color);
+            opacity: 0.75;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: right;
+            user-select: none;
+            overflow: hidden;
+            white-space: pre;
+            margin: 0;
+            box-sizing: border-box;
+            display: block;
+        }
+        .syntax-highlight {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            margin: 0;
+            padding: 12px;
+            border: 0;
+            box-sizing: border-box;
+            overflow: hidden;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text-color);
+            pointer-events: none;
+        }
+        .yaml-key {
+            color: var(--syntax-key);
+            font-weight: 600;
+        }
+        .yaml-string {
+            color: var(--syntax-string);
+        }
+        .yaml-number {
+            color: var(--syntax-number);
+        }
+        .yaml-boolean,
+        .yaml-null {
+            color: var(--syntax-boolean);
+            font-weight: 600;
+        }
+        .yaml-comment {
+            color: var(--syntax-comment);
+            font-style: italic;
+        }
+        .yaml-marker {
+            color: var(--syntax-marker);
+            font-weight: 600;
+        }
+        textarea {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            min-height: 0;
+            height: auto;
+            font-family: monospace;
+            padding: 12px;
+            border: 0;
+            border-radius: 0;
+            background-color: transparent;
+            color: transparent;
+            caret-color: var(--text-color);
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: pre;
+            overflow-wrap: normal;
+            word-break: normal;
+            margin: 0;
+            box-sizing: border-box;
+        }
+        textarea::selection {
+            background-color: rgba(33, 150, 243, 0.32);
+            color: transparent;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 25px;
+            padding: 20px;
+            background-color: var(--config-item-bg);
+            border-radius: 8px 8px 0 0;
+            box-shadow: none;
+            border: 1px solid var(--border-color);
+            border-bottom: 0;
+            margin-bottom: 0;
+        }
+        .controls + .config-tabs {
+            margin-top: 0;
+            border-top: 0;
+            border-radius: 0 0 8px 8px;
+            box-shadow: none;
+        }
+        .controls + .config-tabs .tab {
+            border-radius: 0;
+        }
+        .controls + .config-tabs .tab.active::after {
+            bottom: -1px;
+        }
+        .controls + .config-tabs + .preview-section {
+            margin-top: 20px;
+        }
+        button {
+            background-color: var(--button-bg);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        .theme-toggle {
+            background-color: var(--button-bg);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px 15px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        .theme-toggle:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .config-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 2px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid var(--border-color);
+            background-color: var(--config-item-bg);
+            border-radius: 8px 8px 0 0;
+            padding: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .tab {
+            padding: 14px 28px;
+            cursor: pointer;
+            background-color: var(--tab-bg);
+            border: none;
+            border-radius: 8px 8px 0 0;
+            margin-right: 0;
+            font-weight: 500;
+            font-size: 1.05em;
+            transition: all 0.2s ease;
+        }
+        .tab.active {
+            background-color: var(--tab-active-bg);
+            color: var(--tab-active-text);
+            position: relative;
+        }
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: var(--tab-active-bg);
+        }
+        .tab:hover:not(.active) {
+            background-color: var(--preview-bg);
+            transform: translateY(-2px);
+        }
+        .preview-section {
+            margin-top: 25px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--preview-bg);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .preview-section.homepage-preview {
+            min-height: 420px;
+        }
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .preview-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: var(--group-title-color);
+        }
+        .refresh-btn {
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        .refresh-btn:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .refresh-btn:disabled {
+            background-color: var(--border-color);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .visual-preview {
+            display: grid;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        #visual-preview > div:not(.config-group):not(.error-message) {
+            padding: 20px;
+            text-align: center;
+            font-style: italic;
+            color: var(--text-color);
+            background-color: var(--config-item-bg);
+            border-radius: 6px;
+        }
+        .config-item {
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--config-item-bg);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+            margin-bottom: 10px;
+        }
+        .config-group {
+            margin-bottom: 25px;
+            background-color: var(--config-item-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border: 1px solid var(--border-color);
+        }
+        .group-title {
+            font-weight: 600;
+            color: var(--group-title-color);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            font-size: 1.15em;
+        }
+        .service-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px dashed var(--border-color);
+            transition: background-color 0.2s ease;
+        }
+        .service-item:last-child {
+            border-bottom: none;
+        }
+        .service-item:hover {
+            background-color: rgba(0,0,0,0.03);
+        }
+        .service-name {
+            font-weight: 500;
+        }
+        .service-url {
+            color: var(--text-color);
+            font-size: 0.9em;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-all;
+        }
+        .widget-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+            padding-left: 10px;
+        }
+        .widget-block {
+            background-color: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.8em;
+            color: var(--tab-active-bg);
+            font-weight: 500;
+        }
+        .settings-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .layout-group {
+            background-color: var(--config-item-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .layout-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--group-title-color);
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .layout-property {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            padding: 4px 0;
+        }
+        .property-key {
+            font-weight: 500;
+            color: var(--text-color);
+        }
+        .property-value {
+            color: var(--text-color);
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+        .service-description {
+            font-size: 0.85em;
+            color: var(--text-color);
+            margin-top: 5px;
+            padding-left: 10px;
+            font-style: italic;
+        }
+        .config-group-sub {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed var(--border-color);
+        }
+        .group-title-sub {
+            font-weight: 500;
+            color: var(--group-title-color);
+            margin-bottom: 8px;
+        }
+        .error-message {
+            color: var(--error-color);
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 6px;
+            background-color: rgba(255, 0, 0, 0.05);
+            border: 1px solid var(--error-color);
+        }
+        .error-message {
+            color: var(--error-color);
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 6px;
+            background-color: rgba(255, 0, 0, 0.05);
+            border: 1px solid var(--error-color);
+        }
+        .dashboard-shell {
+            display: grid;
+            gap: 14px;
+        }
+        .dashboard-top {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .preview-tab-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .preview-tab-btn {
+            border: 1px solid var(--border-color);
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.85em;
+            cursor: pointer;
+        }
+        .preview-tab-btn.active {
+            background: var(--tab-active-bg);
+            color: var(--tab-active-text);
+            border-color: var(--tab-active-bg);
+        }
+        .dashboard-stat {
+            background: var(--config-item-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .dashboard-stat span {
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+        .dashboard-stat strong {
+            font-size: 1.2em;
+        }
+        .dashboard-errors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .dashboard-pill {
+            border: 1px solid var(--border-color);
+            background: var(--config-item-bg);
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 0.8em;
+        }
+        .dashboard-pill.error {
+            border-color: var(--error-color);
+            color: var(--error-color);
+        }
+        .dashboard-widgets,
+        .dashboard-bookmarks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px 0;
+        }
+        .bookmark-chip {
+            text-decoration: none;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            background: var(--config-item-bg);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.85em;
+        }
+        .dashboard-grid {
+            display: grid;
+            gap: 12px;
+        }
+        .dashboard-group {
+            background: var(--config-item-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .dashboard-group-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            list-style: none;
+            margin-bottom: 0;
+        }
+        .dashboard-group-title::-webkit-details-marker {
+            display: none;
+        }
+        .dashboard-group-title::after {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            opacity: 0.75;
+            transform: rotate(45deg);
+            transition: transform 0.15s ease;
+            margin-left: auto;
+            flex: 0 0 auto;
+        }
+        .dashboard-group[open] > .dashboard-group-title {
+            margin-bottom: 10px;
+        }
+        .dashboard-group[open] > .dashboard-group-title::after {
+            transform: rotate(225deg);
+        }
+        .dashboard-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+        }
+        .dashboard-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            background: var(--preview-bg);
+        }
+        .preview-jump-target {
+            cursor: pointer;
+        }
+        .preview-jump-target:hover {
+            outline: 2px solid var(--tab-active-bg);
+            outline-offset: 2px;
+        }
+        .editor-section.source-flash {
+            box-shadow: 0 0 0 3px var(--tab-active-bg), 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .dashboard-card-heading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            min-width: 0;
+        }
+        .dashboard-icon {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+            flex: 0 0 auto;
+        }
+        .dashboard-group-title .dashboard-icon {
+            width: 22px;
+            height: 22px;
+        }
+        .dashboard-card-title {
+            font-weight: 600;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        .dashboard-card-url {
+            font-size: 0.82em;
+            opacity: 0.85;
+            word-break: break-all;
+            margin-bottom: 6px;
+        }
+        .dashboard-card-desc {
+            font-size: 0.82em;
+            opacity: 0.9;
+        }
+        .dashboard-empty {
+            padding: 10px;
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+        .file-controls {
+            margin-bottom: 25px;
+            text-align: center;
+            padding: 20px;
+            background-color: var(--config-item-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border: 1px solid var(--border-color);
+        }
+        input[type="file"] {
+            margin: 10px;
+        }
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        .theme-toggle:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        /* Modal Styles */
+        #directoryModal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--container-bg);
+            margin: auto;
+            padding: 30px;
+            border: none;
+            width: 80%;
+            max-width: 600px;
+            color: var(--text-color);
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        
+        .modal-input {
+            width: 100%;
+            padding: 14px;
+            margin: 20px 0;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--container-bg);
+            color: var(--text-color);
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        .modal-button {
+            padding: 12px 24px;
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        
+        .modal-button:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .floating-nav {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 900;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .floating-nav.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .floating-nav button {
+            width: 52px;
+            height: 52px;
+            margin: 0;
+            padding: 0;
+            border-radius: 999px;
+            font-size: 22px;
+            font-weight: 600;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-nav" id="floating-nav">
+        <button type="button" onclick="scrollToTop()" aria-label="Scroll to top" title="Scroll to top">↑</button>
+        <button type="button" onclick="scrollToPreview()" aria-label="Scroll to homepage preview" title="Scroll to homepage preview">⌂</button>
+    </div>
+    <div class="container">
+        <h1>Homepage YAML Editor</h1>
+        
+        <button class="theme-toggle" id="themeToggle">Switch to Light Mode</button>
+        
+        <div class="file-controls">
+            <input type="file" id="yaml-dir-input" webkitdirectory directory multiple accept=".yaml,.yml" style="display:none;">
+            <button onclick="handleLoadDirectory()">Load Directory</button>
+            <button onclick="downloadAllConfigs()">Download All Configs</button>
+        </div>
+        
+        <p id="directory-info" style="text-align:center; margin: 15px 0; padding: 15px; background-color: var(--config-item-bg); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">No directory loaded. Click "Load Directory" to load YAML configuration files from a server path.<br><small>Supports bookmarks.yaml, settings.yaml, services.yaml and widgets.yaml</small></p>
+        
+        <div class="controls">
+            <button id="reset-sample-button" onclick="resetToSample()">Reset to Sample</button>
+            <button onclick="saveConfig()">Save Configuration</button>
+            <button onclick="downloadAllConfigs()">Download All</button>
+        </div>
+        <div class="config-tabs">
+
+            <div class="tab active" data-tab="services" onclick="switchTab('services', event)">Services</div>
+            <div class="tab" data-tab="settings" onclick="switchTab('settings', event)">Settings</div>
+            <div class="tab" data-tab="bookmarks" onclick="switchTab('bookmarks', event)">Bookmarks</div>
+            <div class="tab" data-tab="widgets" onclick="switchTab('widgets', event)">Widgets</div>
+        </div>
+        
+        <div class="editor-section">
+            <div class="editor-options">
+                <label><input type="checkbox" id="auto-indent-toggle" checked> Auto Indent</label>
+            </div>
+            <div class="editor-wrapper">
+                <pre id="line-numbers" class="line-numbers">1</pre>
+                <div class="editor-code-pane">
+                    <pre id="yaml-highlight" class="syntax-highlight" aria-hidden="true"></pre>
+                    <textarea id="yaml-editor" spellcheck="false"></textarea>
+                </div>
+            </div>
+        </div>
+        
+        <div class="preview-section homepage-preview" id="homepage-preview-section">
+            <div class="preview-header">
+                <div class="preview-title">Homepage Preview</div>
+                <button class="refresh-btn" onclick="refreshPreview()">Refresh Preview</button>
+            </div>
+            <div id="visual-preview"></div>
+        </div>
+        
+    </div>
+
+    <!-- Modal for directory path input -->
+    <div id="directoryModal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>Load Configuration Directory</h3>
+                <span onclick="closeDirectoryModal()" style="cursor: pointer; font-size: 24px;">&times;</span>
+            </div>
+            <p>Please enter the server path to your configuration directory containing YAML files:</p>
+            <input type="text" id="serverPathInput" placeholder="/path/to/configs" class="modal-input" />
+            <div style="display: flex; justify-content: space-between;">
+                <button onclick="closeDirectoryModal()" class="modal-button">Cancel</button>
+                <button onclick="loadFromServerPath()" class="modal-button">Load Directory</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <script>
+        // Sample homepage configuration files
+        const sampleConfigs = {
+            services: `# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/services/
+
+- My First Group:
+    - My First Service:
+        href: http://localhost/
+        description: Homepage is awesome
+
+- My Second Group:
+    - My Second Service:
+        href: http://localhost/
+        description: Homepage is the best`,
+                    
+            settings: `# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/settings/
+
+providers:
+  openweathermap: openweathermapapikey
+  weatherapi: weatherapiurl`,
+                    
+            bookmarks: `- My First Bookmark:
+    href: http://localhost/
+    description: Homepage is awesome
+    
+- My Second Bookmark:
+    href: http://localhost/
+    description: Homepage is the best`,
+                    
+            widgets: `# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/widgets/
+
+- weather:
+    location: London
+    units: metric
+- clock:
+    format: 12h`
+        };
+
+        let currentTab = 'services';
+        let loadedFiles = {};
+        let originalLoadedFiles = {};
+        let loadedFileNames = {
+            services: 'services.yaml',
+            settings: 'settings.yaml',
+            bookmarks: 'bookmarks.yaml',
+            widgets: 'widgets.yaml'
+        };
+        let currentDirectoryPath = null;
+        let previewHomepageTab = null;
+
+        const fileToTabMapping = {
+            'services.yaml': 'services',
+            'services.yml': 'services',
+            'settings.yaml': 'settings',
+            'settings.yml': 'settings',
+            'bookmarks.yaml': 'bookmarks',
+            'bookmarks.yml': 'bookmarks',
+            'widgets.yaml': 'widgets',
+            'widgets.yml': 'widgets'
+        };
+
+        function normalizeLoadedFiles(files) {
+            const normalizedFiles = {};
+            const normalizedFileNames = { ...loadedFileNames };
+
+            Object.entries(files || {}).forEach(([filename, content]) => {
+                const tabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
+                if (tabName) {
+                    normalizedFiles[tabName] = content;
+                    normalizedFileNames[tabName] = filename;
+                }
+            });
+
+            return { files: normalizedFiles, fileNames: normalizedFileNames };
+        }
+
+        function rememberCurrentEditorValue() {
+            if (currentTab) {
+                loadedFiles[currentTab] = document.getElementById('yaml-editor').value;
+            }
+        }
+        
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function scrollToPreview() {
+            const previewSection = document.getElementById('homepage-preview-section');
+            if (previewSection) {
+                previewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function updateFloatingNavVisibility() {
+            const floatingNav = document.getElementById('floating-nav');
+            if (!floatingNav) {
+                return;
+            }
+            floatingNav.classList.toggle('visible', window.scrollY > 200);
+        }
+
+        function switchTab(tabName, event, options = {}) {
+            if (!options.skipRemember) {
+                rememberCurrentEditorValue();
+            }
+            currentTab = tabName;
+            
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            
+            if (event && event.target) {
+                event.target.classList.add('active');
+            } else {
+                const activeTabElement = document.querySelector(`.tab[data-tab="${tabName}"]`);
+                if (activeTabElement) {
+                    activeTabElement.classList.add('active');
+                }
+            }
+            
+            let contentToSet;
+            try {
+                if (loadedFiles && Object.prototype.hasOwnProperty.call(loadedFiles, tabName)) {
+                    const fileContent = loadedFiles[tabName];
+                    
+                    if (typeof fileContent === 'object' && fileContent !== null) {
+                        try {
+                            contentToSet = jsyaml.dump(fileContent);
+                        } catch (err) {
+                            contentToSet = String(fileContent || '');
+                        }
+                    } else {
+                        contentToSet = String(fileContent || '');
+                    }
+                } else {
+                    contentToSet = sampleConfigs[tabName];
+                }
+            } catch (e) {
+                console.warn("SwitchTab error for tab " + tabName + ", using sample");
+                contentToSet = sampleConfigs[tabName];
+            }
+            
+            document.getElementById('yaml-editor').value = String(contentToSet || '');
+            updatePreview();
+        }
+
+        function resetToSample() {
+            document.getElementById('yaml-editor').value = sampleConfigs[currentTab];
+            updatePreview();
+        }
+
+        function setResetSampleVisible(isVisible) {
+            const resetButton = document.getElementById('reset-sample-button');
+            if (resetButton) {
+                resetButton.style.display = isVisible ? '' : 'none';
+            }
+        }
+
+        async function saveConfig() {
+            const yamlText = document.getElementById('yaml-editor').value;
+            const existingYamlText = Object.prototype.hasOwnProperty.call(originalLoadedFiles, currentTab)
+                ? String(originalLoadedFiles[currentTab] || '')
+                : String(sampleConfigs[currentTab] || '');
+            
+            try {
+                jsyaml.load(yamlText);
+
+                if (yamlText === existingYamlText) {
+                    alert('No changes to save for this file.');
+                    return;
+                }
+
+                if (currentDirectoryPath) {
+                    const response = await fetch('/api/directory/file/save', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            dirPath: currentDirectoryPath,
+                            filename: loadedFileNames[currentTab] || `${currentTab}.yaml`,
+                            content: yamlText
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    if (!response.ok || data.error) {
+                        const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to save file');
+                        alert(`Error saving file: ${message}`);
+                    } else {
+                        loadedFiles[currentTab] = yamlText;
+                        originalLoadedFiles[currentTab] = yamlText;
+                        alert(data.message || 'Configuration saved successfully!');
+                    }
+                } else {
+                    const response = await fetch('/api/config/save', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            filename: `${currentTab}.yaml`,
+                            content: yamlText
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    if (!response.ok || data.error) {
+                        const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to save file');
+                        alert(`Error saving file: ${message}`);
+                    } else {
+                        loadedFiles[currentTab] = yamlText;
+                        originalLoadedFiles[currentTab] = yamlText;
+                        alert(data.message || 'Configuration saved successfully!');
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error occurred while trying to save the configuration: ${error.message}`);
+            }
+        }
+
+        async function downloadAllConfigs() {
+            try {
+                rememberCurrentEditorValue();
+                const filesForDownload = ['services', 'settings', 'bookmarks', 'widgets'].reduce((files, tabName) => {
+                    files[loadedFileNames[tabName] || `${tabName}.yaml`] = getTabYamlText(tabName);
+                    return files;
+                }, {});
+                const blob = createZipBlob(filesForDownload);
+                const filename = `homepage-config-${new Date().toISOString().slice(0, 10)}.zip`;
+                const downloadUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(downloadUrl);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error occurred while trying to download configurations');
+            }
+        }
+
+        function makeCrc32Table() {
+            const table = new Uint32Array(256);
+            for (let i = 0; i < 256; i++) {
+                let value = i;
+                for (let bit = 0; bit < 8; bit++) {
+                    value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+                }
+                table[i] = value >>> 0;
+            }
+            return table;
+        }
+
+        const crc32Table = makeCrc32Table();
+
+        function getCrc32(bytes) {
+            let crc = 0xffffffff;
+            for (const byte of bytes) {
+                crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+            }
+            return (crc ^ 0xffffffff) >>> 0;
+        }
+
+        function writeUint16(bytes, value) {
+            bytes.push(value & 0xff, (value >>> 8) & 0xff);
+        }
+
+        function writeUint32(bytes, value) {
+            bytes.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+        }
+
+        function getZipDateParts(date) {
+            const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+            const dosDate = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+            return { dosTime, dosDate };
+        }
+
+        function createZipBlob(files) {
+            const encoder = new TextEncoder();
+            const localParts = [];
+            const centralParts = [];
+            let offset = 0;
+            const { dosTime, dosDate } = getZipDateParts(new Date());
+
+            Object.entries(files).forEach(([filename, content]) => {
+                const nameBytes = encoder.encode(filename);
+                const contentBytes = encoder.encode(String(content || ''));
+                const crc = getCrc32(contentBytes);
+                const localHeader = [];
+
+                writeUint32(localHeader, 0x04034b50);
+                writeUint16(localHeader, 20);
+                writeUint16(localHeader, 0);
+                writeUint16(localHeader, 0);
+                writeUint16(localHeader, dosTime);
+                writeUint16(localHeader, dosDate);
+                writeUint32(localHeader, crc);
+                writeUint32(localHeader, contentBytes.length);
+                writeUint32(localHeader, contentBytes.length);
+                writeUint16(localHeader, nameBytes.length);
+                writeUint16(localHeader, 0);
+                localParts.push(new Uint8Array(localHeader), nameBytes, contentBytes);
+
+                const centralHeader = [];
+                writeUint32(centralHeader, 0x02014b50);
+                writeUint16(centralHeader, 20);
+                writeUint16(centralHeader, 20);
+                writeUint16(centralHeader, 0);
+                writeUint16(centralHeader, 0);
+                writeUint16(centralHeader, dosTime);
+                writeUint16(centralHeader, dosDate);
+                writeUint32(centralHeader, crc);
+                writeUint32(centralHeader, contentBytes.length);
+                writeUint32(centralHeader, contentBytes.length);
+                writeUint16(centralHeader, nameBytes.length);
+                writeUint16(centralHeader, 0);
+                writeUint16(centralHeader, 0);
+                writeUint16(centralHeader, 0);
+                writeUint16(centralHeader, 0);
+                writeUint32(centralHeader, 0);
+                writeUint32(centralHeader, offset);
+                centralParts.push(new Uint8Array(centralHeader), nameBytes);
+
+                offset += localHeader.length + nameBytes.length + contentBytes.length;
+            });
+
+            const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+            const endRecord = [];
+            writeUint32(endRecord, 0x06054b50);
+            writeUint16(endRecord, 0);
+            writeUint16(endRecord, 0);
+            writeUint16(endRecord, Object.keys(files).length);
+            writeUint16(endRecord, Object.keys(files).length);
+            writeUint32(endRecord, centralSize);
+            writeUint32(endRecord, offset);
+            writeUint16(endRecord, 0);
+
+            return new Blob([...localParts, ...centralParts, new Uint8Array(endRecord)], { type: 'application/zip' });
+        }
+
+        function triggerDirectorySelect() {
+            // Trigger the hidden file input (this will prompt directory selection in supported browsers)
+            document.getElementById('yaml-dir-input').click();
+        }
+
+        // Initialize with services tab and sample data
+        window.onload = async function() {
+            applyTheme(true);
+            
+            loadedFiles = {
+                'services': sampleConfigs.services,
+                'settings': sampleConfigs.settings, 
+                'bookmarks': sampleConfigs.bookmarks,
+                'widgets': sampleConfigs.widgets
+            };
+            originalLoadedFiles = { ...loadedFiles };
+            
+            document.getElementById('yaml-editor').value = sampleConfigs.services;
+            updatePreview();
+
+            try {
+                const response = await fetch('/api/startup-directory');
+                const startup = await response.json();
+
+                if (startup.hasStartupDirectory && startup.directory && startup.files) {
+                    const normalized = normalizeLoadedFiles(startup.files);
+                    loadedFiles = normalized.files;
+                    originalLoadedFiles = { ...normalized.files };
+                    loadedFileNames = normalized.fileNames;
+                    currentDirectoryPath = startup.directory;
+
+                    document.getElementById('directory-info').innerHTML = 
+                        `<strong>Loaded from:</strong> ${currentDirectoryPath}<br>
+                         <small>${Object.keys(startup.files).length} of 4 files loaded</small><br>
+                         <small>Note: Server-side path loading completed successfully</small>`;
+
+                    setResetSampleVisible(false);
+                    switchTab('services', null, { skipRemember: true });
+                }
+            } catch (error) {
+                console.error('Startup directory load failed:', error);
+            }
+        };
+
+        // Directory loading via API calls to server (the only functional approach)
+        function handleLoadDirectory() {
+            openDirectoryModal();
+        }
+
+
+        function openDirectoryModal() {
+            document.getElementById('directoryModal').style.display = 'block';
+        }
+
+        function closeDirectoryModal() {
+            document.getElementById('directoryModal').style.display = 'none';
+        }
+
+        async function loadFromServerPath() {
+            const dirPath = document.getElementById('serverPathInput').value.trim();
+            if (!dirPath) {
+                alert('Please enter a directory path.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/directory/load', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ dirPath })
+                });
+
+                const data = await response.json();
+                if (!response.ok || data.error) {
+                    const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to load directory');
+                    alert(`Error loading directory: ${message}`);
+                    return;
+                }
+
+                const normalized = normalizeLoadedFiles(data.files);
+                loadedFiles = normalized.files;
+                originalLoadedFiles = { ...normalized.files };
+                loadedFileNames = normalized.fileNames;
+                currentDirectoryPath = data.directory;
+
+                document.getElementById('directory-info').innerHTML =
+                    `<strong>Loaded from:</strong> ${currentDirectoryPath}<br>
+                     <small>${Object.keys(data.files || {}).length} of 4 files loaded</small><br>
+                     <small>Note: Server-side path loading completed successfully</small>`;
+
+                closeDirectoryModal();
+                switchTab(currentTab, null, { skipRemember: true });
+            } catch (error) {
+                console.error('Directory load error:', error);
+                alert(`Error occurred while trying to load the directory: ${error.message}`);
+            }
+        }
+
+        function getTabYamlText(tabName) {
+            if (tabName === currentTab) {
+                return document.getElementById('yaml-editor').value;
+            }
+            const value = loadedFiles && Object.prototype.hasOwnProperty.call(loadedFiles, tabName)
+                ? loadedFiles[tabName]
+                : sampleConfigs[tabName];
+            if (typeof value === 'string') {
+                return value;
+            }
+            try {
+                return jsyaml.dump(value || {});
+            } catch (error) {
+                return String(value || '');
+            }
+        }
+
+        function parseTabConfig(tabName) {
+            const yamlText = getTabYamlText(tabName);
+            if (!yamlText || !yamlText.trim()) {
+                return { data: null, error: null };
+            }
+            try {
+                return { data: jsyaml.load(yamlText), error: null };
+            } catch (error) {
+                const parserLine = error && error.mark && typeof error.mark.line === 'number' ? error.mark.line + 1 : null;
+                const column = error && error.mark && typeof error.mark.column === 'number' ? error.mark.column + 1 : null;
+                const likelyLine = parserLine && parserLine > 1 ? parserLine - 1 : parserLine;
+                const cleaned = (error && error.message ? error.message.split('\n')[0] : 'Invalid YAML').replace(/^YAMLException:\s*/i, '');
+                return {
+                    data: null,
+                    error: {
+                        summary: cleaned,
+                        line: likelyLine,
+                        parserLine,
+                        column
+                    }
+                };
+            }
+        }
+
+        function getHomepageTabInfo(settingsData) {
+            const tabs = [];
+            const groupsByTab = {};
+            const groupLayout = {};
+            if (!settingsData || typeof settingsData !== 'object') {
+                return { tabs, groupsByTab, groupLayout };
+            }
+            const layout = settingsData.layout;
+            if (layout && typeof layout === 'object' && !Array.isArray(layout)) {
+                Object.entries(layout).forEach(([groupName, config]) => {
+                    if (config && typeof config === 'object') {
+                        groupLayout[groupName] = config;
+                    }
+                    if (config && typeof config === 'object' && typeof config.tab === 'string' && config.tab.trim()) {
+                        const tabName = config.tab.trim();
+                        if (!tabs.includes(tabName)) {
+                            tabs.push(tabName);
+                        }
+                        if (!groupsByTab[tabName]) {
+                            groupsByTab[tabName] = [];
+                        }
+                        groupsByTab[tabName].push(groupName);
+                    }
+                });
+            }
+            if (tabs.length > 0) {
+                return { tabs, groupsByTab, groupLayout };
+            }
+            const candidates = [settingsData.tabs, settingsData.tabbed, settingsData.views];
+            for (const candidate of candidates) {
+                if (!candidate) {
+                    continue;
+                }
+                if (Array.isArray(candidate)) {
+                    candidate.forEach((item) => {
+                        const tabName = typeof item === 'string'
+                            ? item
+                            : item && typeof item === 'object'
+                                ? item.name || item.label || item.title || Object.keys(item)[0]
+                                : null;
+                        if (tabName && !tabs.includes(tabName)) {
+                            tabs.push(tabName);
+                        }
+                    });
+                    break;
+                }
+                if (typeof candidate === 'object') {
+                    Object.keys(candidate).forEach((key) => {
+                        if (!tabs.includes(key)) {
+                            tabs.push(key);
+                        }
+                    });
+                    break;
+                }
+            }
+            return { tabs, groupsByTab, groupLayout };
+        }
+
+        function isInitiallyCollapsed(layoutConfig) {
+            if (!layoutConfig || typeof layoutConfig !== 'object') {
+                return false;
+            }
+            return layoutConfig.initiallyCollapsed === true
+                || String(layoutConfig.initiallyCollapsed).toLowerCase() === 'true';
+        }
+
+        function resolveIconUrl(icon) {
+            const iconName = String(icon || '').trim();
+            if (!iconName) {
+                return '';
+            }
+            if (/^https?:\/\//i.test(iconName)) {
+                return iconName;
+            }
+            if (iconName.startsWith('/')) {
+                return iconName;
+            }
+
+            const iconWithExtension = /\.[a-z0-9]+$/i.test(iconName)
+                ? iconName
+                : `${iconName}.png`;
+            const extensionMatch = iconWithExtension.match(/\.([a-z0-9]+)$/i);
+            const format = extensionMatch ? extensionMatch[1].toLowerCase() : 'png';
+            const supportedFormat = ['png', 'svg', 'webp'].includes(format) ? format : 'png';
+            const filename = iconWithExtension.split('/').map(encodeURIComponent).join('/');
+
+            return `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/${supportedFormat}/${filename}`;
+        }
+
+        function renderIcon(icon, label) {
+            const iconUrl = resolveIconUrl(icon);
+            if (!iconUrl) {
+                return '';
+            }
+            return `<img class="dashboard-icon" src="${escapeHtml(iconUrl)}" alt="" title="${escapeHtml(label || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">`;
+        }
+
+        function getYamlLines(tabName) {
+            return String(getTabYamlText(tabName) || '').replace(/\r\n/g, '\n').split('\n');
+        }
+
+        function getYamlKeyFromLine(line) {
+            const trimmed = String(line || '').trim();
+            const withoutListMarker = trimmed.startsWith('- ') ? trimmed.slice(2).trimStart() : trimmed;
+            const match = withoutListMarker.match(/^(['"]?)(.*?)\1\s*:/);
+            return match ? match[2] : null;
+        }
+
+        function getYamlIndent(line) {
+            const match = String(line || '').match(/^\s*/);
+            return match ? match[0].length : 0;
+        }
+
+        function findYamlKeyLine(tabName, key, options = {}) {
+            if (!key) {
+                return 1;
+            }
+
+            const lines = getYamlLines(tabName);
+            const startIndex = Math.max(0, (options.startLine || 1) - 1);
+            const endIndex = Math.min(lines.length, options.endLine || lines.length);
+            for (let index = startIndex; index < endIndex; index++) {
+                if (getYamlKeyFromLine(lines[index]) === key) {
+                    return index + 1;
+                }
+            }
+            return options.fallbackLine || 1;
+        }
+
+        function findNthYamlListKeyLine(tabName, key, occurrenceIndex, options = {}) {
+            const lines = getYamlLines(tabName);
+            const startIndex = Math.max(0, (options.startLine || 1) - 1);
+            const endIndex = Math.min(lines.length, options.endLine || lines.length);
+            let seen = 0;
+
+            for (let index = startIndex; index < endIndex; index++) {
+                const line = lines[index];
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('- ')) {
+                    continue;
+                }
+                if (typeof options.indent === 'number' && getYamlIndent(line) !== options.indent) {
+                    continue;
+                }
+                if (typeof options.minIndent === 'number' && getYamlIndent(line) < options.minIndent) {
+                    continue;
+                }
+                if (getYamlKeyFromLine(line) === key) {
+                    if (seen === occurrenceIndex) {
+                        return index + 1;
+                    }
+                    seen++;
+                }
+            }
+
+            return options.fallbackLine || findYamlKeyLine(tabName, key, options);
+        }
+
+        function findYamlGroupRange(tabName, groupName, occurrenceIndex = 0) {
+            const lines = getYamlLines(tabName);
+            const groupLine = findNthYamlListKeyLine(tabName, groupName, occurrenceIndex, { indent: 0 });
+            const groupIndex = Math.max(0, groupLine - 1);
+            const groupIndent = getYamlIndent(lines[groupIndex]);
+            let endLine = lines.length;
+
+            for (let index = groupIndex + 1; index < lines.length; index++) {
+                const line = lines[index];
+                if (!line.trim() || line.trim().startsWith('#')) {
+                    continue;
+                }
+                if (getYamlIndent(line) <= groupIndent && line.trim().startsWith('- ') && getYamlKeyFromLine(line)) {
+                    endLine = index;
+                    break;
+                }
+            }
+
+            return { startLine: groupLine, endLine };
+        }
+
+        function findNestedYamlKeyLine(tabName, parentKey, childKey, parentIndex = 0, childIndex = 0) {
+            const range = findYamlGroupRange(tabName, parentKey, parentIndex);
+            return findNthYamlListKeyLine(tabName, childKey, childIndex, {
+                startLine: range.startLine + 1,
+                endLine: range.endLine,
+                minIndent: getYamlIndent(getYamlLines(tabName)[range.startLine - 1]) + 1,
+                fallbackLine: range.startLine
+            });
+        }
+
+        function findLineContainingValue(tabName, value, options = {}) {
+            if (!value) {
+                return options.fallbackLine || 1;
+            }
+
+            const lines = getYamlLines(tabName);
+            const startIndex = Math.max(0, (options.startLine || 1) - 1);
+            const endIndex = Math.min(lines.length, options.endLine || lines.length);
+            const target = String(value).trim().replace(/^['"]|['"]$/g, '');
+
+            for (let index = startIndex; index < endIndex; index++) {
+                const line = lines[index];
+                const valuePart = line.includes(':') ? line.slice(line.indexOf(':') + 1).trim() : line.trim();
+                if (valuePart.replace(/^['"]|['"]$/g, '') === target) {
+                    return index + 1;
+                }
+            }
+
+            return options.fallbackLine || 1;
+        }
+
+        function findSourceLine(source) {
+            if (!source || !source.tab) {
+                return 1;
+            }
+
+            if (source.kind === 'services-group') {
+                return findNthYamlListKeyLine('services', source.groupName, source.groupIndex || 0, { indent: 0 });
+            }
+            if (source.kind === 'service') {
+                return findNestedYamlKeyLine('services', source.groupName, source.serviceName, source.groupIndex || 0, source.serviceIndex || 0);
+            }
+            if (source.kind === 'bookmark') {
+                return findNthYamlListKeyLine('bookmarks', source.name, source.index || 0, { indent: 0 });
+            }
+            if (source.kind === 'widget') {
+                return source.isList
+                    ? findNthYamlListKeyLine('widgets', source.name, source.index || 0, { indent: 0 })
+                    : findYamlKeyLine('widgets', source.name);
+            }
+            if (source.kind === 'settings-key') {
+                return findYamlKeyLine('settings', source.key);
+            }
+            if (source.kind === 'settings-layout-group') {
+                const layoutLine = findYamlKeyLine('settings', 'layout');
+                return findYamlKeyLine('settings', source.groupName, {
+                    startLine: layoutLine,
+                    fallbackLine: layoutLine
+                });
+            }
+            if (source.kind === 'settings-tab') {
+                const layoutLine = findYamlKeyLine('settings', 'layout');
+                return findLineContainingValue('settings', source.name, {
+                    startLine: layoutLine,
+                    fallbackLine: layoutLine
+                });
+            }
+            return source.line || 1;
+        }
+
+        function getSourceAttributes(source) {
+            return `data-source="${escapeHtml(JSON.stringify(source))}"`;
+        }
+
+        function getOccurrenceIndex(items, currentIndex, getName) {
+            const currentName = getName(items[currentIndex]);
+            let occurrenceIndex = 0;
+            for (let index = 0; index < currentIndex; index++) {
+                if (getName(items[index]) === currentName) {
+                    occurrenceIndex++;
+                }
+            }
+            return occurrenceIndex;
+        }
+
+        function getCurrentTabSource(source) {
+            if (!source || typeof source !== 'object') {
+                return source;
+            }
+            if (currentTab === 'settings' && source.settingsSource) {
+                return source.settingsSource;
+            }
+            if (currentTab === 'services' && source.servicesSource) {
+                return source.servicesSource;
+            }
+            return source;
+        }
+
+        function jumpToYamlSource(source) {
+            const resolvedSource = getCurrentTabSource(source);
+            const editorSection = document.querySelector('.editor-section');
+            const tabName = resolvedSource && resolvedSource.tab ? resolvedSource.tab : currentTab;
+            const targetLine = Math.max(1, Number(findSourceLine(resolvedSource)) || 1);
+
+            switchTab(tabName, null);
+
+            requestAnimationFrame(() => {
+                const activeEditor = document.getElementById('yaml-editor');
+                const lines = activeEditor.value.replace(/\r\n/g, '\n').split('\n');
+                let selectionStart = 0;
+                for (let index = 0; index < targetLine - 1 && index < lines.length; index++) {
+                    selectionStart += lines[index].length + 1;
+                }
+                const selectionEnd = selectionStart + (lines[targetLine - 1] || '').length;
+
+                activeEditor.focus({ preventScroll: true });
+                activeEditor.setSelectionRange(selectionStart, selectionEnd);
+                const lineElement = document.getElementById('line-numbers');
+                if (lineElement) {
+                    const styles = window.getComputedStyle(activeEditor);
+                    const lineHeight = parseFloat(styles.lineHeight) || 21;
+                    const editorTop = activeEditor.getBoundingClientRect().top + window.scrollY;
+                    const targetTop = editorTop + ((targetLine - 1) * lineHeight);
+                    window.scrollTo({
+                        top: Math.max(0, targetTop - (window.innerHeight * 0.35)),
+                        behavior: 'smooth'
+                    });
+                } else {
+                    activeEditor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                if (editorSection) {
+                    editorSection.classList.add('source-flash');
+                    window.setTimeout(() => editorSection.classList.remove('source-flash'), 900);
+                }
+            });
+        }
+
+        function updateVisualPreview() {
+            const previewDiv = document.getElementById('visual-preview');
+            const parsed = {
+                services: parseTabConfig('services'),
+                bookmarks: parseTabConfig('bookmarks'),
+                widgets: parseTabConfig('widgets'),
+                settings: parseTabConfig('settings')
+            };
+
+            const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
+            const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
+            const settingsProviders = parsed.settings.data && parsed.settings.data.providers && typeof parsed.settings.data.providers === 'object'
+                ? Object.entries(parsed.settings.data.providers)
+                : [];
+            const widgetsData = parsed.widgets.data;
+            const widgets = Array.isArray(widgetsData)
+                ? widgetsData.map((item) => Object.keys(item || {})[0]).filter(Boolean)
+                : widgetsData && typeof widgetsData === 'object'
+                    ? Object.keys(widgetsData)
+                    : [];
+
+            const homepageTabInfo = getHomepageTabInfo(parsed.settings.data);
+            const homepageTabs = homepageTabInfo.tabs;
+            const groupsByTab = homepageTabInfo.groupsByTab;
+            const groupLayout = homepageTabInfo.groupLayout;
+            if (homepageTabs.length > 0 && (!previewHomepageTab || !homepageTabs.includes(previewHomepageTab))) {
+                previewHomepageTab = homepageTabs[0];
+            }
+            if (homepageTabs.length === 0) {
+                previewHomepageTab = null;
+            }
+
+            const errorItems = Object.entries(parsed)
+                .filter(([, value]) => value.error)
+                .map(([key, value]) => {
+                    const location = value.error.line ? `Line ${value.error.line}${value.error.column ? `, Col ${value.error.column}` : ''}` : 'Unknown location';
+                    const parserHint = value.error.parserLine && value.error.line && value.error.parserLine !== value.error.line
+                        ? ` (parser reported line ${value.error.parserLine})`
+                        : '';
+                    return `<span class="dashboard-pill error">${key}: ${value.error.summary} (${location})${parserHint}</span>`;
+                })
+                .join('');
+
+            let filteredServices = services;
+            if (previewHomepageTab) {
+                const allowedGroups = groupsByTab[previewHomepageTab] || [];
+                if (allowedGroups.length > 0) {
+                    filteredServices = services.filter((group) => {
+                        const groupName = Object.keys(group || {})[0] || '';
+                        return allowedGroups.includes(groupName);
+                    });
+                } else {
+                    filteredServices = services.filter((group) => {
+                        const groupName = Object.keys(group || {})[0] || '';
+                        const lower = groupName.toLowerCase();
+                        const tabLower = previewHomepageTab.toLowerCase();
+                        return lower.includes(`[${tabLower}]`) || lower.includes(`${tabLower}:`) || lower.startsWith(`${tabLower} `) || lower === tabLower;
+                    });
+                }
+                if (filteredServices.length === 0) {
+                    filteredServices = services;
+                }
+            }
+
+            let groupsHtml = '';
+            filteredServices.forEach((group) => {
+                const groupName = Object.keys(group || {})[0];
+                const absoluteGroupIndex = services.findIndex((candidate) => candidate === group);
+                const groupIndex = getOccurrenceIndex(services, absoluteGroupIndex, (item) => Object.keys(item || {})[0] || '');
+                const entries = groupName ? group[groupName] : [];
+                const layoutConfig = groupLayout[groupName];
+                const isCollapsed = isInitiallyCollapsed(layoutConfig);
+                const groupIcon = renderIcon(layoutConfig && layoutConfig.icon, groupName || 'Services');
+                const groupSource = {
+                    servicesSource: { tab: 'services', kind: 'services-group', groupName, groupIndex },
+                    settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
+                };
+                const cards = Array.isArray(entries) ? entries.map((service, serviceIndex) => {
+                    const name = Object.keys(service || {})[0] || 'Service';
+                    const serviceOccurrenceIndex = getOccurrenceIndex(entries, serviceIndex, (item) => Object.keys(item || {})[0] || '');
+                    const data = service[name] || {};
+                    const serviceSource = {
+                        servicesSource: { tab: 'services', kind: 'service', groupName, groupIndex, serviceName: name, serviceIndex: serviceOccurrenceIndex },
+                        settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
+                    };
+                    const serviceIcon = renderIcon(data.icon, name);
+                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} title="Jump to this item in the active YAML tab"><div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-url">${escapeHtml(data.href || '')}</div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                }).join('') : '';
+                groupsHtml += `<details class="dashboard-group" ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} title="Jump to this group in the active YAML tab">${escapeHtml(groupName || 'Services')}</span></summary><div class="dashboard-cards">${cards || '<div class="dashboard-empty">No services in this group</div>'}</div></details>`;
+            });
+
+            const bookmarksHtml = bookmarks.map((item, index) => {
+                const name = Object.keys(item || {})[0] || 'Bookmark';
+                const occurrenceIndex = getOccurrenceIndex(bookmarks, index, (bookmark) => Object.keys(bookmark || {})[0] || '');
+                const data = item[name] || {};
+                return `<a class="bookmark-chip preview-jump-target" href="${escapeHtml(data.href || '#')}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes({ tab: 'bookmarks', kind: 'bookmark', name, index: occurrenceIndex })} title="Jump to this bookmark in bookmarks.yaml">${escapeHtml(name)}</a>`;
+            }).join('');
+
+            const previewTabsHtml = homepageTabs.length > 0
+                ? `<div class="preview-tab-strip">${homepageTabs.map((name) => `<button class="preview-tab-btn ${name === previewHomepageTab ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`).join('')}</div>`
+                : '';
+
+            previewDiv.innerHTML = `
+                <div class="dashboard-shell">
+                    ${previewTabsHtml}
+                    <div class="dashboard-top">
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'services', line: 1 })} title="Jump to services.yaml"><span>Service Groups</span><strong>${filteredServices.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'bookmarks', line: 1 })} title="Jump to bookmarks.yaml"><span>Bookmarks</span><strong>${bookmarks.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'widgets', line: 1 })} title="Jump to widgets.yaml"><span>Widgets</span><strong>${widgets.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'settings', kind: 'settings-key', key: 'providers' })} title="Jump to providers in settings.yaml"><span>Providers</span><strong>${settingsProviders.length}</strong></div>
+                    </div>
+                    ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
+                    <div class="dashboard-widgets">${widgets.map((name, index) => `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: widgets.slice(0, index).filter((candidate) => candidate === name).length, isList: Array.isArray(widgetsData) })} title="Jump to this widget in widgets.yaml">${escapeHtml(name)}</span>`).join('') || '<div class="dashboard-empty">No widgets configured</div>'}</div>
+                    <div class="dashboard-bookmarks">${bookmarksHtml || '<div class="dashboard-empty">No bookmarks configured</div>'}</div>
+                    <div class="dashboard-grid">${groupsHtml || '<div class="dashboard-empty">No service groups configured</div>'}</div>
+                </div>`;
+
+            previewDiv.querySelectorAll('.preview-tab-btn').forEach((button) => {
+                button.addEventListener('click', function() {
+                    previewHomepageTab = this.getAttribute('data-preview-tab');
+                    updateVisualPreview();
+                });
+            });
+
+            previewDiv.querySelectorAll('[data-source]').forEach((element) => {
+                element.addEventListener('click', function(event) {
+                    if (this.classList.contains('preview-tab-btn')) {
+                        return;
+                    }
+                    if (event.target.closest('summary') && event.target === event.currentTarget.closest('details')?.querySelector('summary')) {
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    try {
+                        jumpToYamlSource(JSON.parse(this.getAttribute('data-source') || '{}'));
+                    } catch (error) {
+                        console.warn('Could not parse preview source target', error);
+                    }
+                });
+            });
+        }
+
+
+        function autoResizeEditor() {
+            const editor = document.getElementById('yaml-editor');
+            const lineNumbers = document.getElementById('line-numbers');
+            const highlight = document.getElementById('yaml-highlight');
+            const styles = window.getComputedStyle(editor);
+            const lineHeight = parseFloat(styles.lineHeight) || 21;
+            const paddingTop = parseFloat(styles.paddingTop) || 0;
+            const paddingBottom = parseFloat(styles.paddingBottom) || 0;
+            const lineCount = Math.max(1, editor.value.split('\n').length);
+            const nextHeight = Math.ceil((lineCount * lineHeight) + paddingTop + paddingBottom);
+            editor.style.height = `${nextHeight}px`;
+            lineNumbers.style.height = `${nextHeight}px`;
+            highlight.style.height = `${nextHeight}px`;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function splitYamlComment(line) {
+            let quote = null;
+            for (let index = 0; index < line.length; index++) {
+                const char = line[index];
+                const previous = line[index - 1];
+                if ((char === '"' || char === "'") && previous !== '\\') {
+                    quote = quote === char ? null : (quote || char);
+                }
+                if (char === '#' && !quote && (index === 0 || /\s/.test(line[index - 1]))) {
+                    return {
+                        body: line.slice(0, index),
+                        comment: line.slice(index)
+                    };
+                }
+            }
+            return { body: line, comment: '' };
+        }
+
+        function highlightYamlScalar(value) {
+            const match = String(value).match(/^(\s*)(.*?)(\s*)$/);
+            if (!match) {
+                return escapeHtml(value);
+            }
+
+            const [, leading, token, trailing] = match;
+            const escapedLeading = escapeHtml(leading);
+            const escapedTrailing = escapeHtml(trailing);
+
+            if (!token) {
+                return escapedLeading + escapedTrailing;
+            }
+            if (/^(['"]).*\1$/.test(token)) {
+                return `${escapedLeading}<span class="yaml-string">${escapeHtml(token)}</span>${escapedTrailing}`;
+            }
+            if (/^(true|false|yes|no|on|off)$/i.test(token)) {
+                return `${escapedLeading}<span class="yaml-boolean">${escapeHtml(token)}</span>${escapedTrailing}`;
+            }
+            if (/^(null|~)$/i.test(token)) {
+                return `${escapedLeading}<span class="yaml-null">${escapeHtml(token)}</span>${escapedTrailing}`;
+            }
+            if (/^-?(?:\d+|\d*\.\d+)(?:e[+-]?\d+)?$/i.test(token)) {
+                return `${escapedLeading}<span class="yaml-number">${escapeHtml(token)}</span>${escapedTrailing}`;
+            }
+
+            return `${escapedLeading}<span class="yaml-string">${escapeHtml(token)}</span>${escapedTrailing}`;
+        }
+
+        function highlightYamlBody(body) {
+            const keyMatch = body.match(/^(\s*)(-\s*)?([^:\n]+)(:\s*)(.*)$/);
+            if (keyMatch) {
+                const [, indent, marker = '', key, separator, rest] = keyMatch;
+                return escapeHtml(indent)
+                    + (marker ? `<span class="yaml-marker">${escapeHtml(marker)}</span>` : '')
+                    + `<span class="yaml-key">${escapeHtml(key.trimEnd())}</span>`
+                    + escapeHtml(key.slice(key.trimEnd().length))
+                    + escapeHtml(separator)
+                    + highlightYamlScalar(rest);
+            }
+
+            const listMatch = body.match(/^(\s*)(-\s+)(.*)$/);
+            if (listMatch) {
+                const [, indent, marker, rest] = listMatch;
+                return escapeHtml(indent)
+                    + `<span class="yaml-marker">${escapeHtml(marker)}</span>`
+                    + highlightYamlScalar(rest);
+            }
+
+            return highlightYamlScalar(body);
+        }
+
+        function updateSyntaxHighlight() {
+            const editor = document.getElementById('yaml-editor');
+            const highlight = document.getElementById('yaml-highlight');
+            const highlighted = editor.value.split('\n').map((line) => {
+                const { body, comment } = splitYamlComment(line);
+                return highlightYamlBody(body)
+                    + (comment ? `<span class="yaml-comment">${escapeHtml(comment)}</span>` : '');
+            }).join('\n');
+            highlight.innerHTML = highlighted || '\n';
+        }
+
+        function updateLineNumbers() {
+            const editor = document.getElementById('yaml-editor');
+            const lineNumbers = document.getElementById('line-numbers');
+            const lineCount = editor.value.split('\n').length;
+            const numbers = Array.from({ length: Math.max(1, lineCount) }, (_, i) => i + 1).join('\n');
+            lineNumbers.textContent = numbers;
+            autoResizeEditor();
+            lineNumbers.style.height = `${editor.offsetHeight}px`;
+            lineNumbers.scrollTop = editor.scrollTop;
+            updateSyntaxHighlight();
+        }
+
+        function updatePreview() {
+            updateLineNumbers();
+            updateVisualPreview();
+        }
+
+        function refreshPreview() {
+            // Add a small visual feedback when refreshing
+            const refreshBtn = document.querySelector('.refresh-btn');
+            const originalText = refreshBtn.textContent;
+            refreshBtn.textContent = 'Refreshing...';
+            refreshBtn.disabled = true;
+            
+            // Update the preview
+            updatePreview();
+            
+            // Restore button after a short delay
+            setTimeout(() => {
+                refreshBtn.textContent = originalText;
+                refreshBtn.disabled = false;
+            }, 500);
+        }
+
+        function applyTheme(isDarkMode) {
+            document.documentElement.classList.toggle('light-mode', !isDarkMode);
+            document.body.classList.toggle('light-mode', !isDarkMode);
+            themeToggle.textContent = isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+        }
+
+        function getAutoIndentInsertion(currentLine) {
+            const indentMatch = currentLine.match(/^\s*/);
+            const currentIndent = indentMatch ? indentMatch[0] : '';
+            const { body } = splitYamlComment(currentLine);
+            const trimmed = body.trimEnd();
+            const trimmedLeft = trimmed.trimStart();
+
+            if (!trimmedLeft) {
+                return '\n' + currentIndent;
+            }
+
+            if (/^-\s+.*:\s*$/.test(trimmedLeft)) {
+                return '\n' + currentIndent + '    ';
+            }
+
+            if (/:\s*$/.test(trimmedLeft)) {
+                return '\n' + currentIndent + '  ';
+            }
+
+            if (/^-\s+\S/.test(trimmedLeft)) {
+                return '\n' + currentIndent + '- ';
+            }
+
+            return '\n' + currentIndent;
+        }
+
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const yamlEditor = document.getElementById('yaml-editor');
+        const autoIndentToggle = document.getElementById('auto-indent-toggle');
+        yamlEditor.addEventListener('scroll', function() {
+            document.getElementById('line-numbers').scrollTop = this.scrollTop;
+            const highlight = document.getElementById('yaml-highlight');
+            highlight.scrollTop = this.scrollTop;
+            highlight.scrollLeft = this.scrollLeft;
+        });
+        yamlEditor.addEventListener('keydown', function(event) {
+            if (event.key !== 'Enter' || !autoIndentToggle.checked) {
+                return;
+            }
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            const value = this.value;
+            const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+            const currentLine = value.slice(lineStart, start);
+            const insertion = getAutoIndentInsertion(currentLine);
+            event.preventDefault();
+            this.value = value.slice(0, start) + insertion + value.slice(end);
+            const caret = start + insertion.length;
+            this.selectionStart = caret;
+            this.selectionEnd = caret;
+            updatePreview();
+        });
+        themeToggle.addEventListener('click', function() {
+            applyTheme(document.body.classList.contains('light-mode'));
+        });
+
+        // Update preview as user types
+        document.addEventListener('input', function() {
+            updatePreview();
+        });
+        window.addEventListener('scroll', updateFloatingNavVisibility);
+        updateFloatingNavVisibility();
+    </script>
+</body>
+</html>
