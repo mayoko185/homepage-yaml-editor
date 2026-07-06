@@ -1,6 +1,6 @@
 # Homepage YAML Editor
 
-A small browser-based editor for [Homepage](https://gethomepage.dev/) YAML configuration files. It runs as a Node/Express server, loads the standard Homepage config files, provides a YAML editor with syntax highlighting, and shows a lightweight dashboard preview.
+A small browser-based editor for [Homepage](https://gethomepage.dev/) YAML configuration files. Designed to run alongside Homepage via docker, loads the standard Homepage config files, provides a YAML editor with syntax highlighting, and shows a lightweight dashboard preview.
 
 ## Features
 
@@ -20,24 +20,6 @@ The editor intentionally limits reads and writes to these Homepage config files:
 - `settings.yaml` or `settings.yml`
 - `bookmarks.yaml` or `bookmarks.yml`
 - `widgets.yaml` or `widgets.yml`
-
-## Docker Compose
-
-```yaml
-services:
-  homepage-editor:
-    image: docker.io/mayoko185/homepage-yaml-editor:v22
-    ports:
-      - 8081:8081
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - AUTOLOAD_DIR=/hp_config
-    volumes:
-      - /opt/stacks/homepage/config:/hp_config
-      - ./data:/app/data
-    restart: unless-stopped
-```
 
 Open the editor at:
 
@@ -84,41 +66,6 @@ The preview supports Homepage-style `icon` values in both `services.yaml` servic
 - Full URLs are used as-is.
 - Names like `docker.png` are resolved through `homarr-labs/dashboard-icons` using jsDelivr.
 - Extensionless names like `mylar` are treated as `mylar.png`.
-
-Example:
-
-```yaml
-layout:
-  Docker:
-    icon: docker.png
-    tab: Badlands
-
-services:
-  - Docker:
-      - Portainer:
-          icon: portainer.png
-          href: https://portainer.example.test
-```
-
-## Local Development
-
-Install dependencies:
-
-```sh
-npm install
-```
-
-Run the server:
-
-```sh
-npm start
-```
-
-Or run with nodemon if installed:
-
-```sh
-npm run dev
-```
 
 ## Notes
 
