@@ -14,7 +14,8 @@ COPY server.js ./
 COPY public ./public
 COPY --chmod=755 start.sh ./start.sh
 
-RUN mkdir -p ./data /hp_config
+RUN sed -i 's/\r$//' ./start.sh && \
+    mkdir -p ./data /hp_config
 
 EXPOSE 8081
 

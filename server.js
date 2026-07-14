@@ -49,7 +49,9 @@ app.use(express.static(PUBLIC_DIR, {
   etag: true,
   maxAge: '1h',
   setHeaders(res, filePath) {
-    if (/\.(?:css|js|ico)$/i.test(filePath)) {
+    if (/\.html$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else if (/\.(?:css|js|ico)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
     }
   }

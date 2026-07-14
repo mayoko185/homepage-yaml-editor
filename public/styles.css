@@ -562,8 +562,9 @@
             outline: 2px solid var(--tab-active-bg);
             outline-offset: 2px;
         }
-        .editor-section.source-flash {
-            box-shadow: 0 0 0 3px var(--tab-active-bg), 0 2px 8px rgba(0,0,0,0.08);
+        .CodeMirror-linebackground.source-line-highlight {
+            background: rgba(76, 175, 80, 0.28);
+            box-shadow: inset 3px 0 0 var(--tab-active-bg);
         }
         .dashboard-card-heading {
             display: flex;

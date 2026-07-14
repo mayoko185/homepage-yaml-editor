@@ -51,6 +51,8 @@ providers:
         let previewHomepageTab = null;
         const parsedConfigCache = new Map();
         let previewUpdateTimer = null;
+        let sourceHighlightLine = null;
+        let sourceHighlightTimer = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
             mode: 'yaml',
             lineNumbers: true,
@@ -803,33 +805,36 @@ providers:
 
         function jumpToYamlSource(source) {
             const resolvedSource = getCurrentTabSource(source);
-            const editorSection = document.querySelector('.editor-section');
             const tabName = resolvedSource && resolvedSource.tab ? resolvedSource.tab : currentTab;
             const targetLine = Math.max(1, Number(findSourceLine(resolvedSource)) || 1);
 
-            switchTab(tabName, null);
+            if (tabName !== currentTab) {
+                switchTab(tabName, null);
+            }
 
             requestAnimationFrame(() => {
                 const lineIndex = Math.min(targetLine - 1, Math.max(0, yamlCodeEditor.lineCount() - 1));
                 const lineText = yamlCodeEditor.getLine(lineIndex) || '';
-                yamlCodeEditor.focus();
-                yamlCodeEditor.setSelection(
-                    { line: lineIndex, ch: 0 },
-                    { line: lineIndex, ch: lineText.length }
-                );
-                yamlCodeEditor.scrollIntoView({ line: lineIndex, ch: 0 }, 120);
-                const editorElement = yamlCodeEditor.getWrapperElement();
-                const editorTop = editorElement.getBoundingClientRect().top + window.scrollY;
-                const targetCoords = yamlCodeEditor.charCoords({ line: lineIndex, ch: 0 }, 'local');
-                window.scrollTo({
-                    top: Math.max(0, editorTop + targetCoords.top - (window.innerHeight * 0.35)),
-                    behavior: 'smooth'
-                });
+                const firstContentColumn = Math.max(0, lineText.search(/\S|$/));
 
-                if (editorSection) {
-                    editorSection.classList.add('source-flash');
-                    window.setTimeout(() => editorSection.classList.remove('source-flash'), 900);
+                if (sourceHighlightLine) {
+                    yamlCodeEditor.removeLineClass(sourceHighlightLine, 'background', 'source-line-highlight');
                 }
+                window.clearTimeout(sourceHighlightTimer);
+
+                yamlCodeEditor.focus();
+                yamlCodeEditor.setCursor({ line: lineIndex, ch: firstContentColumn });
+                yamlCodeEditor.scrollIntoView({ line: lineIndex, ch: 0 }, 120);
+                sourceHighlightLine = yamlCodeEditor.addLineClass(lineIndex, 'background', 'source-line-highlight');
+
+                const editorElement = yamlCodeEditor.getWrapperElement();
+                editorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                sourceHighlightTimer = window.setTimeout(() => {
+                    if (sourceHighlightLine) {
+                        yamlCodeEditor.removeLineClass(sourceHighlightLine, 'background', 'source-line-highlight');
+                        sourceHighlightLine = null;
+                    }
+                }, 1400);
             });
         }
 
