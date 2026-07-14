@@ -62,6 +62,8 @@ providers:
             smartIndent: true,
             viewportMargin: 10,
             extraKeys: {
+                'Ctrl-/': toggleSelectedComments,
+                'Cmd-/': toggleSelectedComments,
                 Enter(editor) {
                     if (document.getElementById('auto-indent-toggle').checked) {
                         editor.execCommand('newlineAndIndent');
@@ -86,6 +88,45 @@ providers:
         function setEditorValue(value) {
             yamlCodeEditor.setValue(String(value || ''));
             yamlCodeEditor.clearHistory();
+        }
+
+        function getSelectedLineNumbers(editor) {
+            const lineNumbers = new Set();
+            editor.listSelections().forEach(({ anchor, head }) => {
+                const from = CodeMirror.cmpPos(anchor, head) <= 0 ? anchor : head;
+                const to = CodeMirror.cmpPos(anchor, head) <= 0 ? head : anchor;
+                const endLine = to.ch === 0 && to.line > from.line ? to.line - 1 : to.line;
+                for (let line = from.line; line <= endLine; line++) {
+                    lineNumbers.add(line);
+                }
+            });
+            return Array.from(lineNumbers).sort((left, right) => left - right);
+        }
+
+        function toggleSelectedComments(editor) {
+            const lineNumbers = getSelectedLineNumbers(editor);
+            const lines = lineNumbers.map((lineNumber) => editor.getLine(lineNumber) || '');
+            const nonBlankLines = lines.filter((line) => line.trim().length > 0);
+            const shouldUncomment = nonBlankLines.length > 0
+                && nonBlankLines.every((line) => /^\s*#/.test(line));
+
+            editor.operation(() => {
+                lineNumbers.forEach((lineNumber, index) => {
+                    const currentLine = lines[index];
+                    const nextLine = shouldUncomment
+                        ? currentLine.replace(/^(\s*)# ?/, '$1')
+                        : currentLine.replace(/^(\s*)/, '$1# ');
+                    if (nextLine !== currentLine) {
+                        editor.replaceRange(
+                            nextLine,
+                            { line: lineNumber, ch: 0 },
+                            { line: lineNumber, ch: currentLine.length },
+                            '+toggleComment'
+                        );
+                    }
+                });
+            });
+            editor.focus();
         }
 
         function scheduleVisualPreview() {
@@ -1006,9 +1047,16 @@ providers:
 
         // Theme toggle functionality
         const themeToggle = document.getElementById('themeToggle');
+        const toggleCommentButton = document.getElementById('toggle-comment-button');
         themeToggle.addEventListener('click', function() {
             applyTheme(document.body.classList.contains('light-mode'));
             yamlCodeEditor.refresh();
+        });
+        toggleCommentButton.addEventListener('mousedown', function(event) {
+            event.preventDefault();
+        });
+        toggleCommentButton.addEventListener('click', function() {
+            toggleSelectedComments(yamlCodeEditor);
         });
 
         yamlCodeEditor.on('change', function() {

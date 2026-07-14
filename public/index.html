@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
     <div class="floating-nav" id="floating-nav">
@@ -40,8 +40,17 @@
         </div>
         
         <div class="editor-section">
-            <div class="editor-options">
-                <label><input type="checkbox" id="auto-indent-toggle" checked> Auto Indent</label>
+            <div class="editor-toolbar" role="toolbar" aria-label="YAML editor tools">
+                <div class="toolbar-group">
+                    <label class="toolbar-toggle" title="Automatically indent new YAML lines">
+                        <input type="checkbox" id="auto-indent-toggle" checked>
+                        <span>Auto Indent</span>
+                    </label>
+                    <button type="button" id="toggle-comment-button" class="toolbar-button" title="Toggle comment (Ctrl+/)">
+                        <span class="toolbar-button-icon" aria-hidden="true">#</span>
+                        <span>Toggle Comment</span>
+                    </button>
+                </div>
             </div>
             <div class="editor-wrapper">
                 <textarea id="yaml-editor" spellcheck="false"></textarea>
@@ -77,6 +86,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
 </body>
 </html>

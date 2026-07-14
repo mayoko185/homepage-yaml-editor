@@ -82,7 +82,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     const documentResponse = await fetch(`${baseUrl}/`);
     assert.equal(documentResponse.headers.get('cache-control'), 'no-cache');
 
-    const assetResponse = await fetch(`${baseUrl}/app.js?v=2`, {
+    const assetResponse = await fetch(`${baseUrl}/app.js?v=3`, {
       headers: { 'accept-encoding': 'gzip' }
     });
     assert.equal(assetResponse.status, 200);
