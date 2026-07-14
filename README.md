@@ -73,3 +73,14 @@ The preview supports Homepage-style `icon` values in both `services.yaml` servic
 - Server-side directory loading and saving is limited to allowed config paths.
 - The app validates YAML before saving.
 - The preview is intentionally lightweight and may not implement every Homepage feature exactly.
+- The YAML editor uses viewport rendering, so large configuration files do not create one DOM node per line.
+
+## Development
+
+Node.js 20 or newer and pnpm 11.7.0 are supported.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm test
+pnpm dev
+```

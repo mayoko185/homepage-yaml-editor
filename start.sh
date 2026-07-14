@@ -23,6 +23,24 @@ elif ! getent passwd "$APP_USER" >/dev/null 2>&1; then
     adduser -S -D -H -u "$PUID" -G "$APP_GROUP" "$APP_USER"
 fi
 
-chown -R "$PUID:$PGID" /app/data /hp_config || true
+chown_if_needed() {
+    target="$1"
+    owner="$(stat -c '%u:%g' "$target" 2>/dev/null || true)"
+    if [ "$owner" != "$PUID:$PGID" ]; then
+        chown "$PUID:$PGID" "$target" || true
+    fi
+}
+
+chown_if_needed /app/data
+chown_if_needed /hp_config
+
+for base_name in bookmarks settings services widgets; do
+    for extension in yaml yml; do
+        config_file="/hp_config/${base_name}.${extension}"
+        if [ -f "$config_file" ]; then
+            chown_if_needed "$config_file"
+        fi
+    done
+done
 
 exec su-exec "$PUID:$PGID" node server.js
