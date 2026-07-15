@@ -345,6 +345,7 @@ providers:
         function setDirectoryStatus(directory, fileCount) {
             const statusElement = document.getElementById('directory-info');
             statusElement.textContent = `Loaded ${fileCount}/4 from ${directory}`;
+            statusElement.dataset.state = 'loaded';
         }
 
         function clearSaveStatus() {

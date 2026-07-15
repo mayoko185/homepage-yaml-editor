@@ -11,11 +11,19 @@
             --group-title-color: #ffffff;
             --error-color: #ff6b6b;
             --warning-color: #fbbf24;
+            --notice-info-color: #60a5fa;
+            --notice-info-bg: rgba(96, 165, 250, 0.12);
+            --notice-success-color: #66bb6a;
+            --notice-success-bg: rgba(102, 187, 106, 0.12);
+            --notice-warning-bg: rgba(251, 191, 36, 0.1);
+            --notice-error-bg: rgba(255, 107, 107, 0.1);
             --unsaved-dot-color: #ff453a;
             --button-bg: #2196F3;
             --button-hover: #1e88e5;
             --action-icon-color: #d1d5db;
             --action-icon-bg: rgba(0, 0, 0, 0.14);
+            --action-button-hover-color: #f3f4f6;
+            --action-button-hover-bg: #4b5563;
             --syntax-key: #7dd3fc;
             --syntax-string: #86efac;
             --syntax-number: #fbbf24;
@@ -37,13 +45,21 @@
             --preview-bg: #f9f9f9;
             --config-item-bg: white;
             --group-title-color: #333;
-            --error-color: red;
+            --error-color: #c62828;
             --warning-color: #a16207;
+            --notice-info-color: #2563eb;
+            --notice-info-bg: rgba(37, 99, 235, 0.08);
+            --notice-success-color: #2e7d32;
+            --notice-success-bg: rgba(46, 125, 50, 0.1);
+            --notice-warning-bg: rgba(161, 98, 7, 0.08);
+            --notice-error-bg: rgba(198, 40, 40, 0.08);
             --unsaved-dot-color: #d70000;
             --button-bg: #4CAF50;
             --button-hover: #45a049;
             --action-icon-color: white;
             --action-icon-bg: rgba(255, 255, 255, 0.16);
+            --action-button-hover-color: white;
+            --action-button-hover-bg: #1b5e20;
             --syntax-key: #0f766e;
             --syntax-string: #15803d;
             --syntax-number: #b45309;
@@ -214,9 +230,12 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .toolbar-action-button:hover {
-            background-color: var(--button-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: none;
+        }
+        .toolbar-action-button:not(:disabled):hover,
+        .toolbar-action-button:not(:disabled):focus-visible {
+            background-color: var(--action-button-hover-bg);
+            color: var(--action-button-hover-color);
         }
         .toolbar-action-button:disabled {
             background-color: var(--border-color);
@@ -228,6 +247,12 @@
         .toolbar-action-button .toolbar-button-icon {
             background: var(--action-icon-bg);
             color: var(--action-icon-color);
+            transition: background-color 0.18s ease, color 0.18s ease;
+        }
+        .toolbar-action-button:not(:disabled):hover .toolbar-button-icon,
+        .toolbar-action-button:not(:disabled):focus-visible .toolbar-button-icon {
+            background: transparent;
+            color: inherit;
         }
         .toolbar-button:focus-visible,
         .toolbar-toggle:focus-within {
@@ -361,38 +386,32 @@
             margin: 0 auto 12px;
             padding: 0;
         }
-        .directory-status {
+        .directory-status,
+        .save-status,
+        .unsaved-status {
             margin: 0;
-            padding: 8px 10px;
-            background-color: var(--preview-bg);
-            border-radius: 7px;
-            text-align: center;
-            line-height: 1.4;
-            overflow-wrap: anywhere;
-        }
-        .save-status {
-            margin: 0;
-            padding: 10px 12px;
+            padding: 9px 11px;
             border: 1px solid var(--border-color);
             border-radius: 6px;
             background-color: var(--preview-bg);
             color: var(--text-color);
+            box-sizing: border-box;
             font-size: 14px;
             line-height: 1.4;
+            overflow-wrap: anywhere;
+        }
+        .directory-status {
+            text-align: center;
+        }
+        .save-status {
             text-align: left;
         }
         .unsaved-status {
-            margin: 0;
-            padding: 8px 10px;
-            border: 1px solid var(--warning-color);
-            border-radius: 6px;
-            background: rgba(251, 191, 36, 0.1);
+            border-color: var(--warning-color);
+            background: var(--notice-warning-bg);
             color: var(--warning-color);
-            font-size: 14px;
             font-weight: 600;
-            line-height: 1.4;
             text-align: center;
-            overflow-wrap: anywhere;
         }
         .unsaved-status[hidden] {
             display: none;
@@ -404,23 +423,31 @@
         }
         .save-status[data-state="pending"]::before {
             content: "…";
-            color: var(--button-bg);
+            color: var(--notice-info-color);
         }
+        .save-status[data-state="pending"],
+        .save-status[data-state="info"] {
+            border-color: var(--notice-info-color);
+            background: var(--notice-info-bg);
+            color: var(--notice-info-color);
+        }
+        .directory-status[data-state="loaded"],
         .save-status[data-state="success"] {
-            border-color: var(--tab-active-bg);
-            background: rgba(76, 175, 80, 0.12);
+            border-color: var(--notice-success-color);
+            background: var(--notice-success-bg);
+            color: var(--notice-success-color);
         }
         .save-status[data-state="success"]::before {
             content: "✓";
-            color: var(--tab-active-bg);
+            color: var(--notice-success-color);
         }
         .save-status[data-state="info"]::before {
             content: "i";
-            color: var(--button-bg);
+            color: var(--notice-info-color);
         }
         .save-status[data-state="error"] {
             border-color: var(--error-color);
-            background: rgba(255, 107, 107, 0.1);
+            background: var(--notice-error-bg);
             color: var(--error-color);
         }
         .save-status[data-state="error"]::before {

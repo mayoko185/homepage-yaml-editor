@@ -20,6 +20,9 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Enlarged the toolbar icons and added a solid floppy-disk icon for Save.
 - Changed dark-theme file-action icons to light gray on black-tinted tiles for softer contrast.
 - Expanded file-action hover labels to describe exactly which YAML files each action affects.
+- Standardized directory, save, unsaved, info, and error notification colors and borders across both themes.
+- Added full-button color inversion for file actions on hover and keyboard focus while preserving their default colors and position.
+- Tuned file-action hover colors to use a softer slate in dark mode and a high-contrast dark green in light mode.
 
 ## [1.1.0] - 2026-07-15
 
