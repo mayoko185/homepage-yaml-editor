@@ -17,15 +17,25 @@ async function getFreePort() {
   });
 }
 
+function createServerEnv(overrides) {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (name.toLowerCase() === 'require_login_user' || name.toLowerCase() === 'require_login_password') {
+      delete env[name];
+    }
+  }
+  return { ...env, ...overrides };
+}
+
 async function waitForServer(baseUrl, child) {
   for (let attempt = 0; attempt < 50; attempt++) {
     if (child.exitCode !== null) {
       throw new Error(`Server exited before becoming ready with code ${child.exitCode}`);
     }
     try {
-      const response = await fetch(`${baseUrl}/api/startup-directory`);
+      const response = await fetch(`${baseUrl}/runtime-config.js`);
       if (response.ok) {
-        return response.json();
+        return;
       }
     } catch {
       // The listener may not be bound yet.
@@ -41,18 +51,18 @@ test('serves optimized assets and supports the active configuration APIs', async
   const baseUrl = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ['server.js'], {
     cwd: path.resolve(__dirname, '..'),
-    env: {
-      ...process.env,
+    env: createServerEnv({
       PORT: String(port),
       DATA_DIR: tempRoot,
       AUTOLOAD_DIR: tempRoot,
       DEFAULT_THEME: 'light'
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
   try {
-    const startup = await waitForServer(baseUrl, child);
+    await waitForServer(baseUrl, child);
+    const startup = await (await fetch(`${baseUrl}/api/startup-directory`)).json();
     assert.equal(startup.hasStartupDirectory, true);
     assert.equal(startup.directory, tempRoot);
 
@@ -96,6 +106,98 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(assetResponse.headers.get('content-encoding'), 'gzip');
 
     assert.equal((await fetch(`${baseUrl}/api/files`)).status, 404);
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
+test('optional login protects the editor and APIs with a form-based session', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-auth-test-'));
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      DATA_DIR: tempRoot,
+      AUTOLOAD_DIR: tempRoot,
+      require_login_user: 'test-user',
+      require_login_password: 'test-password'
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+
+    const runtimeConfig = await (await fetch(`${baseUrl}/runtime-config.js`)).text();
+    assert.match(runtimeConfig, /"loginRequired":true/);
+
+    const documentResponse = await fetch(`${baseUrl}/`, { redirect: 'manual' });
+    assert.equal(documentResponse.status, 302);
+    assert.equal(documentResponse.headers.get('location'), '/login');
+
+    const apiResponse = await fetch(`${baseUrl}/api/startup-directory`);
+    assert.equal(apiResponse.status, 401);
+    assert.deepEqual(await apiResponse.json(), { error: 'Authentication required' });
+
+    const loginPageResponse = await fetch(`${baseUrl}/login`);
+    assert.equal(loginPageResponse.status, 200);
+    assert.match(await loginPageResponse.text(), /<form method="post" action="\/login"/);
+
+    const invalidLoginResponse = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: 'test-user', password: 'wrong-password' }),
+      redirect: 'manual'
+    });
+    assert.equal(invalidLoginResponse.status, 303);
+    assert.equal(invalidLoginResponse.headers.get('location'), '/login?error=invalid');
+
+    const loginResponse = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: 'test-user', password: 'test-password' }),
+      redirect: 'manual'
+    });
+    assert.equal(loginResponse.status, 303);
+    assert.equal(loginResponse.headers.get('location'), '/');
+    const sessionCookie = loginResponse.headers.get('set-cookie');
+    assert.match(sessionCookie, /homepage_editor_session=/);
+    assert.match(sessionCookie, /HttpOnly/i);
+    assert.match(sessionCookie, /SameSite=Strict/i);
+
+    const authenticatedResponse = await fetch(`${baseUrl}/`, {
+      headers: { cookie: sessionCookie.split(';')[0] },
+      redirect: 'manual'
+    });
+    assert.equal(authenticatedResponse.status, 200);
+    assert.match(await authenticatedResponse.text(), /Homepage YAML Editor/);
+
+    const logoutResponse = await fetch(`${baseUrl}/logout`, {
+      method: 'POST',
+      headers: { cookie: sessionCookie.split(';')[0] },
+      redirect: 'manual'
+    });
+    assert.equal(logoutResponse.status, 303);
+    assert.equal(logoutResponse.headers.get('location'), '/login');
+    assert.match(logoutResponse.headers.get('set-cookie'), /Max-Age=0/);
+
+    const secureLoginResponse = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-forwarded-proto': 'https'
+      },
+      body: new URLSearchParams({ username: 'test-user', password: 'test-password' }),
+      redirect: 'manual'
+    });
+    assert.match(secureLoginResponse.headers.get('set-cookie'), /; Secure/);
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => child.once('exit', resolve));

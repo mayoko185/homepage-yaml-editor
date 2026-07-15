@@ -440,6 +440,7 @@ providers:
         window.onload = async function() {
             const configuredTheme = window.APP_CONFIG && window.APP_CONFIG.defaultTheme;
             applyTheme(configuredTheme !== 'light');
+            document.getElementById('logout-form').hidden = !(window.APP_CONFIG && window.APP_CONFIG.loginRequired);
             
             loadedFiles = {
                 'services': sampleConfigs.services,

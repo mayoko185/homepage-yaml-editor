@@ -7,6 +7,9 @@ services:
       - PUID=1000
       - PGID=1000
       - DEFAULT_THEME=dark
+      # Uncomment both values to require the matching login credentials.
+      # - require_login_user=admin
+      # - require_login_password=change-this-password
       - AUTOLOAD_DIR=/hp_config
     volumes:
       - /opt/stacks/homepage/config:/hp_config

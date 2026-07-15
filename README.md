@@ -40,6 +40,22 @@ http://localhost:8081
 | `AUTOLOAD_DIR` | unset | Preferred startup autoload directory. Set this to the mounted Homepage config path you want loaded automatically. |
 | `ALLOWED_CONFIG_DIRS` | unset | Optional comma-separated list of additional server-side directories that can be loaded from or saved to. `/hp_config`, `DATA_DIR`, and `AUTOLOAD_DIR` are always allowed. |
 | `DEFAULT_THEME` | `dark` | Initial interface theme. Set to `light` for light mode; missing or invalid values use dark mode. |
+| `require_login_user` | unset | Username for optional form-based login. Login is enabled only when this and `require_login_password` are both set. `REQUIRE_LOGIN_USER` is also accepted. |
+| `require_login_password` | unset | Password for optional form-based login. Login is enabled only when this and `require_login_user` are both set. `REQUIRE_LOGIN_PASSWORD` is also accepted. |
+
+## Optional Login
+
+Set both login variables to protect the editor and its APIs:
+
+```yaml
+environment:
+  - require_login_user=admin
+  - require_login_password=replace-with-a-strong-password
+```
+
+If neither variable is set, the editor remains open as before. If only one is set, the container exits with a configuration error so an incomplete login setup cannot accidentally expose the editor.
+
+Successful sign-in creates an HTTP-only, `SameSite=Strict` session that lasts for 12 hours or until the container restarts. Use HTTPS through a reverse proxy when exposing the editor outside a trusted network.
 
 ## Startup Autoload Behavior
 
