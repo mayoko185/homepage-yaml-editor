@@ -166,14 +166,18 @@ providers:
             }
         }
 
-        function hasUnsavedChanges() {
-            return ['services', 'settings', 'bookmarks', 'widgets'].some((tabName) => {
+        function getUnsavedTabNames() {
+            return ['services', 'settings', 'bookmarks', 'widgets'].filter((tabName) => {
                 const currentYaml = getTabYamlText(tabName);
                 const originalYaml = Object.prototype.hasOwnProperty.call(originalLoadedFiles, tabName)
                     ? String(originalLoadedFiles[tabName] || '')
                     : String(sampleConfigs[tabName] || '');
                 return currentYaml !== originalYaml;
             });
+        }
+
+        function hasUnsavedChanges() {
+            return getUnsavedTabNames().length > 0;
         }
         
         function scrollToTop() {
@@ -330,56 +334,85 @@ providers:
         }
 
         async function saveConfig() {
-            const yamlText = getEditorValue();
-            const filename = currentDirectoryPath
-                ? (loadedFileNames[currentTab] || `${currentTab}.yaml`)
-                : `${currentTab}.yaml`;
-            const existingYamlText = Object.prototype.hasOwnProperty.call(originalLoadedFiles, currentTab)
-                ? String(originalLoadedFiles[currentTab] || '')
-                : String(sampleConfigs[currentTab] || '');
             const saveButton = document.getElementById('save-config-button');
-            
-            try {
-                jsyaml.load(yamlText);
+            rememberCurrentEditorValue();
+            const unsavedConfigs = getUnsavedTabNames().map((tabName) => ({
+                tabName,
+                filename: currentDirectoryPath
+                    ? (loadedFileNames[tabName] || `${tabName}.yaml`)
+                    : `${tabName}.yaml`,
+                yamlText: getTabYamlText(tabName)
+            }));
 
-                if (yamlText === existingYamlText) {
-                    setSaveStatus(`No changes to save for ${filename}.`, 'info');
-                    return;
-                }
+            if (unsavedConfigs.length === 0) {
+                setSaveStatus('No unsaved changes.', 'info');
+                return;
+            }
 
-                saveButton.disabled = true;
-                setSaveStatus(`Saving ${filename}…`, 'pending');
-                const endpoint = currentDirectoryPath ? '/api/directory/file/save' : '/api/config/save';
-                const requestBody = currentDirectoryPath
-                    ? { dirPath: currentDirectoryPath, filename, content: yamlText }
-                    : { filename, content: yamlText };
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody)
-                });
-                const data = await response.json();
-
-                if (!response.ok || data.error) {
-                    const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to save file');
-                    setSaveStatus(`Could not save ${filename}: ${getSaveErrorSummary(message)}`, 'error');
-                    return;
-                }
-
-                loadedFiles[currentTab] = yamlText;
-                originalLoadedFiles[currentTab] = yamlText;
-                setSaveStatus(`${data.message || 'Configuration saved successfully'}: ${filename}`, 'success');
-            } catch (error) {
-                if (error && error.mark) {
+            for (const config of unsavedConfigs) {
+                try {
+                    jsyaml.load(config.yamlText);
+                } catch (error) {
                     const yamlError = formatYamlError(error);
                     setSaveStatus(
-                        `${filename} · ${formatYamlErrorLocation(yamlError)} · ${yamlError.summary}`,
+                        `${config.filename} - ${formatYamlErrorLocation(yamlError)} - ${yamlError.summary}`,
                         'error',
-                        { tab: currentTab, line: yamlError.line || 1 }
+                        { tab: config.tabName, line: yamlError.line || 1 }
+                    );
+                    return;
+                }
+            }
+
+            const savedConfigs = [];
+            const failedConfigs = [];
+            try {
+                saveButton.disabled = true;
+                setSaveStatus(
+                    `Saving ${unsavedConfigs.length} changed configuration${unsavedConfigs.length === 1 ? '' : 's'}...`,
+                    'pending'
+                );
+
+                for (const config of unsavedConfigs) {
+                    try {
+                        const endpoint = currentDirectoryPath ? '/api/directory/file/save' : '/api/config/save';
+                        const requestBody = currentDirectoryPath
+                            ? { dirPath: currentDirectoryPath, filename: config.filename, content: config.yamlText }
+                            : { filename: config.filename, content: config.yamlText };
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(requestBody)
+                        });
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || data.error) {
+                            const message = data.details
+                                ? `${data.error}: ${data.details}`
+                                : (data.error || `Request failed with status ${response.status}`);
+                            throw new Error(message);
+                        }
+
+                        loadedFiles[config.tabName] = config.yamlText;
+                        originalLoadedFiles[config.tabName] = config.yamlText;
+                        savedConfigs.push(config);
+                    } catch (error) {
+                        failedConfigs.push({ config, error });
+                    }
+                }
+
+                if (failedConfigs.length > 0) {
+                    const firstFailure = failedConfigs[0];
+                    setSaveStatus(
+                        `Saved ${savedConfigs.length} of ${unsavedConfigs.length}. Could not save ${firstFailure.config.filename}: ${getSaveErrorSummary(firstFailure.error)}`,
+                        'error'
                     );
                 } else {
-                    console.error('Save error:', error);
-                    setSaveStatus(`Could not save ${filename}: ${getSaveErrorSummary(error)}`, 'error');
+                    const savedNames = savedConfigs.map(({ filename }) => filename).join(', ');
+                    setSaveStatus(
+                        savedConfigs.length === 1
+                            ? `Saved ${savedNames}.`
+                            : `Saved ${savedConfigs.length} configurations: ${savedNames}.`,
+                        'success'
+                    );
                 }
             } finally {
                 saveButton.disabled = false;
