@@ -328,7 +328,12 @@ async function applyStartupDirectoryLoad() {
   try {
     const resolvedStartupDir = resolveAllowedConfigDirectory(startupDir);
     await assertDirectory(resolvedStartupDir);
-    const { fileContents } = await loadDirectoryContents(resolvedStartupDir);
+    const { fileContents, loadedCount } = await loadDirectoryContents(resolvedStartupDir);
+    if (loadedCount === 0) {
+      app.locals.startupDirectory = null;
+      app.locals.startupFiles = {};
+      return;
+    }
     app.locals.startupDirectory = resolvedStartupDir;
     app.locals.startupFiles = fileContents;
   } catch (error) {
@@ -369,7 +374,16 @@ app.get('/api/startup-directory', async (req, res) => {
   }
 
   try {
-    const { fileContents } = await loadDirectoryContents(startupDirectory);
+    const { fileContents, loadedCount } = await loadDirectoryContents(startupDirectory);
+    if (loadedCount === 0) {
+      app.locals.startupDirectory = null;
+      app.locals.startupFiles = {};
+      return res.json({
+        directory: null,
+        files: {},
+        hasStartupDirectory: false
+      });
+    }
     app.locals.startupFiles = fileContents;
     return res.json({
       directory: startupDirectory,
@@ -380,23 +394,6 @@ app.get('/api/startup-directory', async (req, res) => {
     console.error('Startup directory refresh failed:', error);
     return res.status(error.statusCode || 500).json({
       error: 'Failed to refresh startup directory',
-      details: error.message
-    });
-  }
-});
-
-app.post('/api/config/save', async (req, res) => {
-  try {
-    const { filename, content } = req.body;
-    if (!filename || content === undefined) {
-      return res.status(400).json({ error: 'Filename and content are required' });
-    }
-    await saveConfigFile(DATA_DIR, filename, content);
-    return res.json({ message: 'File saved successfully' });
-  } catch (error) {
-    const isYamlError = error && (error.name === 'YAMLParseError' || error.code === 'BAD_INDENT');
-    return res.status(error.statusCode || (isYamlError ? 400 : 500)).json({
-      error: isYamlError ? 'Invalid YAML' : 'Failed to save file',
       details: error.message
     });
   }

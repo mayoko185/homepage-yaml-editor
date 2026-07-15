@@ -47,6 +47,8 @@ async function waitForServer(baseUrl, child) {
 
 test('serves optimized assets and supports the active configuration APIs', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-test-'));
+  const yamlContent = '- Test:\n    - Service:\n        href: http://localhost/';
+  await fs.writeFile(path.join(tempRoot, 'services.yaml'), yamlContent, 'utf8');
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ['server.js'], {
@@ -65,6 +67,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     const startup = await (await fetch(`${baseUrl}/api/startup-directory`)).json();
     assert.equal(startup.hasStartupDirectory, true);
     assert.equal(startup.directory, tempRoot);
+    assert.equal(startup.files['services.yaml'], yamlContent);
 
     const examplesResponse = await fetch(`${baseUrl}/api/examples`);
     const examples = await examplesResponse.json();
@@ -75,13 +78,12 @@ test('serves optimized assets and supports the active configuration APIs', async
       assert.equal(examples.samples[baseName], expectedExample);
     }
 
-    const yamlContent = '- Test:\n    - Service:\n        href: http://localhost/';
-    const saveResponse = await fetch(`${baseUrl}/api/config/save`, {
+    const removedSaveResponse = await fetch(`${baseUrl}/api/config/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ filename: 'services.yaml', content: yamlContent })
     });
-    assert.equal(saveResponse.status, 200);
+    assert.equal(removedSaveResponse.status, 404);
 
     const refreshedStartupResponse = await fetch(`${baseUrl}/api/startup-directory`);
     const refreshedStartup = await refreshedStartupResponse.json();
@@ -133,6 +135,42 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(assetResponse.headers.get('content-encoding'), 'gzip');
 
     assert.equal((await fetch(`${baseUrl}/api/files`)).status, 404);
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
+test('keeps an empty startup directory in read-only sample mode', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-sample-test-'));
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      DATA_DIR: tempRoot,
+      AUTOLOAD_DIR: tempRoot
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+    const startupResponse = await fetch(`${baseUrl}/api/startup-directory`);
+    const startup = await startupResponse.json();
+    assert.equal(startupResponse.status, 200);
+    assert.deepEqual(startup, {
+      directory: null,
+      files: {},
+      hasStartupDirectory: false
+    });
+    assert.equal((await fetch(`${baseUrl}/api/config/save`, { method: 'POST' })).status, 404);
+    assert.deepEqual(await fs.readdir(tempRoot), []);
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => child.once('exit', resolve));

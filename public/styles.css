@@ -247,6 +247,9 @@
             box-shadow: none;
             opacity: 0.7;
         }
+        .toolbar-action-button.sample-mode-disabled:disabled {
+            cursor: not-allowed;
+        }
         .toolbar-action-button .toolbar-button-icon {
             background: var(--action-icon-bg);
             color: var(--action-icon-color);

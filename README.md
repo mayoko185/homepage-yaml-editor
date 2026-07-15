@@ -71,11 +71,11 @@ On startup, the app chooses an autoload directory in this order:
 1. `AUTOLOAD_DIR`
 2. `/hp_config`, only if that directory exists
 
-If a startup directory is autoloaded successfully, the editor loads files from that directory and replaces the toolbar's `Reset` action with `Reload`. This avoids accidentally replacing real mounted config content with sample YAML.
+If a startup directory contains at least one supported YAML file, the editor loads files from that directory and replaces the toolbar's `Reset` action with `Reload`. An empty startup directory remains in read-only sample mode instead of being reported as loaded.
 
 ## Default Samples
 
-The built-in sample content is loaded from the repository's `examples` directory. Replace `services.yaml`, `settings.yaml`, `bookmarks.yaml`, or `widgets.yaml` there to change what a fresh editor session and the `Reset` action use. Rebuild the Docker image after changing these files so the updated examples are copied into the container.
+The built-in sample content is loaded from the repository's `examples` directory. Replace `services.yaml`, `settings.yaml`, `bookmarks.yaml`, or `widgets.yaml` there to change what a fresh editor session and the `Reset` action use. Rebuild the Docker image after changing these files so the updated examples are copied into the container. Sample mode is read-only: edits remain in the browser, and Save stays disabled until a configuration directory is loaded.
 
 ## Saving Behavior
 
@@ -85,7 +85,7 @@ Loaded directories must be `/hp_config`, `DATA_DIR`, `AUTOLOAD_DIR`, or a path l
 
 If the loaded file was `.yml`, saves keep using `.yml`. If it was `.yaml`, saves keep using `.yaml`.
 
-If no directory is loaded, saves use the data-file endpoint and write to `DATA_DIR`.
+If no directory is loaded, the editor uses read-only examples and Save is disabled. Load a configuration directory before saving changes.
 
 `Download All` creates a zip archive containing the current `services`, `settings`, `bookmarks`, and `widgets` YAML content from the editor.
 

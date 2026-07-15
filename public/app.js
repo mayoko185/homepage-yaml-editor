@@ -285,6 +285,17 @@
             }
         }
 
+        function setSampleMode(isSampleMode) {
+            const saveButton = document.getElementById('save-config-button');
+            const saveLabel = saveButton.querySelector('.toolbar-button-label');
+            saveButton.disabled = isSampleMode;
+            saveButton.classList.toggle('sample-mode-disabled', isSampleMode);
+            saveButton.setAttribute('aria-label', isSampleMode ? 'Save unavailable in sample mode' : 'Save');
+            saveLabel.textContent = isSampleMode
+                ? 'Examples are read-only; load a directory to save'
+                : 'Save all edited YAML files';
+        }
+
         function setReloadDirectoryVisible(isVisible) {
             const reloadButton = document.getElementById('reload-directory-button');
             if (reloadButton) {
@@ -300,6 +311,7 @@
             currentDirectoryPath = data.directory;
 
             setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length);
+            setSampleMode(false);
             setResetSampleVisible(false);
             setReloadDirectoryVisible(true);
             switchTab(tabName, null, { skipRemember: true });
@@ -380,6 +392,10 @@
 
         async function saveConfig() {
             const saveButton = document.getElementById('save-config-button');
+            if (!currentDirectoryPath) {
+                setSaveStatus('Examples are read-only. Load a directory before saving.', 'error');
+                return;
+            }
             rememberCurrentEditorValue();
             const unsavedConfigs = getUnsavedTabNames().map((tabName) => ({
                 tabName,
@@ -419,14 +435,14 @@
 
                 for (const config of unsavedConfigs) {
                     try {
-                        const endpoint = currentDirectoryPath ? '/api/directory/file/save' : '/api/config/save';
-                        const requestBody = currentDirectoryPath
-                            ? { dirPath: currentDirectoryPath, filename: config.filename, content: config.yamlText }
-                            : { filename: config.filename, content: config.yamlText };
-                        const response = await fetch(endpoint, {
+                        const response = await fetch('/api/directory/file/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(requestBody)
+                            body: JSON.stringify({
+                                dirPath: currentDirectoryPath,
+                                filename: config.filename,
+                                content: config.yamlText
+                            })
                         });
                         const data = await response.json().catch(() => ({}));
                         if (!response.ok || data.error) {
@@ -460,7 +476,7 @@
                     );
                 }
             } finally {
-                saveButton.disabled = false;
+                setSampleMode(!currentDirectoryPath);
                 updateUnsavedIndicators();
             }
         }
@@ -613,6 +629,11 @@
                 'widgets': sampleConfigs.widgets
             };
             originalLoadedFiles = { ...loadedFiles };
+            currentDirectoryPath = null;
+            setSampleMode(true);
+            const directoryInfo = document.getElementById('directory-info');
+            directoryInfo.textContent = 'Examples loaded (read-only).';
+            directoryInfo.dataset.state = 'idle';
             
             setEditorValue(sampleConfigs.services);
             updatePreview();
