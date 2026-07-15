@@ -30,6 +30,7 @@
             widgets: 'widgets.yaml'
         };
         let currentDirectoryPath = null;
+        let currentDirectoryWasAutoloaded = false;
         let previewHomepageTab = null;
         const parsedConfigCache = new Map();
         let previewUpdateTimer = null;
@@ -303,14 +304,15 @@
             }
         }
 
-        function applyLoadedDirectory(data, tabName = currentTab) {
+        function applyLoadedDirectory(data, tabName = currentTab, { autoloaded = false } = {}) {
             const normalized = normalizeLoadedFiles(data.files);
             loadedFiles = normalized.files;
             originalLoadedFiles = { ...normalized.files };
             loadedFileNames = normalized.fileNames;
             currentDirectoryPath = data.directory;
+            currentDirectoryWasAutoloaded = autoloaded;
 
-            setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length);
+            setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length, { autoloaded });
             setSampleMode(false);
             setResetSampleVisible(false);
             setReloadDirectoryVisible(true);
@@ -336,9 +338,11 @@
             }
         }
 
-        function setDirectoryStatus(directory, fileCount) {
+        function setDirectoryStatus(directory, fileCount, { autoloaded = false } = {}) {
             const statusElement = document.getElementById('directory-info');
-            statusElement.textContent = `Loaded ${fileCount}/4 from ${directory}`;
+            statusElement.textContent = autoloaded
+                ? `Autoloaded ${fileCount}/4`
+                : `Loaded ${fileCount}/4 from ${directory}`;
             statusElement.dataset.state = 'loaded';
         }
 
@@ -643,7 +647,7 @@
                 const startup = await response.json();
 
                 if (startup.hasStartupDirectory && startup.directory && startup.files) {
-                    applyLoadedDirectory(startup, 'services');
+                    applyLoadedDirectory(startup, 'services', { autoloaded: true });
                 }
             } catch (error) {
                 console.error('Startup directory load failed:', error);
@@ -776,7 +780,7 @@
 
             try {
                 const data = await requestDirectoryLoad(currentDirectoryPath);
-                applyLoadedDirectory(data);
+                applyLoadedDirectory(data, currentTab, { autoloaded: currentDirectoryWasAutoloaded });
                 setSaveStatus(`Reloaded ${Object.keys(data.files || {}).length} configurations.`, 'success');
             } catch (error) {
                 console.error('Directory reload error:', error);
