@@ -71,7 +71,7 @@ On startup, the app chooses an autoload directory in this order:
 1. `AUTOLOAD_DIR`
 2. `/hp_config`, only if that directory exists
 
-If a startup directory is autoloaded successfully, the editor loads files from that directory and hides the `Reset to Sample` button. This avoids accidentally replacing real mounted config content with sample YAML.
+If a startup directory is autoloaded successfully, the editor loads files from that directory and replaces the toolbar's `Reset` action with `Reload`. This avoids accidentally replacing real mounted config content with sample YAML.
 
 ## Saving Behavior
 

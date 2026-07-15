@@ -288,21 +288,6 @@
         .cm-s-default .cm-meta,
         .cm-s-default .cm-variable-2,
         .cm-s-default .cm-def { color: var(--syntax-key); }
-        .controls {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin: 0 0 12px;
-            padding: 6px 0;
-        }
-        .controls[hidden] {
-            display: none;
-        }
-        .controls button {
-            margin: 0;
-        }
         .notification-area {
             display: grid;
             gap: 8px;
@@ -375,10 +360,6 @@
         }
         .save-status[data-state="error"]::before {
             content: "!";
-        }
-        .controls button:disabled {
-            cursor: wait;
-            opacity: 0.65;
         }
         button {
             background-color: var(--button-bg);

@@ -297,12 +297,8 @@ providers:
 
         function setResetSampleVisible(isVisible) {
             const resetButton = document.getElementById('reset-sample-button');
-            const sampleControls = document.getElementById('sample-controls');
             if (resetButton) {
-                resetButton.style.display = isVisible ? '' : 'none';
-            }
-            if (sampleControls) {
-                sampleControls.hidden = !isVisible;
+                resetButton.hidden = !isVisible;
             }
         }
 
