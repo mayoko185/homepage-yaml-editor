@@ -1275,6 +1275,7 @@
         .header-actions form[hidden] {
             display: none;
         }
+        .docs-link,
         .theme-toggle,
         .logout-button {
             display: inline-flex;
@@ -1292,9 +1293,11 @@
             border-radius: 7px;
             cursor: pointer;
             font-size: 20px;
+            text-decoration: none;
             box-shadow: none;
             transition: background-color 0.18s ease, color 0.18s ease;
         }
+        .docs-link:hover,
         .theme-toggle:hover,
         .logout-button:hover {
             background-color: var(--button-bg);
