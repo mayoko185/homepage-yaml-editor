@@ -25,7 +25,15 @@ const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 10;
 const sessions = new Map();
 const loginAttempts = new Map();
-const CONFIG_BASE_NAMES = Object.freeze(['bookmarks', 'settings', 'services', 'widgets']);
+const CONFIG_BASE_NAMES = Object.freeze([
+  'services',
+  'settings',
+  'bookmarks',
+  'widgets',
+  'docker',
+  'proxmox',
+  'kubernetes'
+]);
 const CONFIG_EXTENSIONS = Object.freeze(['.yaml', '.yml']);
 const ALLOWED_CONFIG_FILES = new Set(
   CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`))
@@ -220,7 +228,7 @@ function isValidConfigFile(filename) {
 
 function resolveConfigFilePath(dirPath, filename) {
   if (!isValidConfigFile(filename)) {
-    const error = new Error('Only bookmarks, settings, services, and widgets YAML files are supported');
+    const error = new Error(`Only ${CONFIG_BASE_NAMES.join(', ')} YAML files are supported`);
     error.statusCode = 400;
     throw error;
   }

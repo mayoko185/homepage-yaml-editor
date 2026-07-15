@@ -34,7 +34,7 @@ chown_if_needed() {
 chown_if_needed /app/data
 chown_if_needed /hp_config
 
-for base_name in bookmarks settings services widgets; do
+for base_name in services settings bookmarks widgets docker proxmox kubernetes; do
     for extension in yaml yml; do
         config_file="/hp_config/${base_name}.${extension}"
         if [ -f "$config_file" ]; then

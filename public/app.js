@@ -1,10 +1,14 @@
 // Sample homepage configuration files loaded from the server-side examples directory.
-        const sampleConfigs = {
-            services: '',
-            settings: '',
-            bookmarks: '',
-            widgets: ''
-        };
+        const configTabNames = Object.freeze([
+            'services',
+            'settings',
+            'bookmarks',
+            'widgets',
+            'docker',
+            'proxmox',
+            'kubernetes'
+        ]);
+        const sampleConfigs = Object.fromEntries(configTabNames.map((tabName) => [tabName, '']));
 
         async function loadSampleConfigs() {
             const response = await fetch('/api/examples', { cache: 'no-store' });
@@ -23,12 +27,9 @@
         let currentTab = 'services';
         let loadedFiles = {};
         let originalLoadedFiles = {};
-        let loadedFileNames = {
-            services: 'services.yaml',
-            settings: 'settings.yaml',
-            bookmarks: 'bookmarks.yaml',
-            widgets: 'widgets.yaml'
-        };
+        let loadedFileNames = Object.fromEntries(
+            configTabNames.map((tabName) => [tabName, `${tabName}.yaml`])
+        );
         let currentDirectoryPath = null;
         let currentDirectoryWasAutoloaded = false;
         let previewHomepageTab = null;
@@ -117,16 +118,10 @@
             previewUpdateTimer = window.setTimeout(updateVisualPreview, 180);
         }
 
-        const fileToTabMapping = {
-            'services.yaml': 'services',
-            'services.yml': 'services',
-            'settings.yaml': 'settings',
-            'settings.yml': 'settings',
-            'bookmarks.yaml': 'bookmarks',
-            'bookmarks.yml': 'bookmarks',
-            'widgets.yaml': 'widgets',
-            'widgets.yml': 'widgets'
-        };
+        const fileToTabMapping = Object.fromEntries(configTabNames.flatMap((tabName) => [
+            [`${tabName}.yaml`, tabName],
+            [`${tabName}.yml`, tabName]
+        ]));
 
         function normalizeLoadedFiles(files) {
             const normalizedFiles = {};
@@ -150,7 +145,7 @@
         }
 
         function getUnsavedTabNames() {
-            return ['services', 'settings', 'bookmarks', 'widgets'].filter((tabName) => {
+            return configTabNames.filter((tabName) => {
                 const currentYaml = getTabYamlText(tabName);
                 const originalYaml = Object.prototype.hasOwnProperty.call(originalLoadedFiles, tabName)
                     ? String(originalLoadedFiles[tabName] || '')
@@ -341,8 +336,8 @@
         function setDirectoryStatus(directory, fileCount, { autoloaded = false } = {}) {
             const statusElement = document.getElementById('directory-info');
             statusElement.textContent = autoloaded
-                ? `Autoloaded ${fileCount}/4`
-                : `Loaded ${fileCount}/4 from ${directory}`;
+                ? `Autoloaded ${fileCount}/${configTabNames.length}`
+                : `Loaded ${fileCount}/${configTabNames.length} from ${directory}`;
             statusElement.dataset.state = 'loaded';
         }
 
@@ -494,7 +489,7 @@
                     }, 0);
                     return;
                 }
-                const filesForDownload = ['services', 'settings', 'bookmarks', 'widgets'].reduce((files, tabName) => {
+                const filesForDownload = configTabNames.reduce((files, tabName) => {
                     files[loadedFileNames[tabName] || `${tabName}.yaml`] = getTabYamlText(tabName);
                     return files;
                 }, {});
@@ -626,12 +621,7 @@
                 setSaveStatus(`Could not load examples: ${error.message}`, 'error');
             }
             
-            loadedFiles = {
-                'services': sampleConfigs.services,
-                'settings': sampleConfigs.settings, 
-                'bookmarks': sampleConfigs.bookmarks,
-                'widgets': sampleConfigs.widgets
-            };
+            loadedFiles = { ...sampleConfigs };
             originalLoadedFiles = { ...loadedFiles };
             currentDirectoryPath = null;
             setSampleMode(true);
@@ -1256,12 +1246,9 @@
 
         function updateVisualPreview() {
             const previewDiv = document.getElementById('visual-preview');
-            const parsed = {
-                services: parseTabConfig('services'),
-                bookmarks: parseTabConfig('bookmarks'),
-                widgets: parseTabConfig('widgets'),
-                settings: parseTabConfig('settings')
-            };
+            const parsed = Object.fromEntries(
+                configTabNames.map((tabName) => [tabName, parseTabConfig(tabName)])
+            );
 
             const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
             const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];

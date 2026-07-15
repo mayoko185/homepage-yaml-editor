@@ -73,7 +73,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     const examples = await examplesResponse.json();
     assert.equal(examplesResponse.status, 200);
     assert.equal(examplesResponse.headers.get('cache-control'), 'no-store');
-    for (const baseName of ['bookmarks', 'services', 'settings', 'widgets']) {
+    for (const baseName of ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes']) {
       const expectedExample = await fs.readFile(path.join('examples', `${baseName}.yaml`), 'utf8');
       assert.equal(examples.samples[baseName], expectedExample);
     }
@@ -106,6 +106,15 @@ test('serves optimized assets and supports the active configuration APIs', async
       body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: yamlContent })
     });
     assert.equal((await unchangedResponse.json()).changed, false);
+
+    const proxmoxContent = 'pve:\n  url: https://proxmox.example:8006\n';
+    const proxmoxSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: tempRoot, filename: 'proxmox.yaml', content: proxmoxContent })
+    });
+    assert.equal(proxmoxSaveResponse.status, 200);
+    assert.equal(await fs.readFile(path.join(tempRoot, 'proxmox.yaml'), 'utf8'), proxmoxContent);
 
     const updatedYamlContent = `${yamlContent}\n        description: Updated after startup`;
     const updatedSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {

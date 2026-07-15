@@ -12,6 +12,9 @@ Homepage YAML Editor is a small Express application for editing the supported Ho
 - `settings.yaml` / `settings.yml`
 - `bookmarks.yaml` / `bookmarks.yml`
 - `widgets.yaml` / `widgets.yml`
+- `docker.yaml` / `docker.yml`
+- `proxmox.yaml` / `proxmox.yml`
+- `kubernetes.yaml` / `kubernetes.yml`
 
 The server reads and writes configuration files from explicitly allowed server-side directories. The browser provides a CodeMirror YAML editor and a lightweight Homepage-style preview.
 

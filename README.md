@@ -4,7 +4,7 @@ A small browser-based editor for [Homepage](https://gethomepage.dev/) YAML confi
 
 ## Features
 
-- Edit `services`, `settings`, `bookmarks`, and `widgets` YAML files.
+- Edit `services`, `settings`, `bookmarks`, `widgets`, `docker`, `proxmox`, and `kubernetes` YAML files.
 - Auto-load a mounted Homepage config directory at startup.
 - Save raw YAML text back to disk without reformatting comments or spacing.
 - Download supported config files as a zip archive.
@@ -75,7 +75,7 @@ If a startup directory contains at least one supported YAML file, the editor loa
 
 ## Default Samples
 
-The built-in sample content is loaded from the repository's `examples` directory. Replace `services.yaml`, `settings.yaml`, `bookmarks.yaml`, or `widgets.yaml` there to change what a fresh editor session and the `Reset` action use. Rebuild the Docker image after changing these files so the updated examples are copied into the container. Sample mode is read-only: edits remain in the browser, and Save stays disabled until a configuration directory is loaded.
+The built-in sample content is loaded from the repository's `examples` directory. Replace any of the seven supported YAML files there to change what a fresh editor session and the `Reset` action use. Rebuild the Docker image after changing these files so the updated examples are copied into the container. Sample mode is read-only: edits remain in the browser, and Save stays disabled until a configuration directory is loaded.
 
 ## Saving Behavior
 
@@ -87,7 +87,7 @@ If the loaded file was `.yml`, saves keep using `.yml`. If it was `.yaml`, saves
 
 If no directory is loaded, the editor uses read-only examples and Save is disabled. Load a configuration directory before saving changes.
 
-`Download All` creates a zip archive containing the current `services`, `settings`, `bookmarks`, and `widgets` YAML content from the editor.
+`Download All` creates a zip archive containing all seven supported YAML files from the editor.
 
 ## Icons
 
