@@ -486,6 +486,12 @@ providers:
         async function downloadAllConfigs() {
             try {
                 rememberCurrentEditorValue();
+                if (hasUnsavedChanges()) {
+                    window.setTimeout(() => {
+                        setSaveStatus('Save or discard pending changes before downloading.', 'error');
+                    }, 0);
+                    return;
+                }
                 const filesForDownload = ['services', 'settings', 'bookmarks', 'widgets'].reduce((files, tabName) => {
                     files[loadedFileNames[tabName] || `${tabName}.yaml`] = getTabYamlText(tabName);
                     return files;
