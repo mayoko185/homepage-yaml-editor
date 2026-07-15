@@ -1357,6 +1357,7 @@ providers:
 
             previewDiv.innerHTML = `
                 <div class="dashboard-shell">
+                    ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
                     ${previewTabsHtml}
                     <div class="dashboard-top">
                         <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'services', line: 1 })} title="Jump to services.yaml"><span>Service Groups</span><strong>${filteredServices.length}</strong></div>
@@ -1364,7 +1365,6 @@ providers:
                         <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'widgets', line: 1 })} title="Jump to widgets.yaml"><span>Widgets</span><strong>${widgets.length}</strong></div>
                         <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'settings', kind: 'settings-key', key: 'providers' })} title="Jump to providers in settings.yaml"><span>Providers</span><strong>${settingsProviders.length}</strong></div>
                     </div>
-                    ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
                     <div class="dashboard-widgets">${widgetsHtml || '<div class="dashboard-empty">No widgets configured</div>'}</div>
                     <div class="dashboard-bookmarks">${bookmarksHtml || '<div class="dashboard-empty">No bookmarks configured</div>'}</div>
                     <div class="dashboard-grid">${groupsHtml || '<div class="dashboard-empty">No service groups configured</div>'}</div>
@@ -1387,19 +1387,19 @@ providers:
         }
 
         function refreshPreview() {
-            // Add a small visual feedback when refreshing
             const refreshBtn = document.querySelector('.refresh-btn');
-            const originalText = refreshBtn.textContent;
-            refreshBtn.textContent = 'Refreshing...';
             refreshBtn.disabled = true;
-            
-            // Update the preview
+            refreshBtn.classList.add('is-refreshing');
+            refreshBtn.setAttribute('aria-label', 'Refreshing preview');
+            refreshBtn.querySelector('.preview-control-label').textContent = 'Refreshing preview';
+
             updatePreview();
-            
-            // Restore button after a short delay
+
             setTimeout(() => {
-                refreshBtn.textContent = originalText;
                 refreshBtn.disabled = false;
+                refreshBtn.classList.remove('is-refreshing');
+                refreshBtn.setAttribute('aria-label', 'Refresh preview');
+                refreshBtn.querySelector('.preview-control-label').textContent = 'Refresh preview';
             }, 500);
         }
 

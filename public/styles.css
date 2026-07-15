@@ -547,58 +547,122 @@
             background-color: var(--preview-bg);
         }
         .preview-section {
-            margin-top: 25px;
-            padding: 20px;
+            margin-top: 18px;
+            padding: 0;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background-color: var(--preview-bg);
+            border-radius: 10px;
+            background-color: var(--config-item-bg);
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
         .preview-section.homepage-preview {
-            min-height: 420px;
+            min-height: 360px;
         }
         .preview-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid var(--border-color);
+            box-sizing: border-box;
+            min-height: 48px;
+            padding: 4px 9px 4px 12px;
+            border-bottom: 1px solid var(--border-color);
         }
         .preview-title {
-            font-size: 1.3em;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.05em;
             font-weight: 600;
             color: var(--group-title-color);
         }
+        .preview-title-icon,
+        .refresh-icon {
+            width: 21px;
+            height: 21px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
         .refresh-btn {
+            position: relative;
+            display: inline-grid;
+            place-items: center;
+            width: 38px;
+            height: 38px;
+            min-width: 38px;
+            min-height: 38px;
+            margin: 0;
+            padding: 0;
             background-color: var(--button-bg);
             color: white;
             border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
+            border-radius: 7px;
             cursor: pointer;
-            font-size: 0.95em;
-            font-weight: 500;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
+            transition: background-color 0.18s ease, color 0.18s ease;
         }
         .refresh-btn:hover {
             background-color: var(--button-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: none;
         }
         .refresh-btn:disabled {
             background-color: var(--border-color);
-            cursor: not-allowed;
+            cursor: wait;
             transform: none;
             box-shadow: none;
+        }
+        .refresh-btn.is-refreshing .refresh-icon {
+            animation: preview-refresh-spin 0.7s linear infinite;
+        }
+        @keyframes preview-refresh-spin {
+            to { transform: rotate(360deg); }
+        }
+        .preview-control-label {
+            position: absolute;
+            top: 50%;
+            right: calc(100% + 8px);
+            z-index: 30;
+            width: max-content;
+            padding: 6px 9px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--container-bg);
+            color: var(--text-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(4px, -50%);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .refresh-btn:hover > .preview-control-label,
+        .refresh-btn:focus-visible > .preview-control-label {
+            overflow: visible;
+            clip: auto;
+            clip-path: none;
+            opacity: 1;
+            transform: translate(0, -50%);
+        }
+        .preview-canvas {
+            margin: 12px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--preview-bg);
         }
         .visual-preview {
             display: grid;
             gap: 15px;
             margin-top: 10px;
         }
-        #visual-preview > div:not(.config-group):not(.error-message) {
+        #visual-preview > div:not(.config-group):not(.error-message):not(.dashboard-shell) {
             padding: 20px;
             text-align: center;
             font-style: italic;
@@ -739,7 +803,7 @@
         }
         .dashboard-shell {
             display: grid;
-            gap: 14px;
+            gap: 12px;
         }
         .dashboard-top {
             display: grid;
@@ -766,20 +830,22 @@
             border-color: var(--tab-active-bg);
         }
         .dashboard-stat {
+            position: relative;
             background: var(--config-item-bg);
             border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 10px 12px;
+            border-radius: 8px;
+            padding: 7px 9px;
             display: flex;
             justify-content: space-between;
             align-items: baseline;
         }
         .dashboard-stat span {
-            font-size: 0.8em;
-            opacity: 0.8;
+            font-size: 0.76em;
+            opacity: 0.72;
         }
         .dashboard-stat strong {
-            font-size: 1.2em;
+            font-size: 1em;
+            font-weight: 600;
         }
         .dashboard-errors {
             display: grid;
@@ -854,6 +920,13 @@
             .yaml-error-summary {
                 grid-column: 1 / -1;
             }
+            .dashboard-top {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .preview-canvas {
+                margin: 8px;
+                padding: 10px;
+            }
         }
         @media (max-width: 560px) {
             .notification-area {
@@ -869,6 +942,9 @@
             .tab {
                 padding-inline: 7px;
                 font-size: 0.95em;
+            }
+            .dashboard-top {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
         .dashboard-widgets,
@@ -933,6 +1009,7 @@
             gap: 10px;
         }
         .dashboard-card {
+            position: relative;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 10px;
@@ -940,10 +1017,39 @@
         }
         .preview-jump-target {
             cursor: pointer;
+            transition: outline-color 0.15s ease, box-shadow 0.15s ease;
         }
-        .preview-jump-target:hover {
-            outline: 2px solid var(--tab-active-bg);
+        .preview-jump-target:not(.yaml-error-card):hover {
+            outline: 1px solid var(--tab-active-bg);
             outline-offset: 2px;
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab-active-bg) 14%, transparent);
+        }
+        .dashboard-card.preview-jump-target::after,
+        .dashboard-stat.preview-jump-target::after {
+            content: "↗" / "";
+            position: absolute;
+            top: -7px;
+            right: -7px;
+            display: grid;
+            place-items: center;
+            width: 19px;
+            height: 19px;
+            border: 1px solid var(--tab-active-bg);
+            border-radius: 50%;
+            background: var(--container-bg);
+            color: var(--tab-active-bg);
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.85);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .dashboard-card.preview-jump-target:hover::after,
+        .dashboard-stat.preview-jump-target:hover::after {
+            opacity: 1;
+            transform: scale(1);
         }
         .CodeMirror-linebackground.source-line-highlight {
             background: rgba(76, 175, 80, 0.28);

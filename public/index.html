@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=45">
+    <link rel="stylesheet" href="styles.css?v=48">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -117,10 +117,21 @@
         
         <div class="preview-section homepage-preview" id="homepage-preview-section">
             <div class="preview-header">
-                <div class="preview-title">Homepage Preview</div>
-                <button class="refresh-btn" onclick="refreshPreview()">Refresh Preview</button>
+                <div class="preview-title">
+                    <svg class="preview-title-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
+                        <circle cx="12" cy="12" r="2.75"></circle>
+                    </svg>
+                    <span>Homepage Preview</span>
+                </div>
+                <button type="button" class="refresh-btn" onclick="refreshPreview()" aria-label="Refresh preview">
+                    <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M19 7v5h-5M5 17v-5h5M18.2 12A6.5 6.5 0 0 0 7.1 7.4L5 9M5.8 12a6.5 6.5 0 0 0 11.1 4.6L19 15"></path>
+                    </svg>
+                    <span class="preview-control-label" aria-hidden="true">Refresh preview</span>
+                </button>
             </div>
-            <div id="visual-preview"></div>
+            <div id="visual-preview" class="preview-canvas"></div>
         </div>
         
     </div>
@@ -158,6 +169,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=27"></script>
+    <script src="app.js?v=28"></script>
 </body>
 </html>
