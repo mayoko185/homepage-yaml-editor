@@ -595,8 +595,7 @@
             font-size: 1.2em;
         }
         .dashboard-errors {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
             gap: 8px;
         }
         .dashboard-pill {
@@ -609,6 +608,61 @@
         .dashboard-pill.error {
             border-color: var(--error-color);
             color: var(--error-color);
+        }
+        .yaml-error-card {
+            display: grid;
+            grid-template-columns: auto auto 1fr auto;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            margin: 0;
+            padding: 10px 54px 10px 12px;
+            border: 1px solid var(--error-color);
+            border-radius: 8px;
+            background: rgba(255, 107, 107, 0.08);
+            color: var(--text-color);
+            box-shadow: none;
+            text-align: left;
+            transform: none;
+        }
+        .yaml-error-card:hover {
+            background: rgba(255, 107, 107, 0.15);
+            box-shadow: none;
+            transform: none;
+        }
+        .yaml-error-file {
+            color: var(--error-color);
+            font-weight: 700;
+        }
+        .yaml-error-location {
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .yaml-error-summary {
+            min-width: 0;
+        }
+        .yaml-error-action {
+            color: var(--error-color);
+            font-size: 0.85em;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .save-status-jump {
+            cursor: pointer;
+        }
+        .save-status-jump:hover,
+        .save-status-jump:focus-visible {
+            outline: 2px solid var(--error-color);
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 760px) {
+            .yaml-error-card {
+                grid-template-columns: 1fr auto;
+            }
+            .yaml-error-summary {
+                grid-column: 1 / -1;
+            }
         }
         .dashboard-widgets,
         .dashboard-bookmarks {

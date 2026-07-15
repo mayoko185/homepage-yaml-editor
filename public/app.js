@@ -170,6 +170,13 @@ providers:
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
+        function scrollToEditor() {
+            const editorSection = document.getElementById('yaml-editor-section');
+            if (editorSection) {
+                editorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
         function scrollToPreview() {
             const previewSection = document.getElementById('homepage-preview-section');
             if (previewSection) {
@@ -240,13 +247,23 @@ providers:
             }
         }
 
-        function setSaveStatus(message, state = 'info') {
+        function setSaveStatus(message, state = 'info', source = null) {
             const statusElement = document.getElementById('save-status');
             statusElement.textContent = message;
             statusElement.dataset.state = state;
             statusElement.hidden = false;
             statusElement.setAttribute('role', state === 'error' ? 'alert' : 'status');
             statusElement.setAttribute('aria-live', state === 'error' ? 'assertive' : 'polite');
+            statusElement.classList.toggle('save-status-jump', Boolean(source));
+            if (source) {
+                statusElement.dataset.source = JSON.stringify(source);
+                statusElement.tabIndex = 0;
+                statusElement.title = 'Jump to the YAML error';
+            } else {
+                delete statusElement.dataset.source;
+                statusElement.removeAttribute('tabindex');
+                statusElement.removeAttribute('title');
+            }
         }
 
         function setDirectoryStatus(directory, fileCount) {
@@ -259,11 +276,47 @@ providers:
             statusElement.hidden = true;
             statusElement.textContent = '';
             delete statusElement.dataset.state;
+            delete statusElement.dataset.source;
+            statusElement.classList.remove('save-status-jump');
+            statusElement.removeAttribute('tabindex');
+            statusElement.removeAttribute('title');
         }
 
         function getSaveErrorSummary(error) {
             const message = error && error.message ? error.message : error;
             return String(message || 'Unknown error').split('\n')[0];
+        }
+
+        function formatYamlError(error) {
+            const rawReason = String(
+                (error && error.reason)
+                || (error && error.message ? error.message.split('\n')[0] : '')
+                || 'Invalid YAML'
+            ).replace(/^YAMLException:\s*/i, '').trim();
+            const friendlyReasons = [
+                [/duplicated mapping key/i, 'This key is defined more than once.'],
+                [/bad indentation of a mapping entry/i, 'Check the indentation for this key or value.'],
+                [/bad indentation of a sequence entry/i, 'Check the indentation for this list item.'],
+                [/can not read a block mapping entry/i, 'A key is missing a value, or the indentation is incorrect.'],
+                [/end of the stream or a document separator is expected/i, 'Check for incorrect indentation or a missing colon.'],
+                [/missed comma between flow collection entries/i, 'Add a comma between the inline list or object values.'],
+                [/unexpected end of the stream/i, 'The YAML ends before this value or block is complete.'],
+                [/unknown escape sequence/i, 'This quoted value contains an unsupported escape sequence.']
+            ];
+            const matchedReason = friendlyReasons.find(([pattern]) => pattern.test(rawReason));
+            const summary = matchedReason
+                ? matchedReason[1]
+                : `${rawReason.charAt(0).toUpperCase()}${rawReason.slice(1)}${/[.!?]$/.test(rawReason) ? '' : '.'}`;
+            const line = error && error.mark && typeof error.mark.line === 'number' ? error.mark.line + 1 : null;
+            const column = error && error.mark && typeof error.mark.column === 'number' ? error.mark.column + 1 : null;
+            return { summary, line, column };
+        }
+
+        function formatYamlErrorLocation(error) {
+            if (!error.line) {
+                return 'Location unavailable';
+            }
+            return `Line ${error.line}${error.column ? `, column ${error.column}` : ''}`;
         }
 
         async function saveConfig() {
@@ -307,8 +360,17 @@ providers:
                 originalLoadedFiles[currentTab] = yamlText;
                 setSaveStatus(`${data.message || 'Configuration saved successfully'}: ${filename}`, 'success');
             } catch (error) {
-                console.error('Error:', error);
-                setSaveStatus(`Could not save ${filename}: ${getSaveErrorSummary(error)}`, 'error');
+                if (error && error.mark) {
+                    const yamlError = formatYamlError(error);
+                    setSaveStatus(
+                        `${filename} · ${formatYamlErrorLocation(yamlError)} · ${yamlError.summary}`,
+                        'error',
+                        { tab: currentTab, line: yamlError.line || 1 }
+                    );
+                } else {
+                    console.error('Save error:', error);
+                    setSaveStatus(`Could not save ${filename}: ${getSaveErrorSummary(error)}`, 'error');
+                }
             } finally {
                 saveButton.disabled = false;
             }
@@ -560,18 +622,10 @@ providers:
                 parsedConfigCache.set(tabName, { yamlText, result });
                 return result;
             } catch (error) {
-                const parserLine = error && error.mark && typeof error.mark.line === 'number' ? error.mark.line + 1 : null;
-                const column = error && error.mark && typeof error.mark.column === 'number' ? error.mark.column + 1 : null;
-                const likelyLine = parserLine && parserLine > 1 ? parserLine - 1 : parserLine;
-                const cleaned = (error && error.message ? error.message.split('\n')[0] : 'Invalid YAML').replace(/^YAMLException:\s*/i, '');
+                const yamlError = formatYamlError(error);
                 const result = {
                     data: null,
-                    error: {
-                        summary: cleaned,
-                        line: likelyLine,
-                        parserLine,
-                        column
-                    }
+                    error: yamlError
                 };
                 parsedConfigCache.set(tabName, { yamlText, result });
                 return result;
@@ -920,11 +974,14 @@ providers:
             const errorItems = Object.entries(parsed)
                 .filter(([, value]) => value.error)
                 .map(([key, value]) => {
-                    const location = value.error.line ? `Line ${value.error.line}${value.error.column ? `, Col ${value.error.column}` : ''}` : 'Unknown location';
-                    const parserHint = value.error.parserLine && value.error.line && value.error.parserLine !== value.error.line
-                        ? ` (parser reported line ${value.error.parserLine})`
-                        : '';
-                    return `<span class="dashboard-pill error">${key}: ${value.error.summary} (${location})${parserHint}</span>`;
+                    const filename = loadedFileNames[key] || `${key}.yaml`;
+                    const source = { tab: key, line: value.error.line || 1 };
+                    return `<button type="button" class="yaml-error-card preview-jump-target" ${getSourceAttributes(source)} title="Jump to the YAML error">
+                        <span class="yaml-error-file">${escapeHtml(filename)}</span>
+                        <span class="yaml-error-location">${escapeHtml(formatYamlErrorLocation(value.error))}</span>
+                        <span class="yaml-error-summary">${escapeHtml(value.error.summary)}</span>
+                        <span class="yaml-error-action">Jump to line &rarr;</span>
+                    </button>`;
                 })
                 .join('');
 
@@ -1086,6 +1143,24 @@ providers:
                 jumpToYamlSource(JSON.parse(target.getAttribute('data-source') || '{}'));
             } catch (error) {
                 console.warn('Could not parse preview source target', error);
+            }
+        });
+        const saveStatusElement = document.getElementById('save-status');
+        function jumpFromSaveStatus() {
+            if (!saveStatusElement.dataset.source) {
+                return;
+            }
+            try {
+                jumpToYamlSource(JSON.parse(saveStatusElement.dataset.source));
+            } catch (error) {
+                console.warn('Could not parse save error source target', error);
+            }
+        }
+        saveStatusElement.addEventListener('click', jumpFromSaveStatus);
+        saveStatusElement.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                jumpFromSaveStatus();
             }
         });
         window.addEventListener('scroll', updateFloatingNavVisibility);

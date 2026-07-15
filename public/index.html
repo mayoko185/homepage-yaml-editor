@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=21">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -20,6 +20,10 @@
         <button type="button" id="scroll-top-button" class="floating-nav-button" onclick="scrollToTop()" aria-label="Back to top" title="Back to top" hidden>
             <span class="floating-nav-icon" aria-hidden="true">&uarr;</span>
             <span>Top</span>
+        </button>
+        <button type="button" class="floating-nav-button" onclick="scrollToEditor()" aria-label="Jump to YAML editor" title="Jump to YAML editor">
+            <span class="floating-nav-icon" aria-hidden="true">&#9998;</span>
+            <span>Editor</span>
         </button>
         <button type="button" class="floating-nav-button" onclick="scrollToPreview()" aria-label="Jump to homepage preview" title="Jump to homepage preview">
             <span class="floating-nav-icon" aria-hidden="true">&darr;</span>
@@ -56,7 +60,7 @@
             <div class="tab" data-tab="widgets" onclick="switchTab('widgets', event)">Widgets</div>
         </div>
         
-        <div class="editor-section">
+        <div class="editor-section" id="yaml-editor-section">
             <div class="editor-toolbar" role="toolbar" aria-label="YAML editor tools">
                 <div class="toolbar-group">
                     <label class="toolbar-toggle" title="Automatically indent new YAML lines">
@@ -103,6 +107,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=9"></script>
+    <script src="app.js?v=11"></script>
 </body>
 </html>
