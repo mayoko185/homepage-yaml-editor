@@ -19,6 +19,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Changed the editor toolbar to compact icon-only controls with hover and keyboard-focus labels.
 - Enlarged the toolbar icons and added a solid floppy-disk icon for Save.
 - Changed dark-theme file-action icons to light gray on black-tinted tiles for softer contrast.
+- Expanded file-action hover labels to describe exactly which YAML files each action affects.
 
 ## [1.1.0] - 2026-07-15
 
