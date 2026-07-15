@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-15
+
 ### Added
 
 - Added a virtualized CodeMirror YAML editor with syntax highlighting, auto-indent, and comment toggling from the editor toolbar or with `Ctrl+/`.
