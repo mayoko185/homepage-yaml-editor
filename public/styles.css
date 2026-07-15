@@ -1180,6 +1180,8 @@
             line-height: 1.45;
             text-align: left;
             white-space: pre-line;
+            overflow-wrap: anywhere;
+            word-break: break-word;
             opacity: 0;
             pointer-events: none;
             transform: translate(-50%, 4px);
@@ -1251,6 +1253,8 @@
         .dashboard-card-desc {
             font-size: 0.82em;
             opacity: 0.9;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         .dashboard-empty {
             padding: 10px;

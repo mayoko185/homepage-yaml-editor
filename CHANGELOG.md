@@ -19,6 +19,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Removed visible service URLs from Preview cards and added detailed source-aware YAML tooltips to preview jump targets.
 - Added more spacing between service icons and descriptions in Preview cards.
 - Replaced the Preview refresh action with default-on Auto Refresh and an off-state Manual Refresh control.
+- Wrapped long URLs and unbroken text safely inside Preview tooltips and service cards.
 
 ### Changed
 
