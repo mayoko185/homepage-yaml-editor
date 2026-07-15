@@ -1314,8 +1314,15 @@ providers:
 
         // Theme toggle functionality
         const themeToggle = document.getElementById('themeToggle');
+        const autoIndentToggle = document.getElementById('auto-indent-toggle');
+        const autoIndentLabel = document.getElementById('auto-indent-label');
         const toggleCommentButton = document.getElementById('toggle-comment-button');
         const jumpSectionButton = document.getElementById('jump-section-button');
+        function updateAutoIndentLabel() {
+            autoIndentLabel.textContent = `Auto Indent ${autoIndentToggle.checked ? 'on' : 'off'}`;
+        }
+        autoIndentToggle.addEventListener('change', updateAutoIndentLabel);
+        updateAutoIndentLabel();
         themeToggle.addEventListener('click', function() {
             applyTheme(document.body.classList.contains('light-mode'));
             yamlCodeEditor.refresh();

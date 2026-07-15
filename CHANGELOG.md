@@ -23,6 +23,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Standardized directory, save, unsaved, info, and error notification colors and borders across both themes.
 - Added full-button color inversion for file actions on hover and keyboard focus while preserving their default colors and position.
 - Tuned file-action hover colors to use a softer slate in dark mode and a high-contrast dark green in light mode.
+- Made the Auto Indent hover label report whether indentation is currently on or off.
 
 ## [1.1.0] - 2026-07-15
 
