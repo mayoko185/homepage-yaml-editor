@@ -179,6 +179,30 @@ providers:
         function hasUnsavedChanges() {
             return getUnsavedTabNames().length > 0;
         }
+
+        function updateUnsavedIndicators() {
+            const unsavedTabNames = getUnsavedTabNames();
+            const unsavedTabs = new Set(unsavedTabNames);
+
+            document.querySelectorAll('.tab[data-tab]').forEach((tab) => {
+                const tabName = tab.dataset.tab;
+                const isUnsaved = unsavedTabs.has(tabName);
+                const filename = loadedFileNames[tabName] || `${tabName}.yaml`;
+                tab.classList.toggle('unsaved', isUnsaved);
+                tab.title = isUnsaved ? `${filename} has unsaved changes` : '';
+            });
+
+            const statusElement = document.getElementById('unsaved-status');
+            if (unsavedTabNames.length === 0) {
+                statusElement.hidden = true;
+                statusElement.textContent = '';
+                return;
+            }
+
+            const filenames = unsavedTabNames.map((tabName) => loadedFileNames[tabName] || `${tabName}.yaml`);
+            statusElement.textContent = `\u25CF Unsaved (${filenames.length}): ${filenames.join(', ')}`;
+            statusElement.hidden = false;
+        }
         
         function scrollToTop() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -436,6 +460,7 @@ providers:
                 }
             } finally {
                 saveButton.disabled = false;
+                updateUnsavedIndicators();
             }
         }
 
@@ -1197,6 +1222,7 @@ providers:
 
         yamlCodeEditor.on('change', function() {
             clearSaveStatus();
+            updateUnsavedIndicators();
             scheduleVisualPreview();
         });
 

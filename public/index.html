@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=23">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -43,6 +43,7 @@
 
         <section class="notification-area" aria-label="Application notifications">
             <p id="directory-info" class="directory-status">No directory loaded.</p>
+            <p id="unsaved-status" class="unsaved-status" role="status" aria-live="polite" hidden></p>
             <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
         </section>
         
@@ -108,6 +109,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=14"></script>
+    <script src="app.js?v=16"></script>
 </body>
 </html>
