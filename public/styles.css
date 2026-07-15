@@ -11,7 +11,7 @@
             --group-title-color: #ffffff;
             --error-color: #ff6b6b;
             --warning-color: #fbbf24;
-            --unsaved-dot-color: #ff5c8a;
+            --unsaved-dot-color: #ff453a;
             --button-bg: #2196F3;
             --button-hover: #1e88e5;
             --syntax-key: #7dd3fc;
@@ -37,7 +37,7 @@
             --group-title-color: #333;
             --error-color: red;
             --warning-color: #a16207;
-            --unsaved-dot-color: #c2185b;
+            --unsaved-dot-color: #d70000;
             --button-bg: #4CAF50;
             --button-hover: #45a049;
             --syntax-key: #0f766e;
@@ -380,13 +380,13 @@
             display: inline-block;
             margin-left: 8px;
             color: var(--unsaved-dot-color);
-            font-size: 0.85em;
-            text-shadow: 0 0 5px color-mix(in srgb, var(--unsaved-dot-color) 65%, transparent);
+            font-size: 1em;
+            text-shadow: 0 0 1px #fff, 0 0 6px rgba(255, 69, 58, 0.8);
             vertical-align: 0.12em;
         }
         .tab.active.unsaved::after {
-            color: #fff176;
-            text-shadow: 0 0 5px rgba(0, 0, 0, 0.55);
+            color: #ff2d20;
+            text-shadow: 0 0 1px #fff, 0 0 6px rgba(0, 0, 0, 0.75);
         }
         .tab:hover:not(.active) {
             background-color: var(--preview-bg);
