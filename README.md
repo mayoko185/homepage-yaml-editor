@@ -10,6 +10,7 @@ A small browser-based editor for [Homepage](https://gethomepage.dev/) YAML confi
 - Download supported config files as a zip archive.
 - Syntax-highlight YAML while preserving exact saved text.
 - Toggle comments for the current or selected YAML lines from the editor toolbar or with `Ctrl+/`.
+- Show save results and validation errors inline without interrupting editing with browser popups.
 - Preview Homepage tabs, service groups, collapsed groups, cards, bookmarks, widgets, and dashboard-icons.
 - Supports `.yaml` and `.yml` filenames.
 

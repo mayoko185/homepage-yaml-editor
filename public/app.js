@@ -240,67 +240,72 @@ providers:
             }
         }
 
+        function setSaveStatus(message, state = 'info') {
+            const statusElement = document.getElementById('save-status');
+            statusElement.textContent = message;
+            statusElement.dataset.state = state;
+            statusElement.hidden = false;
+            statusElement.setAttribute('role', state === 'error' ? 'alert' : 'status');
+            statusElement.setAttribute('aria-live', state === 'error' ? 'assertive' : 'polite');
+        }
+
+        function clearSaveStatus() {
+            const statusElement = document.getElementById('save-status');
+            statusElement.hidden = true;
+            statusElement.textContent = '';
+            delete statusElement.dataset.state;
+        }
+
+        function getSaveErrorSummary(error) {
+            const message = error && error.message ? error.message : error;
+            return String(message || 'Unknown error').split('\n')[0];
+        }
+
         async function saveConfig() {
             const yamlText = getEditorValue();
+            const filename = currentDirectoryPath
+                ? (loadedFileNames[currentTab] || `${currentTab}.yaml`)
+                : `${currentTab}.yaml`;
             const existingYamlText = Object.prototype.hasOwnProperty.call(originalLoadedFiles, currentTab)
                 ? String(originalLoadedFiles[currentTab] || '')
                 : String(sampleConfigs[currentTab] || '');
+            const saveButton = document.getElementById('save-config-button');
             
             try {
                 jsyaml.load(yamlText);
 
                 if (yamlText === existingYamlText) {
-                    alert('No changes to save for this file.');
+                    setSaveStatus(`No changes to save for ${filename}.`, 'info');
                     return;
                 }
 
-                if (currentDirectoryPath) {
-                    const response = await fetch('/api/directory/file/save', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            dirPath: currentDirectoryPath,
-                            filename: loadedFileNames[currentTab] || `${currentTab}.yaml`,
-                            content: yamlText
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    if (!response.ok || data.error) {
-                        const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to save file');
-                        alert(`Error saving file: ${message}`);
-                    } else {
-                        loadedFiles[currentTab] = yamlText;
-                        originalLoadedFiles[currentTab] = yamlText;
-                        alert(data.message || 'Configuration saved successfully!');
-                    }
-                } else {
-                    const response = await fetch('/api/config/save', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            filename: `${currentTab}.yaml`,
-                            content: yamlText
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    if (!response.ok || data.error) {
-                        const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to save file');
-                        alert(`Error saving file: ${message}`);
-                    } else {
-                        loadedFiles[currentTab] = yamlText;
-                        originalLoadedFiles[currentTab] = yamlText;
-                        alert(data.message || 'Configuration saved successfully!');
-                    }
+                saveButton.disabled = true;
+                setSaveStatus(`Saving ${filename}…`, 'pending');
+                const endpoint = currentDirectoryPath ? '/api/directory/file/save' : '/api/config/save';
+                const requestBody = currentDirectoryPath
+                    ? { dirPath: currentDirectoryPath, filename, content: yamlText }
+                    : { filename, content: yamlText };
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to save file');
+                    setSaveStatus(`Could not save ${filename}: ${getSaveErrorSummary(message)}`, 'error');
+                    return;
                 }
+
+                loadedFiles[currentTab] = yamlText;
+                originalLoadedFiles[currentTab] = yamlText;
+                setSaveStatus(`${data.message || 'Configuration saved successfully'}: ${filename}`, 'success');
             } catch (error) {
                 console.error('Error:', error);
-                alert(`Error occurred while trying to save the configuration: ${error.message}`);
+                setSaveStatus(`Could not save ${filename}: ${getSaveErrorSummary(error)}`, 'error');
+            } finally {
+                saveButton.disabled = false;
             }
         }
 
@@ -1060,6 +1065,7 @@ providers:
         });
 
         yamlCodeEditor.on('change', function() {
+            clearSaveStatus();
             scheduleVisualPreview();
         });
 
