@@ -706,18 +706,6 @@
             font-size: 0.85em;
             opacity: 0.8;
         }
-        .file-controls {
-            margin-bottom: 25px;
-            text-align: center;
-            padding: 20px;
-            background-color: var(--config-item-bg);
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            border: 1px solid var(--border-color);
-        }
-        input[type="file"] {
-            margin: 10px;
-        }
         .theme-toggle {
             position: absolute;
             top: 20px;

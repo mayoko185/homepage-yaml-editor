@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=4">
+    <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
     <div class="floating-nav" id="floating-nav">
@@ -19,16 +19,12 @@
         
         <button class="theme-toggle" id="themeToggle">Switch to Light Mode</button>
         
-        <div class="file-controls">
-            <button onclick="handleLoadDirectory()">Load Directory</button>
-            <button onclick="downloadAllConfigs()">Download All Configs</button>
-        </div>
-        
         <p id="directory-info" style="text-align:center; margin: 15px 0; padding: 15px; background-color: var(--config-item-bg); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">No directory loaded. Click "Load Directory" to load YAML configuration files from a server path.<br><small>Supports bookmarks.yaml, settings.yaml, services.yaml and widgets.yaml</small></p>
         
         <div class="controls">
             <button id="reset-sample-button" onclick="resetToSample()">Reset to Sample</button>
             <button id="save-config-button" onclick="saveConfig()">Save Configuration</button>
+            <button onclick="handleLoadDirectory()">Load Directory</button>
             <button onclick="downloadAllConfigs()">Download All</button>
             <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
         </div>
