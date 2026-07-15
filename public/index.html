@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
     <div class="floating-nav" id="floating-nav">
@@ -15,18 +15,21 @@
         <button type="button" onclick="scrollToPreview()" aria-label="Scroll to homepage preview" title="Scroll to homepage preview">⌂</button>
     </div>
     <div class="container">
-        <h1>Homepage YAML Editor</h1>
-        
-        <button class="theme-toggle" id="themeToggle">Switch to Light Mode</button>
-        
-        <p id="directory-info" style="text-align:center; margin: 15px 0; padding: 15px; background-color: var(--config-item-bg); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">No directory loaded. Click "Load Directory" to load YAML configuration files from a server path.<br><small>Supports bookmarks.yaml, settings.yaml, services.yaml and widgets.yaml</small></p>
+        <header class="page-header">
+            <h1>Homepage YAML Editor</h1>
+            <button class="theme-toggle" id="themeToggle">Switch to Light Mode</button>
+        </header>
+
+        <section class="notification-area" aria-label="Application notifications">
+            <p id="directory-info" class="directory-status">No directory loaded. Click "Load Directory" to load YAML configuration files from a server path.<br><small>Supports bookmarks.yaml, settings.yaml, services.yaml and widgets.yaml</small></p>
+            <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+        </section>
         
         <div class="controls">
             <button id="reset-sample-button" onclick="resetToSample()">Reset to Sample</button>
             <button id="save-config-button" onclick="saveConfig()">Save Configuration</button>
             <button onclick="handleLoadDirectory()">Load Directory</button>
             <button onclick="downloadAllConfigs()">Download All</button>
-            <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
         </div>
         <div class="config-tabs">
 

@@ -69,12 +69,16 @@
             padding: 20px;
             margin-top: 20px;
         }
+        .page-header {
+            position: relative;
+            min-height: 44px;
+            margin-bottom: 16px;
+        }
         h1 {
             color: var(--text-color);
             text-align: center;
-            margin-top: 20px;
-            margin-bottom: 30px;
-            font-size: 2.2em;
+            margin: 8px 0 0;
+            font-size: 1.8em;
             font-weight: 600;
         }
         .editor-container {
@@ -196,34 +200,44 @@
         .cm-s-default .cm-variable-2,
         .cm-s-default .cm-def { color: var(--syntax-key); }
         .controls {
-            text-align: center;
-            margin-top: 25px;
-            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 0 12px;
+            padding: 14px;
             background-color: var(--config-item-bg);
-            border-radius: 8px 8px 0 0;
-            box-shadow: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border: 1px solid var(--border-color);
-            border-bottom: 0;
-            margin-bottom: 0;
         }
-        .controls + .config-tabs {
-            margin-top: 0;
-            border-top: 0;
-            border-radius: 0 0 8px 8px;
-            box-shadow: none;
+        .controls button {
+            margin: 0;
         }
-        .controls + .config-tabs .tab {
-            border-radius: 0;
+        .notification-area {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 12px;
+            background-color: var(--config-item-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
-        .controls + .config-tabs .tab.active::after {
-            bottom: -1px;
+        .directory-status {
+            margin: 0;
+            padding: 11px 12px;
+            background-color: var(--preview-bg);
+            border-radius: 7px;
+            text-align: center;
+            line-height: 1.4;
         }
-        .controls + .config-tabs + .preview-section {
-            margin-top: 20px;
+        .directory-status small {
+            opacity: 0.78;
         }
         .save-status {
-            max-width: 760px;
-            margin: 14px auto 0;
+            margin: 0;
             padding: 10px 12px;
             border: 1px solid var(--border-color);
             border-radius: 6px;
@@ -301,12 +315,12 @@
         .config-tabs {
             display: flex;
             justify-content: center;
-            gap: 2px;
+            gap: 6px;
             margin-bottom: 25px;
-            border-bottom: 2px solid var(--border-color);
+            border: 1px solid var(--border-color);
             background-color: var(--config-item-bg);
-            border-radius: 8px 8px 0 0;
-            padding: 0;
+            border-radius: 12px;
+            padding: 6px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
         .tab {
@@ -314,7 +328,7 @@
             cursor: pointer;
             background-color: var(--tab-bg);
             border: none;
-            border-radius: 8px 8px 0 0;
+            border-radius: 9px;
             margin-right: 0;
             font-weight: 500;
             font-size: 1.05em;
@@ -324,15 +338,6 @@
             background-color: var(--tab-active-bg);
             color: var(--tab-active-text);
             position: relative;
-        }
-        .tab.active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background-color: var(--tab-active-bg);
         }
         .tab:hover:not(.active) {
             background-color: var(--preview-bg);
