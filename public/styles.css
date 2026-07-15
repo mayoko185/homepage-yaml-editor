@@ -14,6 +14,8 @@
             --unsaved-dot-color: #ff453a;
             --button-bg: #2196F3;
             --button-hover: #1e88e5;
+            --action-icon-color: #d1d5db;
+            --action-icon-bg: rgba(0, 0, 0, 0.14);
             --syntax-key: #7dd3fc;
             --syntax-string: #86efac;
             --syntax-number: #fbbf24;
@@ -40,6 +42,8 @@
             --unsaved-dot-color: #d70000;
             --button-bg: #4CAF50;
             --button-hover: #45a049;
+            --action-icon-color: white;
+            --action-icon-bg: rgba(255, 255, 255, 0.16);
             --syntax-key: #0f766e;
             --syntax-string: #15803d;
             --syntax-number: #b45309;
@@ -222,7 +226,8 @@
             opacity: 0.7;
         }
         .toolbar-action-button .toolbar-button-icon {
-            background: rgba(255, 255, 255, 0.16);
+            background: var(--action-icon-bg);
+            color: var(--action-icon-color);
         }
         .toolbar-button:focus-visible,
         .toolbar-toggle:focus-within {
