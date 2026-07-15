@@ -825,6 +825,16 @@
             text-align: center;
             font-size: 14px;
         }
+        .login-warning {
+            margin: 0 0 14px;
+            padding: 10px 12px;
+            border: 1px solid #d6a23a;
+            border-radius: 6px;
+            background: rgba(214, 162, 58, 0.12);
+            color: var(--text-color);
+            font-size: 14px;
+            line-height: 1.4;
+        }
 
         @media (max-width: 720px) {
             .page-header {

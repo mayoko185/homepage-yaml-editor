@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Homepage YAML Editor</title>
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
-    <link rel="stylesheet" href="styles.css?v=17">
+    <link rel="stylesheet" href="styles.css?v=18">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -19,6 +19,9 @@
             <h1 id="login-title">Homepage YAML Editor</h1>
             <p class="login-subtitle">Sign in to continue</p>
 
+            <p id="connection-warning" class="login-warning" role="status" hidden>
+                This connection is using HTTP. Your login credentials are not encrypted in transit. You can still sign in, but HTTPS is recommended.
+            </p>
             <p id="login-error" class="login-error" role="alert" hidden></p>
 
             <form method="post" action="/login" class="login-form">
@@ -35,6 +38,10 @@
     <script>
         const errorCode = new URLSearchParams(window.location.search).get('error');
         const errorElement = document.getElementById('login-error');
+        const warningElement = document.getElementById('connection-warning');
+        if (window.APP_CONFIG && window.APP_CONFIG.loginRequired && window.location.protocol !== 'https:') {
+            warningElement.hidden = false;
+        }
         if (errorCode === 'invalid') {
             errorElement.textContent = 'Invalid username or password.';
             errorElement.hidden = false;

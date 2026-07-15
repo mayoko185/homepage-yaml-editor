@@ -14,8 +14,8 @@ const AUTOLOAD_DIR = process.env.AUTOLOAD_DIR;
 const DEFAULT_THEME = String(process.env.DEFAULT_THEME || 'dark').trim().toLowerCase() === 'light'
   ? 'light'
   : 'dark';
-const LOGIN_USER = process.env.REQUIRE_LOGIN_USER || process.env.require_login_user || '';
-const LOGIN_PASSWORD = process.env.REQUIRE_LOGIN_PASSWORD || process.env.require_login_password || '';
+const LOGIN_USER = process.env.REQUIRE_LOGIN_USER || '';
+const LOGIN_PASSWORD = process.env.REQUIRE_LOGIN_PASSWORD || '';
 const LOGIN_ENABLED = Boolean(LOGIN_USER && LOGIN_PASSWORD);
 const LOGIN_PARTIALLY_CONFIGURED = Boolean(LOGIN_USER || LOGIN_PASSWORD) && !LOGIN_ENABLED;
 const SESSION_COOKIE_NAME = 'homepage_editor_session';

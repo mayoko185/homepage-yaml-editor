@@ -20,7 +20,7 @@ async function getFreePort() {
 function createServerEnv(overrides) {
   const env = { ...process.env };
   for (const name of Object.keys(env)) {
-    if (name.toLowerCase() === 'require_login_user' || name.toLowerCase() === 'require_login_password') {
+    if (name.toUpperCase() === 'REQUIRE_LOGIN_USER' || name.toUpperCase() === 'REQUIRE_LOGIN_PASSWORD') {
       delete env[name];
     }
   }
@@ -126,8 +126,8 @@ test('optional login protects the editor and APIs with a form-based session', as
       PORT: String(port),
       DATA_DIR: tempRoot,
       AUTOLOAD_DIR: tempRoot,
-      require_login_user: 'test-user',
-      require_login_password: 'test-password'
+      REQUIRE_LOGIN_USER: 'test-user',
+      REQUIRE_LOGIN_PASSWORD: 'test-password'
     }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -148,7 +148,9 @@ test('optional login protects the editor and APIs with a form-based session', as
 
     const loginPageResponse = await fetch(`${baseUrl}/login`);
     assert.equal(loginPageResponse.status, 200);
-    assert.match(await loginPageResponse.text(), /<form method="post" action="\/login"/);
+    const loginPage = await loginPageResponse.text();
+    assert.match(loginPage, /<form method="post" action="\/login"/);
+    assert.match(loginPage, /This connection is using HTTP/);
 
     const invalidLoginResponse = await fetch(`${baseUrl}/login`, {
       method: 'POST',
