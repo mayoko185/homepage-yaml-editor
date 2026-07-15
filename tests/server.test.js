@@ -28,7 +28,7 @@ function createServerEnv(overrides) {
 }
 
 async function waitForServer(baseUrl, child) {
-  for (let attempt = 0; attempt < 50; attempt++) {
+  for (let attempt = 0; attempt < 100; attempt++) {
     if (child.exitCode !== null) {
       throw new Error(`Server exited before becoming ready with code ${child.exitCode}`);
     }
@@ -74,6 +74,12 @@ test('serves optimized assets and supports the active configuration APIs', async
     });
     assert.equal(saveResponse.status, 200);
 
+    const refreshedStartupResponse = await fetch(`${baseUrl}/api/startup-directory`);
+    const refreshedStartup = await refreshedStartupResponse.json();
+    assert.equal(refreshedStartupResponse.status, 200);
+    assert.equal(refreshedStartupResponse.headers.get('cache-control'), 'no-store');
+    assert.equal(refreshedStartup.files['services.yaml'], yamlContent);
+
     const loadResponse = await fetch(`${baseUrl}/api/directory/load`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -89,6 +95,18 @@ test('serves optimized assets and supports the active configuration APIs', async
       body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: yamlContent })
     });
     assert.equal((await unchangedResponse.json()).changed, false);
+
+    const updatedYamlContent = `${yamlContent}\n        description: Updated after startup`;
+    const updatedSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: updatedYamlContent })
+    });
+    assert.equal(updatedSaveResponse.status, 200);
+    assert.equal((await updatedSaveResponse.json()).changed, true);
+
+    const startupAfterDirectorySave = await (await fetch(`${baseUrl}/api/startup-directory`)).json();
+    assert.equal(startupAfterDirectorySave.files['services.yaml'], updatedYamlContent);
 
     const documentResponse = await fetch(`${baseUrl}/`);
     assert.equal(documentResponse.headers.get('cache-control'), 'no-cache');

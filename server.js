@@ -335,12 +335,32 @@ async function applyStartupDirectoryLoad() {
   }
 }
 
-app.get('/api/startup-directory', (req, res) => {
-  res.json({
-    directory: app.locals.startupDirectory,
-    files: app.locals.startupFiles,
-    hasStartupDirectory: Boolean(app.locals.startupDirectory)
-  });
+app.get('/api/startup-directory', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const startupDirectory = app.locals.startupDirectory;
+  if (!startupDirectory) {
+    return res.json({
+      directory: null,
+      files: {},
+      hasStartupDirectory: false
+    });
+  }
+
+  try {
+    const { fileContents } = await loadDirectoryContents(startupDirectory);
+    app.locals.startupFiles = fileContents;
+    return res.json({
+      directory: startupDirectory,
+      files: fileContents,
+      hasStartupDirectory: true
+    });
+  } catch (error) {
+    console.error('Startup directory refresh failed:', error);
+    return res.status(error.statusCode || 500).json({
+      error: 'Failed to refresh startup directory',
+      details: error.message
+    });
+  }
 });
 
 app.post('/api/config/save', async (req, res) => {
