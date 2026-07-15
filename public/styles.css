@@ -15,6 +15,7 @@
             --syntax-key: #7dd3fc;
             --syntax-string: #86efac;
             --syntax-number: #fbbf24;
+            --syntax-boolean: #d8b4fe;
             --syntax-comment: #9ca3af;
             --scrollbar-track: #202020;
             --scrollbar-thumb: #555;
@@ -38,6 +39,7 @@
             --syntax-key: #0f766e;
             --syntax-string: #15803d;
             --syntax-number: #b45309;
+            --syntax-boolean: #7e22ce;
             --syntax-comment: #6b7280;
             --scrollbar-track: #e5e5e5;
             --scrollbar-thumb: #aaa;
@@ -227,7 +229,8 @@
             background: rgba(33, 150, 243, 0.32);
         }
         .cm-s-default .cm-comment { color: var(--syntax-comment); font-style: italic; }
-        .cm-s-default .cm-atom,
+        .cm-s-default .cm-keyword,
+        .cm-s-default .cm-atom { color: var(--syntax-boolean); }
         .cm-s-default .cm-number { color: var(--syntax-number); }
         .cm-s-default .cm-string { color: var(--syntax-string); }
         .cm-s-default .cm-meta,
@@ -812,7 +815,8 @@
             outline-offset: 2px;
         }
         .login-submit {
-            width: 100%;
+            width: fit-content;
+            justify-self: center;
             margin-top: 16px;
         }
         .login-error {
