@@ -165,6 +165,16 @@ providers:
                 loadedFiles[currentTab] = getEditorValue();
             }
         }
+
+        function hasUnsavedChanges() {
+            return ['services', 'settings', 'bookmarks', 'widgets'].some((tabName) => {
+                const currentYaml = getTabYamlText(tabName);
+                const originalYaml = Object.prototype.hasOwnProperty.call(originalLoadedFiles, tabName)
+                    ? String(originalLoadedFiles[tabName] || '')
+                    : String(sampleConfigs[tabName] || '');
+                return currentYaml !== originalYaml;
+            });
+        }
         
         function scrollToTop() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1164,4 +1174,11 @@ providers:
             }
         });
         window.addEventListener('scroll', updateFloatingNavVisibility);
+        window.addEventListener('beforeunload', function(event) {
+            if (!hasUnsavedChanges()) {
+                return;
+            }
+            event.preventDefault();
+            event.returnValue = true;
+        });
         updateFloatingNavVisibility();
