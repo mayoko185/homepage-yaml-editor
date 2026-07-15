@@ -31,6 +31,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Compacted the page header with a left-aligned title, icon-only theme and logout controls, and tighter navigation spacing.
 - Converted the right-side navigation to icon-only controls with hover labels and replaced the Preview arrow with an eye icon.
 - Redesigned the Homepage preview as a compact workspace panel with an icon header, inset canvas, quieter counters, clearer jump targets, and an icon-only refresh control.
+- Restyled Homepage preview pages as a labeled tab rail with a stronger active state and keyboard navigation.
 
 ## [1.1.0] - 2026-07-15
 

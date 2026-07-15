@@ -1352,7 +1352,13 @@ providers:
             const widgetsHtml = widgets.map((name) => `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: takeOccurrence(widgetOccurrenceCounter, name), isList: Array.isArray(widgetsData) })} title="Jump to this widget in widgets.yaml">${escapeHtml(name)}</span>`).join('');
 
             const previewTabsHtml = homepageTabs.length > 0
-                ? `<div class="preview-tab-strip">${homepageTabs.map((name) => `<button class="preview-tab-btn ${name === previewHomepageTab ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`).join('')}</div>`
+                ? `<div class="preview-tab-navigation">
+                    <span class="preview-tab-label">Preview pages</span>
+                    <div class="preview-tab-strip" role="tablist" aria-label="Homepage preview pages">${homepageTabs.map((name) => {
+                        const isActive = name === previewHomepageTab;
+                        return `<button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`;
+                    }).join('')}</div>
+                </div>`
                 : '';
 
             previewDiv.innerHTML = `
@@ -1461,6 +1467,28 @@ providers:
             } catch (error) {
                 console.warn('Could not parse preview source target', error);
             }
+        });
+        document.getElementById('visual-preview').addEventListener('keydown', function(event) {
+            const target = event.target.closest('.preview-tab-btn');
+            if (!target || !this.contains(target) || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+                return;
+            }
+            const tabs = Array.from(this.querySelectorAll('.preview-tab-btn'));
+            const currentIndex = tabs.indexOf(target);
+            let nextIndex = currentIndex;
+            if (event.key === 'ArrowLeft') {
+                nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            } else if (event.key === 'ArrowRight') {
+                nextIndex = (currentIndex + 1) % tabs.length;
+            } else if (event.key === 'Home') {
+                nextIndex = 0;
+            } else if (event.key === 'End') {
+                nextIndex = tabs.length - 1;
+            }
+            event.preventDefault();
+            previewHomepageTab = tabs[nextIndex].getAttribute('data-preview-tab');
+            updateVisualPreview();
+            requestAnimationFrame(() => this.querySelector('.preview-tab-btn.active')?.focus());
         });
         const saveStatusElement = document.getElementById('save-status');
         function jumpFromSaveStatus() {
