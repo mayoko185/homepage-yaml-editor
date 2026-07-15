@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=40">
+    <link rel="stylesheet" href="styles.css?v=41">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -41,18 +41,18 @@
             </div>
         </header>
 
-        <section class="notification-area" aria-label="Application notifications">
-            <p id="directory-info" class="directory-status" data-state="idle">No directory loaded.</p>
-            <p id="unsaved-status" class="unsaved-status" role="status" aria-live="polite" hidden></p>
-            <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-        </section>
-        
-        <div class="config-tabs">
-
-            <div class="tab active" data-tab="services" onclick="switchTab('services', event)">Services</div>
-            <div class="tab" data-tab="settings" onclick="switchTab('settings', event)">Settings</div>
-            <div class="tab" data-tab="bookmarks" onclick="switchTab('bookmarks', event)">Bookmarks</div>
-            <div class="tab" data-tab="widgets" onclick="switchTab('widgets', event)">Widgets</div>
+        <div class="config-navigation">
+            <div class="config-tabs">
+                <div class="tab active" data-tab="services" onclick="switchTab('services', event)">Services</div>
+                <div class="tab" data-tab="settings" onclick="switchTab('settings', event)">Settings</div>
+                <div class="tab" data-tab="bookmarks" onclick="switchTab('bookmarks', event)">Bookmarks</div>
+                <div class="tab" data-tab="widgets" onclick="switchTab('widgets', event)">Widgets</div>
+            </div>
+            <section class="notification-area" aria-label="Application notifications">
+                <p id="directory-info" class="directory-status" data-state="idle">No directory loaded.</p>
+                <p id="unsaved-status" class="unsaved-status" role="status" aria-live="polite" hidden></p>
+                <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+            </section>
         </div>
         
         <div class="editor-section" id="yaml-editor-section">
