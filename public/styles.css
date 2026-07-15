@@ -610,6 +610,57 @@
             stroke-linecap: round;
             stroke-linejoin: round;
         }
+        .preview-refresh-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+        .preview-refresh-toggle {
+            position: relative;
+            display: inline-grid;
+            place-items: center;
+            width: 38px;
+            height: 38px;
+            min-width: 38px;
+            min-height: 38px;
+            margin: 0;
+            padding: 4px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .preview-refresh-toggle input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+        }
+        .preview-refresh-toggle-icon {
+            display: inline-grid;
+            place-items: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            opacity: 0.55;
+            transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+        }
+        .preview-refresh-toggle input:checked + .preview-refresh-toggle-icon {
+            background: var(--button-bg);
+            color: white;
+            opacity: 1;
+        }
+        .preview-refresh-toggle:hover,
+        .preview-refresh-toggle:focus-within {
+            outline: 2px solid var(--button-bg);
+            outline-offset: 2px;
+        }
         .refresh-btn {
             position: relative;
             display: inline-grid;
@@ -637,6 +688,9 @@
             cursor: wait;
             transform: none;
             box-shadow: none;
+        }
+        .refresh-btn[hidden] {
+            display: none;
         }
         .refresh-btn.is-refreshing .refresh-icon {
             animation: preview-refresh-spin 0.7s linear infinite;
@@ -669,7 +723,9 @@
             transition: opacity 0.15s ease, transform 0.15s ease;
         }
         .refresh-btn:hover > .preview-control-label,
-        .refresh-btn:focus-visible > .preview-control-label {
+        .refresh-btn:focus-visible > .preview-control-label,
+        .preview-refresh-toggle:hover > .preview-control-label,
+        .preview-refresh-toggle:focus-within > .preview-control-label {
             overflow: visible;
             clip: auto;
             clip-path: none;

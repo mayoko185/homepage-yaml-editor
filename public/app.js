@@ -115,7 +115,10 @@
 
         function scheduleVisualPreview() {
             window.clearTimeout(previewUpdateTimer);
-            previewUpdateTimer = window.setTimeout(updateVisualPreview, 180);
+            if (!document.getElementById('preview-auto-refresh-toggle').checked) {
+                return;
+            }
+            previewUpdateTimer = window.setTimeout(updatePreview, 180);
         }
 
         const fileToTabMapping = Object.fromEntries(configTabNames.flatMap((tabName) => [
@@ -1477,25 +1480,28 @@
                 .replace(/'/g, '&#39;');
         }
 
-        function updatePreview() {
+        function updatePreview({ force = false } = {}) {
             window.clearTimeout(previewUpdateTimer);
+            if (!force && !document.getElementById('preview-auto-refresh-toggle').checked) {
+                return;
+            }
             updateVisualPreview();
         }
 
         function refreshPreview() {
-            const refreshBtn = document.querySelector('.refresh-btn');
+            const refreshBtn = document.getElementById('manual-refresh-button');
             refreshBtn.disabled = true;
             refreshBtn.classList.add('is-refreshing');
             refreshBtn.setAttribute('aria-label', 'Refreshing preview');
             refreshBtn.querySelector('.preview-control-label').textContent = 'Refreshing preview';
 
-            updatePreview();
+            updatePreview({ force: true });
 
             setTimeout(() => {
                 refreshBtn.disabled = false;
                 refreshBtn.classList.remove('is-refreshing');
-                refreshBtn.setAttribute('aria-label', 'Refresh preview');
-                refreshBtn.querySelector('.preview-control-label').textContent = 'Refresh preview';
+                refreshBtn.setAttribute('aria-label', 'Refresh preview manually');
+                refreshBtn.querySelector('.preview-control-label').textContent = 'Refresh preview manually';
             }, 500);
         }
 
@@ -1512,6 +1518,9 @@
         const themeToggle = document.getElementById('themeToggle');
         const autoIndentToggle = document.getElementById('auto-indent-toggle');
         const autoIndentLabel = document.getElementById('auto-indent-label');
+        const previewAutoRefreshToggle = document.getElementById('preview-auto-refresh-toggle');
+        const previewAutoRefreshLabel = document.getElementById('preview-auto-refresh-label');
+        const manualRefreshButton = document.getElementById('manual-refresh-button');
         const toggleCommentButton = document.getElementById('toggle-comment-button');
         const jumpSectionButton = document.getElementById('jump-section-button');
         function updateAutoIndentLabel() {
@@ -1519,6 +1528,15 @@
         }
         autoIndentToggle.addEventListener('change', updateAutoIndentLabel);
         updateAutoIndentLabel();
+        previewAutoRefreshToggle.addEventListener('change', function() {
+            const isEnabled = previewAutoRefreshToggle.checked;
+            previewAutoRefreshLabel.textContent = `Auto Refresh ${isEnabled ? 'on' : 'off'}`;
+            manualRefreshButton.hidden = isEnabled;
+            window.clearTimeout(previewUpdateTimer);
+            if (isEnabled) {
+                updatePreview({ force: true });
+            }
+        });
         themeToggle.addEventListener('click', function() {
             applyTheme(document.body.classList.contains('light-mode'));
             yamlCodeEditor.refresh();
@@ -1547,7 +1565,7 @@
             }
             if (target.classList.contains('preview-tab-btn')) {
                 previewHomepageTab = target.getAttribute('data-preview-tab');
-                updateVisualPreview();
+                updatePreview();
                 return;
             }
             event.preventDefault();
@@ -1583,7 +1601,7 @@
             }
             event.preventDefault();
             previewHomepageTab = tabs[nextIndex].getAttribute('data-preview-tab');
-            updateVisualPreview();
+            updatePreview();
             requestAnimationFrame(() => this.querySelector('.preview-tab-btn.active')?.focus());
         });
         const saveStatusElement = document.getElementById('save-status');
