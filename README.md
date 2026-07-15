@@ -39,6 +39,7 @@ http://localhost:8081
 | `DATA_DIR` | `/hp_config` | Directory used by the built-in `/api/config/*` data-file endpoints. |
 | `AUTOLOAD_DIR` | unset | Preferred startup autoload directory. Set this to the mounted Homepage config path you want loaded automatically. |
 | `ALLOWED_CONFIG_DIRS` | unset | Optional comma-separated list of additional server-side directories that can be loaded from or saved to. `/hp_config`, `DATA_DIR`, and `AUTOLOAD_DIR` are always allowed. |
+| `DEFAULT_THEME` | `dark` | Initial interface theme. Set to `light` for light mode; missing or invalid values use dark mode. |
 
 ## Startup Autoload Behavior
 

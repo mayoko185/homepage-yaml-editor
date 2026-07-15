@@ -6,6 +6,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
+      - DEFAULT_THEME=dark
       - AUTOLOAD_DIR=/hp_config
     volumes:
       - /opt/stacks/homepage/config:/hp_config

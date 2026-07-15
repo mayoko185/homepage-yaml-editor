@@ -438,7 +438,8 @@ providers:
 
         // Initialize with services tab and sample data
         window.onload = async function() {
-            applyTheme(true);
+            const configuredTheme = window.APP_CONFIG && window.APP_CONFIG.defaultTheme;
+            applyTheme(configuredTheme !== 'light');
             
             loadedFiles = {
                 'services': sampleConfigs.services,

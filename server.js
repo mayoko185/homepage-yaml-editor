@@ -10,6 +10,9 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const DEFAULT_DATA_DIR = '/hp_config';
 const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
 const AUTOLOAD_DIR = process.env.AUTOLOAD_DIR;
+const DEFAULT_THEME = String(process.env.DEFAULT_THEME || 'dark').trim().toLowerCase() === 'light'
+  ? 'light'
+  : 'dark';
 const CONFIG_BASE_NAMES = Object.freeze(['bookmarks', 'settings', 'services', 'widgets']);
 const CONFIG_EXTENSIONS = Object.freeze(['.yaml', '.yml']);
 const ALLOWED_CONFIG_FILES = new Set(
@@ -44,6 +47,12 @@ app.use((error, req, res, next) => {
     });
   }
   return next(error);
+});
+app.get('/runtime-config.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('application/javascript').send(
+    `window.APP_CONFIG = Object.freeze(${JSON.stringify({ defaultTheme: DEFAULT_THEME })});`
+  );
 });
 app.use(express.static(PUBLIC_DIR, {
   etag: true,

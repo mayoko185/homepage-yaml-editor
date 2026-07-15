@@ -45,7 +45,8 @@ test('serves optimized assets and supports the active configuration APIs', async
       ...process.env,
       PORT: String(port),
       DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot
+      AUTOLOAD_DIR: tempRoot,
+      DEFAULT_THEME: 'light'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -82,7 +83,12 @@ test('serves optimized assets and supports the active configuration APIs', async
     const documentResponse = await fetch(`${baseUrl}/`);
     assert.equal(documentResponse.headers.get('cache-control'), 'no-cache');
 
-    const assetResponse = await fetch(`${baseUrl}/app.js?v=5`, {
+    const runtimeConfigResponse = await fetch(`${baseUrl}/runtime-config.js`);
+    assert.equal(runtimeConfigResponse.status, 200);
+    assert.equal(runtimeConfigResponse.headers.get('cache-control'), 'no-store');
+    assert.match(await runtimeConfigResponse.text(), /"defaultTheme":"light"/);
+
+    const assetResponse = await fetch(`${baseUrl}/app.js?v=8`, {
       headers: { 'accept-encoding': 'gzip' }
     });
     assert.equal(assetResponse.status, 200);
