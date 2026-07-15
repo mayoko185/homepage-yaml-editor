@@ -145,6 +145,10 @@
             flex-wrap: wrap;
             gap: 8px;
         }
+        .toolbar-file-actions {
+            justify-content: flex-end;
+            margin-left: auto;
+        }
         .toolbar-toggle {
             display: inline-flex;
             align-items: center;
@@ -197,6 +201,28 @@
             background-color: var(--button-bg);
             color: white;
             transform: none;
+        }
+        .toolbar-action-button {
+            border-color: transparent;
+            background-color: var(--button-bg);
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .toolbar-action-button:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .toolbar-action-button:disabled {
+            background-color: var(--border-color);
+            cursor: wait;
+            transform: none;
+            box-shadow: none;
+            opacity: 0.7;
+        }
+        .toolbar-action-button .toolbar-button-icon {
+            background: rgba(255, 255, 255, 0.16);
         }
         .toolbar-button:focus-visible,
         .toolbar-toggle:focus-within {
@@ -270,6 +296,9 @@
             gap: 10px;
             margin: 0 0 12px;
             padding: 6px 0;
+        }
+        .controls[hidden] {
+            display: none;
         }
         .controls button {
             margin: 0;
@@ -712,6 +741,10 @@
         }
 
         @media (max-width: 760px) {
+            .toolbar-file-actions {
+                width: 100%;
+                margin-left: 0;
+            }
             .yaml-error-card {
                 grid-template-columns: 1fr auto;
             }

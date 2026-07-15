@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=27">
+    <link rel="stylesheet" href="styles.css?v=28">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -47,12 +47,8 @@
             <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
         </section>
         
-        <div class="controls">
+        <div class="controls" id="sample-controls">
             <button id="reset-sample-button" onclick="resetToSample()">Reset to Sample</button>
-            <button id="save-config-button" onclick="saveConfig()">Save</button>
-            <button onclick="handleLoadDirectory()">Load</button>
-            <button id="reload-directory-button" onclick="reloadCurrentDirectory()" hidden>Reload</button>
-            <button onclick="downloadAllConfigs()">Download</button>
         </div>
         <div class="config-tabs">
 
@@ -77,6 +73,24 @@
                     <button type="button" id="jump-section-button" class="toolbar-button" title="Jump to the matching section in Settings">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8644;</span>
                         <span id="jump-section-label">Jump to Settings</span>
+                    </button>
+                </div>
+                <div class="toolbar-group toolbar-file-actions" aria-label="Configuration file actions">
+                    <button type="button" id="save-config-button" class="toolbar-button toolbar-action-button" onclick="saveConfig()" title="Save all changed configurations">
+                        <span class="toolbar-button-icon" aria-hidden="true">&#10003;</span>
+                        <span>Save</span>
+                    </button>
+                    <button type="button" class="toolbar-button toolbar-action-button" onclick="handleLoadDirectory()" title="Load a configuration directory">
+                        <span class="toolbar-button-icon" aria-hidden="true">&#8613;</span>
+                        <span>Load</span>
+                    </button>
+                    <button type="button" id="reload-directory-button" class="toolbar-button toolbar-action-button" onclick="reloadCurrentDirectory()" title="Reload the current directory" hidden>
+                        <span class="toolbar-button-icon" aria-hidden="true">&#8635;</span>
+                        <span>Reload</span>
+                    </button>
+                    <button type="button" class="toolbar-button toolbar-action-button" onclick="downloadAllConfigs()" title="Download all configurations">
+                        <span class="toolbar-button-icon" aria-hidden="true">&#8681;</span>
+                        <span>Download</span>
                     </button>
                 </div>
             </div>
@@ -114,6 +128,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=17"></script>
+    <script src="app.js?v=18"></script>
 </body>
 </html>

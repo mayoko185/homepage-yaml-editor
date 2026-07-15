@@ -14,6 +14,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Changed
 
 - Replaced the Auto Indent checkbox with a toolbar-style indentation icon and active state.
+- Moved Save, Load, Reload, and Download into a right-aligned editor toolbar action group with icons.
 
 ## [1.1.0] - 2026-07-15
 
