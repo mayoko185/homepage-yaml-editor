@@ -7,12 +7,18 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
     <div class="floating-nav" id="floating-nav">
-        <button type="button" onclick="scrollToTop()" aria-label="Scroll to top" title="Scroll to top">↑</button>
-        <button type="button" onclick="scrollToPreview()" aria-label="Scroll to homepage preview" title="Scroll to homepage preview">⌂</button>
+        <button type="button" id="scroll-top-button" class="floating-nav-button" onclick="scrollToTop()" aria-label="Back to top" title="Back to top" hidden>
+            <span class="floating-nav-icon" aria-hidden="true">&uarr;</span>
+            <span>Top</span>
+        </button>
+        <button type="button" class="floating-nav-button" onclick="scrollToPreview()" aria-label="Jump to homepage preview" title="Jump to homepage preview">
+            <span class="floating-nav-icon" aria-hidden="true">&darr;</span>
+            <span>Preview</span>
+        </button>
     </div>
     <div class="container">
         <header class="page-header">
@@ -21,7 +27,7 @@
         </header>
 
         <section class="notification-area" aria-label="Application notifications">
-            <p id="directory-info" class="directory-status">No directory loaded. Click "Load Directory" to load YAML configuration files from a server path.<br><small>Supports bookmarks.yaml, settings.yaml, services.yaml and widgets.yaml</small></p>
+            <p id="directory-info" class="directory-status">No directory loaded.</p>
             <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
         </section>
         
@@ -74,7 +80,7 @@
                 <h3>Load Configuration Directory</h3>
                 <span onclick="closeDirectoryModal()" style="cursor: pointer; font-size: 24px;">&times;</span>
             </div>
-            <p>Please enter the server path to your configuration directory containing YAML files:</p>
+            <p>Enter the server path containing your Homepage YAML files:</p>
             <input type="text" id="serverPathInput" placeholder="/path/to/configs" class="modal-input" />
             <div style="display: flex; justify-content: space-between;">
                 <button onclick="closeDirectoryModal()" class="modal-button">Cancel</button>
@@ -86,6 +92,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=7"></script>
 </body>
 </html>

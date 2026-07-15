@@ -178,11 +178,11 @@ providers:
         }
 
         function updateFloatingNavVisibility() {
-            const floatingNav = document.getElementById('floating-nav');
-            if (!floatingNav) {
+            const topButton = document.getElementById('scroll-top-button');
+            if (!topButton) {
                 return;
             }
-            floatingNav.classList.toggle('visible', window.scrollY > 200);
+            topButton.hidden = window.scrollY <= 100;
         }
 
         function switchTab(tabName, event, options = {}) {
@@ -247,6 +247,11 @@ providers:
             statusElement.hidden = false;
             statusElement.setAttribute('role', state === 'error' ? 'alert' : 'status');
             statusElement.setAttribute('aria-live', state === 'error' ? 'assertive' : 'polite');
+        }
+
+        function setDirectoryStatus(directory, fileCount) {
+            const statusElement = document.getElementById('directory-info');
+            statusElement.textContent = `Loaded ${fileCount}/4 from ${directory}`;
         }
 
         function clearSaveStatus() {
@@ -457,10 +462,7 @@ providers:
                     loadedFileNames = normalized.fileNames;
                     currentDirectoryPath = startup.directory;
 
-                    document.getElementById('directory-info').innerHTML = 
-                        `<strong>Loaded from:</strong> ${currentDirectoryPath}<br>
-                         <small>${Object.keys(startup.files).length} of 4 files loaded</small><br>
-                         <small>Note: Server-side path loading completed successfully</small>`;
+                    setDirectoryStatus(currentDirectoryPath, Object.keys(startup.files).length);
 
                     setResetSampleVisible(false);
                     switchTab('services', null, { skipRemember: true });
@@ -513,10 +515,7 @@ providers:
                 loadedFileNames = normalized.fileNames;
                 currentDirectoryPath = data.directory;
 
-                document.getElementById('directory-info').innerHTML =
-                    `<strong>Loaded from:</strong> ${currentDirectoryPath}<br>
-                     <small>${Object.keys(data.files || {}).length} of 4 files loaded</small><br>
-                     <small>Note: Server-side path loading completed successfully</small>`;
+                setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length);
 
                 closeDirectoryModal();
                 switchTab(currentTab, null, { skipRemember: true });

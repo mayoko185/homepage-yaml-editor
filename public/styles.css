@@ -16,6 +16,9 @@
             --syntax-string: #86efac;
             --syntax-number: #fbbf24;
             --syntax-comment: #9ca3af;
+            --scrollbar-track: #202020;
+            --scrollbar-thumb: #555;
+            --scrollbar-thumb-hover: #6b6b6b;
         }
 
         .light-mode {
@@ -36,6 +39,30 @@
             --syntax-string: #15803d;
             --syntax-number: #b45309;
             --syntax-comment: #6b7280;
+            --scrollbar-track: #e5e5e5;
+            --scrollbar-thumb: #aaa;
+            --scrollbar-thumb-hover: #888;
+        }
+
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+        }
+        *::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        *::-webkit-scrollbar-track,
+        *::-webkit-scrollbar-corner {
+            background: var(--scrollbar-track);
+        }
+        *::-webkit-scrollbar-thumb {
+            background-color: var(--scrollbar-thumb);
+            border: 2px solid var(--scrollbar-track);
+            border-radius: 999px;
+        }
+        *::-webkit-scrollbar-thumb:hover {
+            background-color: var(--scrollbar-thumb-hover);
         }
 
         html,
@@ -115,18 +142,25 @@
         .toolbar-toggle {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 7px;
             min-height: 34px;
-            padding: 0 10px;
-            border: 1px solid transparent;
+            box-sizing: border-box;
+            padding: 6px 11px;
+            border: 1px solid var(--border-color);
             border-radius: 5px;
+            background-color: var(--config-item-bg);
+            color: var(--text-color);
             cursor: pointer;
             font-size: 14px;
             user-select: none;
         }
         .toolbar-toggle:hover {
-            background-color: var(--config-item-bg);
-            border-color: var(--border-color);
+            background-color: var(--button-bg);
+            color: white;
+        }
+        .toolbar-toggle input {
+            margin: 0;
+            accent-color: var(--button-bg);
         }
         .toolbar-button {
             display: inline-flex;
@@ -206,35 +240,27 @@
             flex-wrap: wrap;
             gap: 10px;
             margin: 0 0 12px;
-            padding: 14px;
-            background-color: var(--config-item-bg);
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            border: 1px solid var(--border-color);
+            padding: 6px 0;
         }
         .controls button {
             margin: 0;
         }
         .notification-area {
             display: grid;
-            gap: 10px;
-            margin-bottom: 12px;
-            padding: 12px;
-            background-color: var(--config-item-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            gap: 8px;
+            width: min(100%, 510px);
+            box-sizing: border-box;
+            margin: 0 auto 12px;
+            padding: 0;
         }
         .directory-status {
             margin: 0;
-            padding: 11px 12px;
+            padding: 8px 10px;
             background-color: var(--preview-bg);
             border-radius: 7px;
             text-align: center;
             line-height: 1.4;
-        }
-        .directory-status small {
-            opacity: 0.78;
+            overflow-wrap: anywhere;
         }
         .save-status {
             margin: 0;
@@ -292,35 +318,22 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             transition: all 0.2s ease;
         }
-        .theme-toggle {
-            background-color: var(--button-bg);
-            color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 0 10px 15px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
-        }
-        .theme-toggle:hover {
-            background-color: var(--button-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
         button:active {
             transform: translateY(0);
         }
         .config-tabs {
             display: flex;
             justify-content: center;
-            gap: 6px;
-            margin-bottom: 25px;
+            flex-wrap: wrap;
+            width: fit-content;
+            max-width: 100%;
+            box-sizing: border-box;
+            gap: 4px;
+            margin: 0 auto 25px;
             border: 1px solid var(--border-color);
             background-color: var(--config-item-bg);
             border-radius: 12px;
-            padding: 6px;
+            padding: 4px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
         .tab {
@@ -713,21 +726,27 @@
         }
         .theme-toggle {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            background-color: var(--button-bg);
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 6px;
+            top: 4px;
+            right: 0;
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
+            margin: 0;
+            padding: 6px 11px;
+            background-color: var(--config-item-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
             cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 14px;
+            box-shadow: none;
             transition: all 0.2s ease;
         }
         .theme-toggle:hover {
-            background-color: var(--button-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background-color: var(--button-bg);
+            color: white;
+            transform: none;
+            box-shadow: none;
         }
         
         /* Modal Styles */
@@ -787,28 +806,43 @@
         }
         .floating-nav {
             position: fixed;
-            right: 20px;
+            right: 14px;
             top: 50%;
             transform: translateY(-50%);
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            align-items: flex-end;
+            gap: 8px;
             z-index: 900;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease;
         }
-        .floating-nav.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .floating-nav button {
-            width: 52px;
-            height: 52px;
+        .floating-nav-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            min-width: 92px;
+            min-height: 42px;
             margin: 0;
-            padding: 0;
-            border-radius: 999px;
-            font-size: 22px;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--config-item-bg);
+            color: var(--text-color);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.28);
+            font-size: 13px;
             font-weight: 600;
+            line-height: 1;
+        }
+        .floating-nav-button:hover {
+            background-color: var(--button-bg);
+            color: white;
+            transform: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.32);
+        }
+        .floating-nav-button[hidden] {
+            display: none;
+        }
+        .floating-nav-icon {
+            font-size: 18px;
             line-height: 1;
         }
