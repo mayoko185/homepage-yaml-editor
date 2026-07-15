@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=25">
+    <link rel="stylesheet" href="styles.css?v=26">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -73,6 +73,10 @@
                         <span class="toolbar-button-icon" aria-hidden="true">#</span>
                         <span>Toggle Comment</span>
                     </button>
+                    <button type="button" id="jump-section-button" class="toolbar-button" title="Jump to the matching section in Settings">
+                        <span class="toolbar-button-icon" aria-hidden="true">&#8644;</span>
+                        <span id="jump-section-label">Jump to Settings</span>
+                    </button>
                 </div>
             </div>
             <div class="editor-wrapper">
@@ -109,6 +113,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
 </body>
 </html>

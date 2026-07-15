@@ -182,6 +182,9 @@
             box-shadow: none;
             font-size: 14px;
         }
+        .toolbar-button[hidden] {
+            display: none;
+        }
         .toolbar-button:hover {
             background-color: var(--button-bg);
             color: white;

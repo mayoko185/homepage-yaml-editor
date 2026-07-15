@@ -230,11 +230,28 @@ providers:
             topButton.hidden = window.scrollY <= 100;
         }
 
+        function updateSectionJumpButton() {
+            const button = document.getElementById('jump-section-button');
+            const label = document.getElementById('jump-section-label');
+            const targetTab = currentTab === 'services'
+                ? 'Settings'
+                : currentTab === 'settings'
+                    ? 'Services'
+                    : null;
+
+            button.hidden = !targetTab;
+            if (targetTab) {
+                label.textContent = `Jump to ${targetTab}`;
+                button.title = `Jump to the matching section in ${targetTab}`;
+            }
+        }
+
         function switchTab(tabName, event, options = {}) {
             if (!options.skipRemember) {
                 rememberCurrentEditorValue();
             }
             currentTab = tabName;
+            updateSectionJumpButton();
             
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             
@@ -909,6 +926,93 @@ providers:
             return { startLine: groupLine, endLine };
         }
 
+        function findServicesGroupAtLine(lineIndex) {
+            const lines = getYamlLines('services');
+            const occurrenceCounts = new Map();
+            let currentGroup = null;
+
+            for (let index = 0; index <= Math.min(lineIndex, lines.length - 1); index++) {
+                const line = lines[index];
+                if (getYamlIndent(line) !== 0 || !line.trim().startsWith('- ')) {
+                    continue;
+                }
+                const groupName = getYamlKeyFromLine(line);
+                if (!groupName) {
+                    continue;
+                }
+                const groupIndex = occurrenceCounts.get(groupName) || 0;
+                occurrenceCounts.set(groupName, groupIndex + 1);
+                currentGroup = { groupName, groupIndex };
+            }
+
+            return currentGroup;
+        }
+
+        function findSettingsLayoutGroupAtLine(lineIndex) {
+            const lines = getYamlLines('settings');
+            const layoutLine = findYamlKeyLine('settings', 'layout');
+            const layoutIndex = layoutLine - 1;
+            if (getYamlKeyFromLine(lines[layoutIndex]) !== 'layout' || lineIndex <= layoutIndex) {
+                return null;
+            }
+
+            const layoutIndent = getYamlIndent(lines[layoutIndex]);
+            let layoutEndIndex = lines.length;
+            for (let index = layoutIndex + 1; index < lines.length; index++) {
+                const line = lines[index];
+                if (!line.trim() || line.trim().startsWith('#')) {
+                    continue;
+                }
+                if (getYamlIndent(line) <= layoutIndent && getYamlKeyFromLine(line)) {
+                    layoutEndIndex = index;
+                    break;
+                }
+            }
+            if (lineIndex >= layoutEndIndex) {
+                return null;
+            }
+
+            const groupLines = [];
+            let groupIndent = null;
+            for (let index = layoutIndex + 1; index < layoutEndIndex; index++) {
+                const line = lines[index];
+                const key = getYamlKeyFromLine(line);
+                const indent = getYamlIndent(line);
+                if (!key || indent <= layoutIndent || line.trim().startsWith('- ')) {
+                    continue;
+                }
+                if (groupIndent === null || indent < groupIndent) {
+                    groupIndent = indent;
+                }
+                groupLines.push({ index, indent, groupName: key });
+            }
+
+            let currentGroup = null;
+            groupLines.forEach((group) => {
+                if (group.indent === groupIndent && group.index <= lineIndex) {
+                    currentGroup = group.groupName;
+                }
+            });
+            return currentGroup;
+        }
+
+        function jumpToMatchingConfigSection() {
+            const cursorLine = yamlCodeEditor.getCursor().line;
+            if (currentTab === 'services') {
+                const group = findServicesGroupAtLine(cursorLine);
+                jumpToYamlSource(group
+                    ? { tab: 'settings', kind: 'settings-layout-group', groupName: group.groupName }
+                    : { tab: 'settings', line: 1 });
+                return;
+            }
+            if (currentTab === 'settings') {
+                const groupName = findSettingsLayoutGroupAtLine(cursorLine);
+                jumpToYamlSource(groupName
+                    ? { tab: 'services', kind: 'services-group', groupName, groupIndex: 0 }
+                    : { tab: 'services', line: 1 });
+            }
+        }
+
         function findNestedYamlKeyLine(tabName, parentKey, childKey, parentIndex = 0, childIndex = 0) {
             const range = findYamlGroupRange(tabName, parentKey, parentIndex);
             return findNthYamlListKeyLine(tabName, childKey, childIndex, {
@@ -1209,6 +1313,7 @@ providers:
         // Theme toggle functionality
         const themeToggle = document.getElementById('themeToggle');
         const toggleCommentButton = document.getElementById('toggle-comment-button');
+        const jumpSectionButton = document.getElementById('jump-section-button');
         themeToggle.addEventListener('click', function() {
             applyTheme(document.body.classList.contains('light-mode'));
             yamlCodeEditor.refresh();
@@ -1219,6 +1324,10 @@ providers:
         toggleCommentButton.addEventListener('click', function() {
             toggleSelectedComments(yamlCodeEditor);
         });
+        jumpSectionButton.addEventListener('mousedown', function(event) {
+            event.preventDefault();
+        });
+        jumpSectionButton.addEventListener('click', jumpToMatchingConfigSection);
 
         yamlCodeEditor.on('change', function() {
             clearSaveStatus();
