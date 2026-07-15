@@ -29,6 +29,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Increased the segmented tab and status-strip text sizes for easier reading.
 - Replaced browser alerts and confirmations with themed in-page confirmation, inline directory-dialog feedback, and notification-strip errors.
 - Compacted the page header with a left-aligned title, icon-only theme and logout controls, and tighter navigation spacing.
+- Converted the right-side navigation to icon-only controls with hover labels and replaced the Preview arrow with an eye icon.
 
 ## [1.1.0] - 2026-07-15
 

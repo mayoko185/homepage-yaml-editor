@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=44">
+    <link rel="stylesheet" href="styles.css?v=45">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -17,17 +17,20 @@
 </head>
 <body>
     <div class="floating-nav" id="floating-nav">
-        <button type="button" id="scroll-top-button" class="floating-nav-button" onclick="scrollToTop()" aria-label="Back to top" title="Back to top" hidden>
+        <button type="button" id="scroll-top-button" class="floating-nav-button" onclick="scrollToTop()" aria-label="Back to top" hidden>
             <span class="floating-nav-icon" aria-hidden="true">&uarr;</span>
-            <span>Top</span>
+            <span class="floating-nav-label" aria-hidden="true">Back to top</span>
         </button>
-        <button type="button" class="floating-nav-button" onclick="scrollToEditor()" aria-label="Jump to YAML editor" title="Jump to YAML editor">
+        <button type="button" class="floating-nav-button" onclick="scrollToEditor()" aria-label="Jump to YAML editor">
             <span class="floating-nav-icon" aria-hidden="true">&#9998;</span>
-            <span>Editor</span>
+            <span class="floating-nav-label" aria-hidden="true">Jump to YAML editor</span>
         </button>
-        <button type="button" class="floating-nav-button" onclick="scrollToPreview()" aria-label="Jump to homepage preview" title="Jump to homepage preview">
-            <span class="floating-nav-icon" aria-hidden="true">&darr;</span>
-            <span>Preview</span>
+        <button type="button" class="floating-nav-button" onclick="scrollToPreview()" aria-label="Jump to homepage preview">
+            <svg class="floating-nav-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
+                <circle cx="12" cy="12" r="2.75"></circle>
+            </svg>
+            <span class="floating-nav-label" aria-hidden="true">Jump to homepage preview</span>
         </button>
     </div>
     <div class="container">
