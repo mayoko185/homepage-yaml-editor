@@ -241,8 +241,9 @@ providers:
 
             button.hidden = !targetTab;
             if (targetTab) {
-                label.textContent = `Jump to ${targetTab}`;
-                button.title = `Jump to the matching section in ${targetTab}`;
+                const buttonLabel = `Jump to ${targetTab}`;
+                label.textContent = buttonLabel;
+                button.setAttribute('aria-label', buttonLabel);
             }
         }
 

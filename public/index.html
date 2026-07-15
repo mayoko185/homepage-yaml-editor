@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=29">
+    <link rel="stylesheet" href="styles.css?v=32">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -58,40 +58,46 @@
         <div class="editor-section" id="yaml-editor-section">
             <div class="editor-toolbar" role="toolbar" aria-label="YAML editor tools">
                 <div class="toolbar-group">
-                    <label class="toolbar-toggle" title="Automatically indent new YAML lines">
-                        <input type="checkbox" id="auto-indent-toggle" checked>
+                    <label class="toolbar-toggle toolbar-icon-control">
+                        <input type="checkbox" id="auto-indent-toggle" aria-label="Auto Indent" checked>
                         <span class="toolbar-button-icon auto-indent-icon" aria-hidden="true">&#8677;</span>
-                        <span>Auto Indent</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Auto Indent</span>
                     </label>
-                    <button type="button" id="toggle-comment-button" class="toolbar-button" title="Toggle comment (Ctrl+/)">
+                    <button type="button" id="toggle-comment-button" class="toolbar-button toolbar-icon-control" aria-label="Toggle Comment">
                         <span class="toolbar-button-icon" aria-hidden="true">#</span>
-                        <span>Toggle Comment</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Toggle Comment</span>
                     </button>
-                    <button type="button" id="jump-section-button" class="toolbar-button" title="Jump to the matching section in Settings">
+                    <button type="button" id="jump-section-button" class="toolbar-button toolbar-icon-control" aria-label="Jump to Settings">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8644;</span>
-                        <span id="jump-section-label">Jump to Settings</span>
+                        <span id="jump-section-label" class="toolbar-button-label" aria-hidden="true">Jump to Settings</span>
                     </button>
                 </div>
                 <div class="toolbar-group toolbar-file-actions" aria-label="Configuration file actions">
-                    <button type="button" id="save-config-button" class="toolbar-button toolbar-action-button" onclick="saveConfig()" title="Save all changed configurations">
-                        <span class="toolbar-button-icon" aria-hidden="true">&#10003;</span>
-                        <span>Save</span>
+                    <button type="button" id="save-config-button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="saveConfig()" aria-label="Save">
+                        <span class="toolbar-button-icon" aria-hidden="true">
+                            <svg class="toolbar-svg-icon" viewBox="0 0 24 24" focusable="false">
+                                <path d="M5 3h12l2 2v16H5z"></path>
+                                <path d="M8 3v6h8V3"></path>
+                                <path d="M8 15h8v6H8z"></path>
+                            </svg>
+                        </span>
+                        <span class="toolbar-button-label" aria-hidden="true">Save</span>
                     </button>
-                    <button type="button" class="toolbar-button toolbar-action-button" onclick="handleLoadDirectory()" title="Load a configuration directory">
+                    <button type="button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="handleLoadDirectory()" aria-label="Load">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8613;</span>
-                        <span>Load</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Load</span>
                     </button>
-                    <button type="button" id="reset-sample-button" class="toolbar-button toolbar-action-button" onclick="resetToSample()" title="Reset the current configuration to the sample">
+                    <button type="button" id="reset-sample-button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="resetToSample()" aria-label="Reset">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8634;</span>
-                        <span>Reset</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Reset</span>
                     </button>
-                    <button type="button" id="reload-directory-button" class="toolbar-button toolbar-action-button" onclick="reloadCurrentDirectory()" title="Reload the current directory" hidden>
+                    <button type="button" id="reload-directory-button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="reloadCurrentDirectory()" aria-label="Reload" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">&#8635;</span>
-                        <span>Reload</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Reload</span>
                     </button>
-                    <button type="button" class="toolbar-button toolbar-action-button" onclick="downloadAllConfigs()" title="Download all configurations">
+                    <button type="button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="downloadAllConfigs()" aria-label="Download">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8681;</span>
-                        <span>Download</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Download</span>
                     </button>
                 </div>
             </div>
@@ -129,6 +135,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=21"></script>
 </body>
 </html>

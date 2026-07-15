@@ -16,6 +16,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Replaced the Auto Indent checkbox with a toolbar-style indentation icon and active state.
 - Moved Save, Load, Reload, and Download into a right-aligned editor toolbar action group with icons.
 - Moved Reset into Reload's toolbar position and shortened its label from Reset to Sample.
+- Changed the editor toolbar to compact icon-only controls with hover and keyboard-focus labels.
+- Enlarged the toolbar icons and replaced Save's checkmark with a floppy-disk icon.
 
 ## [1.1.0] - 2026-07-15
 
