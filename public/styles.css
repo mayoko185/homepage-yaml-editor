@@ -114,7 +114,7 @@
             background-color: var(--container-bg);
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            padding: 25px;
+            padding: 18px 24px 24px;
         }
         .preview-container {
             background-color: var(--preview-bg);
@@ -123,15 +123,18 @@
             margin-top: 20px;
         }
         .page-header {
-            position: relative;
-            min-height: 44px;
-            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 36px;
+            margin-bottom: 10px;
         }
-        h1 {
+        .page-header h1 {
             color: var(--text-color);
-            text-align: center;
-            margin: 8px 0 0;
-            font-size: 1.8em;
+            text-align: left;
+            margin: 0;
+            font-size: 1.45em;
             font-weight: 600;
         }
         .editor-container {
@@ -381,7 +384,7 @@
         .config-navigation {
             width: min(100%, 510px);
             box-sizing: border-box;
-            margin: 0 auto 25px;
+            margin: 0 auto 16px;
             overflow: hidden;
             border: 1px solid var(--border-color);
             border-radius: 12px;
@@ -986,12 +989,10 @@
             opacity: 0.8;
         }
         .header-actions {
-            position: absolute;
-            top: 4px;
-            right: 0;
             display: flex;
             align-items: center;
             gap: 8px;
+            margin-left: auto;
         }
         .header-actions form {
             margin: 0;
@@ -1003,17 +1004,21 @@
         .logout-button {
             display: inline-flex;
             align-items: center;
-            min-height: 34px;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
             margin: 0;
-            padding: 6px 11px;
+            padding: 0;
             background-color: var(--config-item-bg);
             color: var(--text-color);
             border: 1px solid var(--border-color);
-            border-radius: 5px;
+            border-radius: 7px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 20px;
             box-shadow: none;
-            transition: all 0.2s ease;
+            transition: background-color 0.18s ease, color 0.18s ease;
         }
         .theme-toggle:hover,
         .logout-button:hover {
@@ -1021,6 +1026,54 @@
             color: white;
             transform: none;
             box-shadow: none;
+        }
+        .header-icon-control {
+            position: relative;
+        }
+        .header-control-icon {
+            display: block;
+            line-height: 1;
+        }
+        .header-control-svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .header-control-label {
+            position: absolute;
+            top: calc(100% + 7px);
+            right: 0;
+            z-index: 50;
+            width: max-content;
+            padding: 6px 9px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--container-bg);
+            color: var(--text-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .header-icon-control:hover > .header-control-label,
+        .header-icon-control:focus-visible > .header-control-label {
+            overflow: visible;
+            clip: auto;
+            clip-path: none;
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .login-page {
@@ -1042,6 +1095,7 @@
         .login-card h1 {
             margin: 0;
             font-size: 1.7rem;
+            text-align: center;
         }
         .login-subtitle {
             margin: 10px 0 26px;
@@ -1099,12 +1153,25 @@
         }
 
         @media (max-width: 720px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 15px;
+            }
             .page-header {
-                padding-top: 46px;
+                flex-wrap: wrap;
+                gap: 10px;
+                margin-bottom: 8px;
+            }
+            .page-header h1 {
+                font-size: 1.28em;
             }
             .header-actions {
-                left: 0;
-                justify-content: center;
+                gap: 6px;
+            }
+            .config-navigation {
+                margin-bottom: 14px;
             }
             .login-card {
                 padding: 24px;

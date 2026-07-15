@@ -28,6 +28,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Combined the YAML tabs and notification area into a compact segmented control with an integrated status strip.
 - Increased the segmented tab and status-strip text sizes for easier reading.
 - Replaced browser alerts and confirmations with themed in-page confirmation, inline directory-dialog feedback, and notification-strip errors.
+- Compacted the page header with a left-aligned title, icon-only theme and logout controls, and tighter navigation spacing.
 
 ## [1.1.0] - 2026-07-15
 

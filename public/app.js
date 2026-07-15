@@ -1406,7 +1406,10 @@ providers:
         function applyTheme(isDarkMode) {
             document.documentElement.classList.toggle('light-mode', !isDarkMode);
             document.body.classList.toggle('light-mode', !isDarkMode);
-            themeToggle.textContent = isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+            const nextTheme = isDarkMode ? 'Light' : 'Dark';
+            themeToggle.setAttribute('aria-label', `Switch to ${nextTheme} Mode`);
+            document.getElementById('theme-toggle-icon').textContent = isDarkMode ? '\u2600' : '\u263E';
+            document.getElementById('theme-toggle-label').textContent = `${nextTheme} mode`;
         }
 
         // Theme toggle functionality

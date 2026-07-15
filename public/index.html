@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=43">
+    <link rel="stylesheet" href="styles.css?v=44">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -34,9 +34,17 @@
         <header class="page-header">
             <h1>Homepage YAML Editor</h1>
             <div class="header-actions">
-                <button class="theme-toggle" id="themeToggle">Switch to Light Mode</button>
+                <button type="button" class="theme-toggle header-icon-control" id="themeToggle" aria-label="Switch to Light Mode">
+                    <span id="theme-toggle-icon" class="header-control-icon" aria-hidden="true">&#9728;</span>
+                    <span id="theme-toggle-label" class="header-control-label" aria-hidden="true">Light mode</span>
+                </button>
                 <form method="post" action="/logout" id="logout-form" hidden>
-                    <button type="submit" class="logout-button">Logout</button>
+                    <button type="submit" class="logout-button header-icon-control" aria-label="Logout">
+                        <svg class="header-control-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M10 5H5v14h5M13 8l4 4-4 4M8 12h9"></path>
+                        </svg>
+                        <span class="header-control-label" aria-hidden="true">Logout</span>
+                    </button>
                 </form>
             </div>
         </header>
@@ -147,6 +155,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=26"></script>
+    <script src="app.js?v=27"></script>
 </body>
 </html>
