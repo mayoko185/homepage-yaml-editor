@@ -1196,6 +1196,66 @@
             return occurrenceIndex;
         }
 
+        function formatPreviewTooltipLabel(key) {
+            if (String(key).toLowerCase() === 'href') {
+                return 'URL';
+            }
+            return String(key)
+                .replace(/([a-z])([A-Z])/g, '$1 $2')
+                .replace(/[-_]+/g, ' ')
+                .replace(/^./, (character) => character.toUpperCase());
+        }
+
+        function formatPreviewTooltipValue(value) {
+            if (value === null || value === undefined || value === '') {
+                return '';
+            }
+            if (Array.isArray(value)) {
+                return value.map((item) => item && typeof item === 'object'
+                    ? Object.keys(item).join(', ')
+                    : String(item)).filter(Boolean).join(', ');
+            }
+            if (typeof value === 'object') {
+                return value.type ? String(value.type) : Object.keys(value).join(', ');
+            }
+            return String(value);
+        }
+
+        function getPreviewDetailLines(data, keys, limit = 6) {
+            if (!data || typeof data !== 'object') {
+                return [];
+            }
+            return keys
+                .filter((key) => !/(?:password|secret|token|api.?key|username)/i.test(key))
+                .map((key) => [key, formatPreviewTooltipValue(data[key])])
+                .filter(([, value]) => value)
+                .slice(0, limit)
+                .map(([key, value]) => `${formatPreviewTooltipLabel(key)}: ${value}`);
+        }
+
+        function getPreviewTooltipAttributes(lines, { focusable = true } = {}) {
+            const cleanLines = lines.map((line) => String(line || '').trim()).filter(Boolean);
+            const tooltip = escapeHtml(cleanLines.join('\n')).replace(/\n/g, '&#10;');
+            const ariaLabel = escapeHtml(cleanLines.join('. '));
+            return `data-preview-tooltip="${tooltip}" aria-label="${ariaLabel}"${focusable ? ' tabindex="0"' : ''}`;
+        }
+
+        function getBookmarkTooltipLines(name, data) {
+            const lines = [`Group: ${name}`];
+            const entries = Array.isArray(data) ? data : [];
+            entries.slice(0, 5).forEach((entry) => {
+                const entryName = Object.keys(entry || {})[0];
+                if (!entryName) {
+                    return;
+                }
+                const entryValue = entry[entryName];
+                const details = Array.isArray(entryValue) ? entryValue[0] : entryValue;
+                const href = details && typeof details === 'object' ? details.href : null;
+                lines.push(href ? `${entryName}: ${href}` : entryName);
+            });
+            return lines;
+        }
+
         function getCurrentTabSource(source) {
             if (!source || typeof source !== 'object') {
                 return source;
@@ -1203,7 +1263,7 @@
             if (currentTab === 'settings' && source.settingsSource) {
                 return source.settingsSource;
             }
-            if (currentTab === 'services' && source.servicesSource) {
+            if (source.servicesSource) {
                 return source.servicesSource;
             }
             return source;
@@ -1336,9 +1396,23 @@
                         settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
                     };
                     const serviceIcon = renderIcon(data.icon, name);
-                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} title="Jump to this item in the active YAML tab"><div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-url">${escapeHtml(data.href || '')}</div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                    const serviceSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
+                    const serviceTooltip = getPreviewTooltipAttributes([
+                        `Jump to this item in ${serviceSourceFile}`,
+                        `Service: ${name}`,
+                        ...getPreviewDetailLines(data, ['description', 'href', 'icon', 'siteMonitor', 'ping', 'container', 'server']),
+                        ...getPreviewDetailLines(data.widget, ['type', 'url'])
+                    ]);
+                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} ${serviceTooltip}><div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
                 }).join('') : '';
-                groupsHtml += `<details class="dashboard-group" ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} title="Jump to this group in the active YAML tab">${escapeHtml(groupName || 'Services')}</span></summary><div class="dashboard-cards">${cards || '<div class="dashboard-empty">No services in this group</div>'}</div></details>`;
+                const groupSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
+                const groupTooltip = getPreviewTooltipAttributes([
+                    `Jump to this group in ${groupSourceFile}`,
+                    `Group: ${groupName || 'Services'}`,
+                    `Services: ${Array.isArray(entries) ? entries.length : 0}`,
+                    ...getPreviewDetailLines(layoutConfig, ['icon', 'style', 'columns', 'header'])
+                ], { focusable: false });
+                groupsHtml += `<details class="dashboard-group" ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span></summary><div class="dashboard-cards">${cards || '<div class="dashboard-empty">No services in this group</div>'}</div></details>`;
             });
 
             const bookmarkOccurrenceCounter = new Map();
@@ -1346,11 +1420,26 @@
                 const name = Object.keys(item || {})[0] || 'Bookmark';
                 const occurrenceIndex = takeOccurrence(bookmarkOccurrenceCounter, name);
                 const data = item[name] || {};
-                return `<a class="bookmark-chip preview-jump-target" href="${escapeHtml(data.href || '#')}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes({ tab: 'bookmarks', kind: 'bookmark', name, index: occurrenceIndex })} title="Jump to this bookmark in bookmarks.yaml">${escapeHtml(name)}</a>`;
+                const bookmarkTooltip = getPreviewTooltipAttributes([
+                    'Jump to this bookmark in bookmarks.yaml',
+                    ...getBookmarkTooltipLines(name, data)
+                ], { focusable: false });
+                return `<a class="bookmark-chip preview-jump-target" href="${escapeHtml(data.href || '#')}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes({ tab: 'bookmarks', kind: 'bookmark', name, index: occurrenceIndex })} ${bookmarkTooltip}>${escapeHtml(name)}</a>`;
             }).join('');
 
             const widgetOccurrenceCounter = new Map();
-            const widgetsHtml = widgets.map((name) => `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: takeOccurrence(widgetOccurrenceCounter, name), isList: Array.isArray(widgetsData) })} title="Jump to this widget in widgets.yaml">${escapeHtml(name)}</span>`).join('');
+            const widgetsHtml = widgets.map((name) => {
+                const occurrenceIndex = takeOccurrence(widgetOccurrenceCounter, name);
+                const widgetData = Array.isArray(widgetsData)
+                    ? widgetsData.filter((item) => Object.prototype.hasOwnProperty.call(item || {}, name))[occurrenceIndex]?.[name]
+                    : widgetsData?.[name];
+                const widgetTooltip = getPreviewTooltipAttributes([
+                    'Jump to this widget in widgets.yaml',
+                    `Widget: ${name}`,
+                    ...getPreviewDetailLines(widgetData, Object.keys(widgetData || {}))
+                ]);
+                return `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData) })} ${widgetTooltip}>${escapeHtml(name)}</span>`;
+            }).join('');
 
             const previewTabsHtml = homepageTabs.length > 0
                 ? `<div class="preview-tab-navigation">
@@ -1367,10 +1456,10 @@
                     ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
                     ${previewTabsHtml}
                     <div class="dashboard-top">
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'services', line: 1 })} title="Jump to services.yaml"><span>Service Groups</span><strong>${filteredServices.length}</strong></div>
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'bookmarks', line: 1 })} title="Jump to bookmarks.yaml"><span>Bookmarks</span><strong>${bookmarks.length}</strong></div>
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'widgets', line: 1 })} title="Jump to widgets.yaml"><span>Widgets</span><strong>${widgets.length}</strong></div>
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'settings', kind: 'settings-key', key: 'providers' })} title="Jump to providers in settings.yaml"><span>Providers</span><strong>${settingsProviders.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'services', line: 1 })} ${getPreviewTooltipAttributes(['Jump to services.yaml', `Service groups: ${filteredServices.length}`])}><span>Service Groups</span><strong>${filteredServices.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'bookmarks', line: 1 })} ${getPreviewTooltipAttributes(['Jump to bookmarks.yaml', `Bookmark groups: ${bookmarks.length}`])}><span>Bookmarks</span><strong>${bookmarks.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'widgets', line: 1 })} ${getPreviewTooltipAttributes(['Jump to widgets.yaml', `Widgets: ${widgets.join(', ') || 'none'}`])}><span>Widgets</span><strong>${widgets.length}</strong></div>
+                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'settings', kind: 'settings-key', key: 'providers' })} ${getPreviewTooltipAttributes(['Jump to providers in settings.yaml', `Providers: ${settingsProviders.map(([name]) => name).join(', ') || 'none'}`])}><span>Providers</span><strong>${settingsProviders.length}</strong></div>
                     </div>
                     <div class="dashboard-widgets">${widgetsHtml || '<div class="dashboard-empty">No widgets configured</div>'}</div>
                     <div class="dashboard-bookmarks">${bookmarksHtml || '<div class="dashboard-empty">No bookmarks configured</div>'}</div>
@@ -1470,6 +1559,12 @@
             }
         });
         document.getElementById('visual-preview').addEventListener('keydown', function(event) {
+            const jumpTarget = event.target.closest('[data-source]');
+            if (jumpTarget && !jumpTarget.classList.contains('preview-tab-btn') && ['Enter', ' '].includes(event.key)) {
+                event.preventDefault();
+                jumpTarget.click();
+                return;
+            }
             const target = event.target.closest('.preview-tab-btn');
             if (!target || !this.contains(target) || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
                 return;

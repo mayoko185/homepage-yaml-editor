@@ -1100,6 +1100,40 @@
             cursor: pointer;
             transition: outline-color 0.15s ease, box-shadow 0.15s ease;
         }
+        .preview-jump-target[data-preview-tooltip] {
+            position: relative;
+        }
+        .preview-jump-target[data-preview-tooltip]::before {
+            content: attr(data-preview-tooltip) / "";
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 10px);
+            z-index: 60;
+            width: max-content;
+            min-width: 180px;
+            max-width: min(320px, calc(100vw - 48px));
+            box-sizing: border-box;
+            padding: 9px 11px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--container-bg);
+            color: var(--text-color);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.45;
+            text-align: left;
+            white-space: pre-line;
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, 4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .preview-jump-target[data-preview-tooltip]:hover::before,
+        .preview-jump-target[data-preview-tooltip]:focus-visible::before {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
         .preview-jump-target:not(.yaml-error-card):hover {
             outline: 1px solid var(--tab-active-bg);
             outline-offset: 2px;
@@ -1157,12 +1191,6 @@
             font-weight: 600;
             min-width: 0;
             overflow-wrap: anywhere;
-        }
-        .dashboard-card-url {
-            font-size: 0.82em;
-            opacity: 0.85;
-            word-break: break-all;
-            margin-bottom: 6px;
         }
         .dashboard-card-desc {
             font-size: 0.82em;

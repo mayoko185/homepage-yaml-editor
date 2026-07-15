@@ -16,6 +16,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Shortened startup directory status messages to `Autoloaded x/7`.
 - Added matching icon headers for the YAML Editor and Preview work areas.
 - Expanded the seven-file navigation across the page and added responsive tab columns and Preview refresh spacing.
+- Removed visible service URLs from Preview cards and added detailed source-aware YAML tooltips to preview jump targets.
 
 ### Changed
 
