@@ -408,7 +408,7 @@
         .cm-s-default .cm-variable-2,
         .cm-s-default .cm-def { color: var(--syntax-key); }
         .config-navigation {
-            width: min(100%, 510px);
+            width: 100%;
             box-sizing: border-box;
             margin: 0 auto 16px;
             overflow: hidden;
@@ -531,7 +531,7 @@
         }
         .config-tabs {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(7, minmax(0, 1fr));
             width: 100%;
             box-sizing: border-box;
             gap: 2px;
@@ -589,7 +589,7 @@
             align-items: center;
             box-sizing: border-box;
             min-height: 48px;
-            padding: 4px 9px 4px 12px;
+            padding: 6px 12px;
             border-bottom: 1px solid var(--border-color);
         }
         .preview-title {
@@ -978,6 +978,9 @@
         }
 
         @media (max-width: 760px) {
+            .config-tabs {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
             .toolbar-file-actions {
                 width: 100%;
                 margin-left: 0;
@@ -997,6 +1000,9 @@
             }
         }
         @media (max-width: 560px) {
+            .config-tabs {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
             .notification-area {
                 grid-template-columns: minmax(0, 1fr);
             }

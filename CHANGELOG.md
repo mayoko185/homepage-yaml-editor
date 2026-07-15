@@ -15,6 +15,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Kept empty startup directories in read-only sample mode and disabled persistence until a real configuration directory is loaded.
 - Shortened startup directory status messages to `Autoloaded x/7`.
 - Added matching icon headers for the YAML Editor and Preview work areas.
+- Expanded the seven-file navigation across the page and added responsive tab columns and Preview refresh spacing.
 
 ### Changed
 
