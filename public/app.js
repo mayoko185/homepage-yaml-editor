@@ -261,6 +261,26 @@ providers:
             }
         }
 
+        function setReloadDirectoryVisible(isVisible) {
+            const reloadButton = document.getElementById('reload-directory-button');
+            if (reloadButton) {
+                reloadButton.hidden = !isVisible;
+            }
+        }
+
+        function applyLoadedDirectory(data, tabName = currentTab) {
+            const normalized = normalizeLoadedFiles(data.files);
+            loadedFiles = normalized.files;
+            originalLoadedFiles = { ...normalized.files };
+            loadedFileNames = normalized.fileNames;
+            currentDirectoryPath = data.directory;
+
+            setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length);
+            setResetSampleVisible(false);
+            setReloadDirectoryVisible(true);
+            switchTab(tabName, null, { skipRemember: true });
+        }
+
         function setSaveStatus(message, state = 'info', source = null) {
             const statusElement = document.getElementById('save-status');
             statusElement.textContent = message;
@@ -563,16 +583,7 @@ providers:
                 const startup = await response.json();
 
                 if (startup.hasStartupDirectory && startup.directory && startup.files) {
-                    const normalized = normalizeLoadedFiles(startup.files);
-                    loadedFiles = normalized.files;
-                    originalLoadedFiles = { ...normalized.files };
-                    loadedFileNames = normalized.fileNames;
-                    currentDirectoryPath = startup.directory;
-
-                    setDirectoryStatus(currentDirectoryPath, Object.keys(startup.files).length);
-
-                    setResetSampleVisible(false);
-                    switchTab('services', null, { skipRemember: true });
+                    applyLoadedDirectory(startup, 'services');
                 }
             } catch (error) {
                 console.error('Startup directory load failed:', error);
@@ -593,6 +604,23 @@ providers:
             document.getElementById('directoryModal').style.display = 'none';
         }
 
+        async function requestDirectoryLoad(dirPath) {
+            const response = await fetch('/api/directory/load', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ dirPath })
+            });
+
+            const data = await response.json();
+            if (!response.ok || data.error) {
+                const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to load directory');
+                throw new Error(message);
+            }
+            return data;
+        }
+
         async function loadFromServerPath() {
             const dirPath = document.getElementById('serverPathInput').value.trim();
             if (!dirPath) {
@@ -601,34 +629,36 @@ providers:
             }
 
             try {
-                const response = await fetch('/api/directory/load', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ dirPath })
-                });
-
-                const data = await response.json();
-                if (!response.ok || data.error) {
-                    const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to load directory');
-                    alert(`Error loading directory: ${message}`);
-                    return;
-                }
-
-                const normalized = normalizeLoadedFiles(data.files);
-                loadedFiles = normalized.files;
-                originalLoadedFiles = { ...normalized.files };
-                loadedFileNames = normalized.fileNames;
-                currentDirectoryPath = data.directory;
-
-                setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length);
-
+                const data = await requestDirectoryLoad(dirPath);
+                applyLoadedDirectory(data);
                 closeDirectoryModal();
-                switchTab(currentTab, null, { skipRemember: true });
             } catch (error) {
                 console.error('Directory load error:', error);
                 alert(`Error occurred while trying to load the directory: ${error.message}`);
+            }
+        }
+
+        async function reloadCurrentDirectory() {
+            if (!currentDirectoryPath) {
+                return;
+            }
+            if (hasUnsavedChanges() && !window.confirm('Reloading the directory will discard unsaved changes. Continue?')) {
+                return;
+            }
+
+            const reloadButton = document.getElementById('reload-directory-button');
+            reloadButton.disabled = true;
+            setSaveStatus('Reloading directory...', 'pending');
+
+            try {
+                const data = await requestDirectoryLoad(currentDirectoryPath);
+                applyLoadedDirectory(data);
+                setSaveStatus(`Reloaded ${Object.keys(data.files || {}).length} configurations.`, 'success');
+            } catch (error) {
+                console.error('Directory reload error:', error);
+                setSaveStatus(`Could not reload directory: ${getSaveErrorSummary(error)}`, 'error');
+            } finally {
+                reloadButton.disabled = false;
             }
         }
 
