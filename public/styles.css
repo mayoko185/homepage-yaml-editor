@@ -165,8 +165,16 @@
             color: white;
         }
         .toolbar-toggle input {
-            margin: 0;
-            accent-color: var(--button-bg);
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+            white-space: nowrap;
+            border: 0;
         }
         .toolbar-button {
             display: inline-flex;
@@ -204,6 +212,17 @@
             background: rgba(255, 255, 255, 0.1);
             font-family: monospace;
             font-weight: 700;
+        }
+        .auto-indent-icon {
+            font-size: 17px;
+            transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+        }
+        .toolbar-toggle input:checked + .auto-indent-icon {
+            background-color: var(--button-bg);
+            color: white;
+        }
+        .toolbar-toggle input:not(:checked) + .auto-indent-icon {
+            opacity: 0.55;
         }
         .editor-wrapper {
             border: 1px solid var(--border-color);
