@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=42">
+    <link rel="stylesheet" href="styles.css?v=43">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -114,18 +114,32 @@
         
     </div>
 
-    <!-- Modal for directory path input -->
-    <div id="directoryModal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
-        <div class="modal-content">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3>Load Configuration Directory</h3>
-                <span onclick="closeDirectoryModal()" style="cursor: pointer; font-size: 24px;">&times;</span>
+    <div id="directoryModal" class="modal-overlay" hidden>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="directory-modal-title">
+            <div class="modal-header">
+                <h3 id="directory-modal-title" class="modal-title">Load Configuration Directory</h3>
+                <button type="button" class="modal-close" onclick="closeDirectoryModal()" aria-label="Close directory dialog">&times;</button>
             </div>
-            <p>Enter the server path containing your Homepage YAML files:</p>
+            <p class="modal-body-text">Enter the server path containing your Homepage YAML files:</p>
             <input type="text" id="serverPathInput" placeholder="/path/to/configs" class="modal-input" />
-            <div style="display: flex; justify-content: space-between;">
-                <button onclick="closeDirectoryModal()" class="modal-button">Cancel</button>
-                <button onclick="loadFromServerPath()" class="modal-button">Load</button>
+            <p id="directory-modal-status" class="modal-status" role="alert" hidden></p>
+            <div class="modal-actions">
+                <button type="button" onclick="closeDirectoryModal()" class="modal-button modal-button-secondary">Cancel</button>
+                <button type="button" id="load-directory-submit" onclick="loadFromServerPath()" class="modal-button">Load</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmation-modal" class="modal-overlay" hidden>
+        <div class="modal-content modal-content-compact" role="dialog" aria-modal="true" aria-labelledby="confirmation-modal-title" aria-describedby="confirmation-modal-message">
+            <div class="modal-header">
+                <h3 id="confirmation-modal-title" class="modal-title">Confirm action</h3>
+                <button type="button" class="modal-close" onclick="closeConfirmationDialog(false)" aria-label="Close confirmation dialog">&times;</button>
+            </div>
+            <p id="confirmation-modal-message" class="modal-body-text"></p>
+            <div class="modal-actions">
+                <button type="button" onclick="closeConfirmationDialog(false)" class="modal-button modal-button-secondary">Cancel</button>
+                <button type="button" id="confirmation-modal-confirm" onclick="closeConfirmationDialog(true)" class="modal-button modal-button-danger">Continue</button>
             </div>
         </div>
     </div>
@@ -133,6 +147,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=25"></script>
+    <script src="app.js?v=26"></script>
 </body>
 </html>

@@ -27,6 +27,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Blocked ZIP downloads while YAML changes are pending and added an in-page prompt to save or discard them first.
 - Combined the YAML tabs and notification area into a compact segmented control with an integrated status strip.
 - Increased the segmented tab and status-strip text sizes for easier reading.
+- Replaced browser alerts and confirmations with themed in-page confirmation, inline directory-dialog feedback, and notification-strip errors.
 
 ## [1.1.0] - 2026-07-15
 

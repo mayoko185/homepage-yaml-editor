@@ -508,7 +508,7 @@ providers:
                 URL.revokeObjectURL(downloadUrl);
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error occurred while trying to download configurations');
+                setSaveStatus(`Could not download configurations: ${getSaveErrorSummary(error)}`, 'error');
             }
         }
 
@@ -646,12 +646,63 @@ providers:
         }
 
 
+        let directoryModalPreviousFocus = null;
+        let confirmationDialogResolver = null;
+        let confirmationDialogPreviousFocus = null;
+
+        function setDirectoryModalStatus(message = '') {
+            const statusElement = document.getElementById('directory-modal-status');
+            statusElement.textContent = message;
+            statusElement.hidden = !message;
+        }
+
         function openDirectoryModal() {
-            document.getElementById('directoryModal').style.display = 'block';
+            const modal = document.getElementById('directoryModal');
+            directoryModalPreviousFocus = document.activeElement;
+            setDirectoryModalStatus();
+            modal.hidden = false;
+            window.requestAnimationFrame(() => document.getElementById('serverPathInput').focus());
         }
 
         function closeDirectoryModal() {
-            document.getElementById('directoryModal').style.display = 'none';
+            document.getElementById('directoryModal').hidden = true;
+            setDirectoryModalStatus();
+            if (directoryModalPreviousFocus && typeof directoryModalPreviousFocus.focus === 'function') {
+                directoryModalPreviousFocus.focus();
+            }
+            directoryModalPreviousFocus = null;
+        }
+
+        function showConfirmationDialog({ title, message, confirmText = 'Continue' }) {
+            const modal = document.getElementById('confirmation-modal');
+            const confirmButton = document.getElementById('confirmation-modal-confirm');
+            document.getElementById('confirmation-modal-title').textContent = title;
+            document.getElementById('confirmation-modal-message').textContent = message;
+            confirmButton.textContent = confirmText;
+            confirmationDialogPreviousFocus = document.activeElement;
+            modal.hidden = false;
+
+            return new Promise((resolve) => {
+                confirmationDialogResolver = resolve;
+                window.requestAnimationFrame(() => confirmButton.focus());
+            });
+        }
+
+        function closeConfirmationDialog(confirmed) {
+            const modal = document.getElementById('confirmation-modal');
+            if (modal.hidden) {
+                return;
+            }
+            modal.hidden = true;
+            const resolve = confirmationDialogResolver;
+            confirmationDialogResolver = null;
+            if (confirmationDialogPreviousFocus && typeof confirmationDialogPreviousFocus.focus === 'function') {
+                confirmationDialogPreviousFocus.focus();
+            }
+            confirmationDialogPreviousFocus = null;
+            if (resolve) {
+                resolve(Boolean(confirmed));
+            }
         }
 
         async function requestDirectoryLoad(dirPath) {
@@ -674,17 +725,23 @@ providers:
         async function loadFromServerPath() {
             const dirPath = document.getElementById('serverPathInput').value.trim();
             if (!dirPath) {
-                alert('Please enter a directory path.');
+                setDirectoryModalStatus('Enter a directory path to continue.');
+                document.getElementById('serverPathInput').focus();
                 return;
             }
 
+            const loadButton = document.getElementById('load-directory-submit');
+            setDirectoryModalStatus();
+            loadButton.disabled = true;
             try {
                 const data = await requestDirectoryLoad(dirPath);
                 applyLoadedDirectory(data);
                 closeDirectoryModal();
             } catch (error) {
                 console.error('Directory load error:', error);
-                alert(`Error occurred while trying to load the directory: ${error.message}`);
+                setDirectoryModalStatus(`Could not load the directory: ${getSaveErrorSummary(error)}`);
+            } finally {
+                loadButton.disabled = false;
             }
         }
 
@@ -692,8 +749,15 @@ providers:
             if (!currentDirectoryPath) {
                 return;
             }
-            if (hasUnsavedChanges() && !window.confirm('Reloading the directory will discard unsaved changes. Continue?')) {
-                return;
+            if (hasUnsavedChanges()) {
+                const confirmed = await showConfirmationDialog({
+                    title: 'Discard unsaved changes?',
+                    message: 'Reloading the directory will replace every pending YAML edit with the files currently on disk.',
+                    confirmText: 'Discard and reload'
+                });
+                if (!confirmed) {
+                    return;
+                }
             }
 
             const reloadButton = document.getElementById('reload-directory-button');
@@ -711,6 +775,33 @@ providers:
                 reloadButton.disabled = false;
             }
         }
+
+        document.getElementById('directoryModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeDirectoryModal();
+            }
+        });
+        document.getElementById('confirmation-modal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeConfirmationDialog(false);
+            }
+        });
+        document.getElementById('serverPathInput').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                loadFromServerPath();
+            }
+        });
+        document.addEventListener('keydown', function(event) {
+            if (event.key !== 'Escape') {
+                return;
+            }
+            if (!document.getElementById('confirmation-modal').hidden) {
+                closeConfirmationDialog(false);
+            } else if (!document.getElementById('directoryModal').hidden) {
+                closeDirectoryModal();
+            }
+        });
 
         function getTabYamlText(tabName) {
             if (tabName === currentTab) {

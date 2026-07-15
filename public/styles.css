@@ -1112,34 +1112,76 @@
         }
         
         /* Modal Styles */
-        #directoryModal {
+        .modal-overlay {
             position: fixed;
             z-index: 1000;
-            left: 0;
-            top: 0;
+            inset: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
+            box-sizing: border-box;
+            padding: 20px;
+            background-color: rgba(0,0,0,0.58);
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay[hidden] {
+            display: none;
         }
         .modal-content {
             background-color: var(--container-bg);
-            margin: auto;
-            padding: 30px;
-            border: none;
-            width: 80%;
-            max-width: 600px;
+            padding: 24px;
+            border: 1px solid var(--border-color);
+            width: min(100%, 560px);
+            box-sizing: border-box;
             color: var(--text-color);
-            border-radius: 10px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            border-radius: 12px;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.34);
         }
-        
+        .modal-content-compact {
+            width: min(100%, 440px);
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .modal-title {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+        .modal-body-text {
+            margin: 14px 0 0;
+            color: var(--text-color);
+            line-height: 1.5;
+        }
+        .modal-close {
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            margin: 0;
+            padding: 0;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            background: transparent;
+            color: var(--text-color);
+            box-shadow: none;
+            font-size: 24px;
+            line-height: 1;
+        }
+        .modal-close:hover,
+        .modal-close:focus-visible {
+            border-color: var(--border-color);
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            transform: none;
+        }
         .modal-input {
             width: 100%;
-            padding: 14px;
-            margin: 20px 0;
+            padding: 12px 13px;
+            margin: 14px 0 0;
             border: 1px solid var(--border-color);
             border-radius: 6px;
             background-color: var(--container-bg);
@@ -1147,24 +1189,57 @@
             font-size: 16px;
             box-sizing: border-box;
         }
-        
+        .modal-input:focus {
+            border-color: var(--button-bg);
+            outline: 2px solid color-mix(in srgb, var(--button-bg) 30%, transparent);
+            outline-offset: 1px;
+        }
+        .modal-status {
+            margin: 10px 0 0;
+            padding: 8px 10px;
+            border-left: 3px solid var(--error-color);
+            border-radius: 4px;
+            background: var(--notice-error-bg);
+            color: var(--error-color);
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
         .modal-button {
-            padding: 12px 24px;
+            padding: 10px 18px;
             background-color: var(--button-bg);
             color: white;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
-            margin: 0 10px;
+            font-size: 15px;
+            margin: 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
+            transition: background-color 0.18s ease, color 0.18s ease;
         }
-        
         .modal-button:hover {
             background-color: var(--button-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: none;
+        }
+        .modal-button-secondary {
+            border: 1px solid var(--border-color);
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            box-shadow: none;
+        }
+        .modal-button-secondary:hover {
+            background: var(--preview-bg);
+            color: var(--text-color);
+        }
+        .modal-button-danger,
+        .modal-button-danger:hover {
+            background: var(--error-color);
+            color: white;
         }
         .floating-nav {
             position: fixed;
