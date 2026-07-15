@@ -408,7 +408,7 @@
             background: transparent;
             color: var(--text-color);
             box-sizing: border-box;
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.3;
         }
         .directory-status {
@@ -518,7 +518,7 @@
             border-radius: 8px;
             margin-right: 0;
             font-weight: 500;
-            font-size: 0.98em;
+            font-size: 1.02em;
             text-align: center;
             transition: background-color 0.18s ease, color 0.18s ease;
         }
@@ -865,7 +865,7 @@
             }
             .tab {
                 padding-inline: 7px;
-                font-size: 0.9em;
+                font-size: 0.95em;
             }
         }
         .dashboard-widgets,

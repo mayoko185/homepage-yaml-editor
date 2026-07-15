@@ -26,6 +26,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Made the Auto Indent hover label report whether indentation is currently on or off.
 - Blocked ZIP downloads while YAML changes are pending and added an in-page prompt to save or discard them first.
 - Combined the YAML tabs and notification area into a compact segmented control with an integrated status strip.
+- Increased the segmented tab and status-strip text sizes for easier reading.
 
 ## [1.1.0] - 2026-07-15
 
