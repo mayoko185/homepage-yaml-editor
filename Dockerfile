@@ -11,6 +11,7 @@ RUN npm install --global pnpm@11.7.0 && \
     pnpm install --prod --frozen-lockfile
 
 COPY server.js ./
+COPY yaml-transform.js ./
 COPY public ./public
 COPY examples ./examples
 COPY --chmod=755 start.sh ./start.sh

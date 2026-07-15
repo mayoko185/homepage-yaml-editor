@@ -28,6 +28,12 @@ function createServerEnv(overrides) {
   return { ...env, ...overrides };
 }
 
+test('Docker image copies every runtime server module', async () => {
+  const dockerfile = await fs.readFile(path.resolve(__dirname, '..', 'Dockerfile'), 'utf8');
+  assert.match(dockerfile, /^COPY server\.js \.\/$/m);
+  assert.match(dockerfile, /^COPY yaml-transform\.js \.\/$/m);
+});
+
 async function waitForServer(baseUrl, child) {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (child.exitCode !== null) {
