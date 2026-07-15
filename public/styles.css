@@ -145,10 +145,32 @@
         }
         .editor-section {
             background-color: var(--config-item-bg);
-            border-radius: 8px;
-            padding: 20px;
+            border-radius: 10px;
+            padding: 0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border: 1px solid var(--border-color);
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            box-sizing: border-box;
+            min-height: 48px;
+            padding: 4px 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .section-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--group-title-color);
+            font-size: 1.05em;
+            font-weight: 600;
+        }
+        .section-title-glyph {
+            width: 21px;
+            font-size: 21px;
+            line-height: 1;
+            text-align: center;
         }
         .editor-toolbar {
             display: flex;
@@ -156,7 +178,7 @@
             justify-content: flex-start;
             flex-wrap: wrap;
             gap: 8px;
-            margin-bottom: 10px;
+            margin: 12px 12px 10px;
             padding: 8px;
             background-color: var(--preview-bg);
             border: 1px solid var(--border-color);
@@ -347,6 +369,7 @@
             transform: translate(-50%, 0);
         }
         .editor-wrapper {
+            margin: 0 12px 12px;
             border: 1px solid var(--border-color);
             border-radius: 4px;
             overflow: hidden;
