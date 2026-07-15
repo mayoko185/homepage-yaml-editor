@@ -17,7 +17,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Moved Save, Load, Reload, and Download into a right-aligned editor toolbar action group with icons.
 - Moved Reset into Reload's toolbar position and shortened its label from Reset to Sample.
 - Changed the editor toolbar to compact icon-only controls with hover and keyboard-focus labels.
-- Enlarged the toolbar icons and replaced Save's checkmark with a floppy-disk icon.
+- Enlarged the toolbar icons and added a solid floppy-disk icon for Save.
 - Changed dark-theme file-action icons to light gray on black-tinted tiles for softer contrast.
 
 ## [1.1.0] - 2026-07-15

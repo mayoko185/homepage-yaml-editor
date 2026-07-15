@@ -237,25 +237,29 @@
         .toolbar-button-icon {
             display: inline-grid;
             place-items: center;
-            width: 24px;
-            height: 24px;
+            width: 28px;
+            height: 28px;
             border-radius: 4px;
             background: rgba(255, 255, 255, 0.1);
             font-family: monospace;
-            font-size: 17px;
+            font-size: 19px;
             font-weight: 700;
         }
         .toolbar-svg-icon {
-            width: 19px;
-            height: 19px;
+            width: 22px;
+            height: 22px;
             fill: none;
             stroke: currentColor;
             stroke-width: 2;
             stroke-linecap: round;
             stroke-linejoin: round;
         }
+        .toolbar-save-icon {
+            fill: currentColor;
+            stroke: none;
+        }
         .auto-indent-icon {
-            font-size: 20px;
+            font-size: 22px;
             transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
         }
         .toolbar-toggle input:checked + .auto-indent-icon {
@@ -272,7 +276,7 @@
             min-width: 40px;
             height: 40px;
             min-height: 40px;
-            padding: 7px;
+            padding: 5px;
             gap: 0;
         }
         .toolbar-button-label {
