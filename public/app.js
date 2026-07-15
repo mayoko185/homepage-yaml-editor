@@ -37,6 +37,11 @@
         let previewUpdateTimer = null;
         let sourceHighlightLine = null;
         let sourceHighlightTimer = null;
+        let sampleModeEnabled = true;
+        let previewUndoState = null;
+        let applyingPreviewFiles = false;
+        let previewEditDialogState = null;
+        let previewEditPreviousFocus = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
             mode: 'yaml',
             lineNumbers: true,
@@ -285,6 +290,7 @@
         }
 
         function setSampleMode(isSampleMode) {
+            sampleModeEnabled = isSampleMode;
             const saveButton = document.getElementById('save-config-button');
             const saveLabel = saveButton.querySelector('.toolbar-button-label');
             saveButton.disabled = isSampleMode;
@@ -293,6 +299,12 @@
             saveLabel.textContent = isSampleMode
                 ? 'Examples are read-only; load a directory to save'
                 : 'Save all edited YAML files';
+            const editToggle = document.getElementById('preview-edit-toggle');
+            editToggle.disabled = isSampleMode;
+            if (isSampleMode && editToggle.checked) {
+                editToggle.checked = false;
+                updatePreviewEditMode();
+            }
         }
 
         function setReloadDirectoryVisible(isVisible) {
@@ -303,6 +315,8 @@
         }
 
         function applyLoadedDirectory(data, tabName = currentTab, { autoloaded = false } = {}) {
+            previewUndoState = null;
+            updatePreviewUndoButton();
             const normalized = normalizeLoadedFiles(data.files);
             loadedFiles = normalized.files;
             originalLoadedFiles = { ...normalized.files };
@@ -712,6 +726,261 @@
             }
         }
 
+        function setPreviewEditModalStatus(message = '') {
+            const statusElement = document.getElementById('preview-edit-modal-status');
+            statusElement.textContent = message;
+            statusElement.hidden = !message;
+        }
+
+        function findPreviewGroup(source) {
+            const services = parseTabConfig('services');
+            if (services.error || !Array.isArray(services.data)) {
+                throw new Error('Fix the services.yaml error before editing the Preview.');
+            }
+            let seen = 0;
+            for (const group of services.data) {
+                const groupName = Object.keys(group || {})[0] || '';
+                if (groupName !== source.groupName) continue;
+                if (seen === (Number(source.groupIndex) || 0)) {
+                    return { group, groupName, services: Array.isArray(group[groupName]) ? group[groupName] : [] };
+                }
+                seen++;
+            }
+            throw new Error(`Could not find service group "${source.groupName}".`);
+        }
+
+        function findPreviewService(source) {
+            const group = findPreviewGroup(source);
+            let seen = 0;
+            for (const service of group.services) {
+                const serviceName = Object.keys(service || {})[0] || '';
+                if (serviceName !== source.serviceName) continue;
+                if (seen === (Number(source.serviceIndex) || 0)) {
+                    return { ...group, service, serviceName, data: service[serviceName] || {} };
+                }
+                seen++;
+            }
+            throw new Error(`Could not find service "${source.serviceName}".`);
+        }
+
+        function openPreviewEditDialog(action, source) {
+            if (sampleModeEnabled) {
+                setSaveStatus('Load a configuration directory before editing the Preview.', 'error');
+                return;
+            }
+            const modal = document.getElementById('preview-edit-modal');
+            const serviceFields = document.getElementById('preview-service-fields');
+            const title = document.getElementById('preview-edit-modal-title');
+            const submit = document.getElementById('preview-edit-submit');
+            const nameInput = document.getElementById('preview-edit-name');
+            const hrefInput = document.getElementById('preview-edit-href');
+            const descriptionInput = document.getElementById('preview-edit-description');
+            const iconInput = document.getElementById('preview-edit-icon');
+            const isService = action.startsWith('service.');
+
+            previewEditDialogState = { action, source };
+            previewEditPreviousFocus = document.activeElement;
+            serviceFields.hidden = !isService;
+            nameInput.value = '';
+            hrefInput.value = '';
+            descriptionInput.value = '';
+            iconInput.value = '';
+            setPreviewEditModalStatus();
+
+            if (action === 'group.add') {
+                title.textContent = 'Add service group';
+                submit.textContent = 'Add group';
+            } else if (action === 'group.rename') {
+                const group = findPreviewGroup(source);
+                title.textContent = 'Rename service group';
+                submit.textContent = 'Apply edit';
+                nameInput.value = group.groupName;
+            } else if (action === 'service.add') {
+                title.textContent = `Add service to ${source.groupName}`;
+                submit.textContent = 'Add service';
+            } else if (action === 'service.edit') {
+                const service = findPreviewService(source);
+                title.textContent = 'Edit service';
+                submit.textContent = 'Apply edit';
+                nameInput.value = service.serviceName;
+                hrefInput.value = service.data.href || '';
+                descriptionInput.value = service.data.description || '';
+                iconInput.value = service.data.icon || '';
+            }
+
+            modal.hidden = false;
+            window.requestAnimationFrame(() => {
+                nameInput.focus();
+                if (action.endsWith('.edit') || action === 'group.rename') nameInput.select();
+            });
+        }
+
+        function closePreviewEditDialog() {
+            const modal = document.getElementById('preview-edit-modal');
+            if (modal.hidden) return;
+            modal.hidden = true;
+            previewEditDialogState = null;
+            setPreviewEditModalStatus();
+            if (previewEditPreviousFocus && typeof previewEditPreviousFocus.focus === 'function') {
+                previewEditPreviousFocus.focus();
+            }
+            previewEditPreviousFocus = null;
+        }
+
+        function replacePreviewEditedFiles(files) {
+            applyingPreviewFiles = true;
+            try {
+                for (const tabName of ['services', 'settings']) {
+                    if (typeof files[tabName] === 'string') loadedFiles[tabName] = files[tabName];
+                }
+                if (typeof files[currentTab] === 'string' && getEditorValue() !== files[currentTab]) {
+                    const lastLine = Math.max(0, yamlCodeEditor.lineCount() - 1);
+                    const lastCharacter = (yamlCodeEditor.getLine(lastLine) || '').length;
+                    yamlCodeEditor.operation(() => {
+                        yamlCodeEditor.replaceRange(
+                            files[currentTab],
+                            { line: 0, ch: 0 },
+                            { line: lastLine, ch: lastCharacter },
+                            '+previewEdit'
+                        );
+                    });
+                    loadedFiles[currentTab] = getEditorValue();
+                }
+            } finally {
+                applyingPreviewFiles = false;
+            }
+            updateUnsavedIndicators();
+            updatePreview({ force: true });
+        }
+
+        function updatePreviewUndoButton() {
+            document.getElementById('preview-undo-button').hidden = !previewUndoState;
+        }
+
+        async function applyPreviewEdit(operation, successMessage) {
+            if (sampleModeEnabled) return false;
+            const beforeFiles = {
+                services: getTabYamlText('services'),
+                settings: getTabYamlText('settings')
+            };
+            try {
+                const response = await fetch('/api/yaml/transform', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: beforeFiles, operation })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || data.error) {
+                    throw new Error(data.details || data.error || 'The Preview edit could not be applied');
+                }
+                previewUndoState = { files: beforeFiles, message: successMessage };
+                replacePreviewEditedFiles(data.files);
+                updatePreviewUndoButton();
+                setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
+                return true;
+            } catch (error) {
+                setSaveStatus(`Could not edit Preview: ${getSaveErrorSummary(error)}`, 'error');
+                return false;
+            }
+        }
+
+        async function submitPreviewEditForm(event) {
+            event.preventDefault();
+            if (!previewEditDialogState) return;
+            const name = document.getElementById('preview-edit-name').value.trim();
+            if (!name) {
+                setPreviewEditModalStatus('Enter a name to continue.');
+                document.getElementById('preview-edit-name').focus();
+                return;
+            }
+            const { action, source } = previewEditDialogState;
+            const values = {
+                name,
+                href: document.getElementById('preview-edit-href').value,
+                description: document.getElementById('preview-edit-description').value,
+                icon: document.getElementById('preview-edit-icon').value
+            };
+            const submitButton = document.getElementById('preview-edit-submit');
+            submitButton.disabled = true;
+            setPreviewEditModalStatus();
+            const message = action === 'group.add'
+                ? `Added group ${name}.`
+                : action === 'group.rename'
+                    ? `Renamed group to ${name}.`
+                    : action === 'service.add'
+                        ? `Added service ${name}.`
+                        : `Updated service ${name}.`;
+            const applied = await applyPreviewEdit({ type: action, target: source, values }, message);
+            submitButton.disabled = false;
+            if (applied) closePreviewEditDialog();
+            else setPreviewEditModalStatus('The edit was not applied. Check the page message for details.');
+        }
+
+        function undoPreviewEdit() {
+            if (!previewUndoState) return;
+            const undoState = previewUndoState;
+            previewUndoState = null;
+            replacePreviewEditedFiles(undoState.files);
+            updatePreviewUndoButton();
+            setSaveStatus(`Undid: ${undoState.message}`, 'info');
+        }
+
+        async function handlePreviewEditAction(action, source) {
+            try {
+                if (['group.add', 'group.rename', 'service.add', 'service.edit'].includes(action)) {
+                    openPreviewEditDialog(action, source);
+                    return;
+                }
+                if (action === 'service.move-up' || action === 'service.move-down') {
+                    const direction = action.endsWith('up') ? 'up' : 'down';
+                    await applyPreviewEdit(
+                        { type: 'service.move', target: source, direction },
+                        `Moved service ${source.serviceName} ${direction}.`
+                    );
+                    return;
+                }
+                if (action === 'group.move-up' || action === 'group.move-down') {
+                    const direction = action.endsWith('up') ? 'up' : 'down';
+                    await applyPreviewEdit(
+                        { type: 'group.move', target: source, direction },
+                        `Moved group ${source.groupName} ${direction}.`
+                    );
+                    return;
+                }
+                if (action === 'service.remove') {
+                    const confirmed = await showConfirmationDialog({
+                        title: 'Delete service?',
+                        message: `Delete ${source.serviceName} from ${source.groupName}? Its complete YAML block will be removed.`,
+                        confirmText: 'Delete service'
+                    });
+                    if (confirmed) {
+                        await applyPreviewEdit(
+                            { type: 'service.remove', target: source },
+                            `Deleted service ${source.serviceName}.`
+                        );
+                    }
+                    return;
+                }
+                if (action === 'group.remove') {
+                    const group = findPreviewGroup(source);
+                    const count = group.services.length;
+                    const confirmed = await showConfirmationDialog({
+                        title: 'Delete service group?',
+                        message: `Delete ${source.groupName} and ${count} service${count === 1 ? '' : 's'}? A matching settings.yaml layout entry will also be removed.`,
+                        confirmText: 'Delete group'
+                    });
+                    if (confirmed) {
+                        await applyPreviewEdit(
+                            { type: 'group.remove', target: source },
+                            `Deleted group ${source.groupName}.`
+                        );
+                    }
+                }
+            } catch (error) {
+                setSaveStatus(`Could not edit Preview: ${getSaveErrorSummary(error)}`, 'error');
+            }
+        }
+
         async function requestDirectoryLoad(dirPath) {
             const response = await fetch('/api/directory/load', {
                 method: 'POST',
@@ -793,6 +1062,12 @@
                 closeConfirmationDialog(false);
             }
         });
+        document.getElementById('preview-edit-modal').addEventListener('click', function(event) {
+            if (event.target === this) closePreviewEditDialog();
+        });
+        document.getElementById('preview-edit-modal-close').addEventListener('click', closePreviewEditDialog);
+        document.getElementById('preview-edit-cancel').addEventListener('click', closePreviewEditDialog);
+        document.getElementById('preview-edit-form').addEventListener('submit', submitPreviewEditForm);
         document.getElementById('serverPathInput').addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -803,7 +1078,9 @@
             if (event.key !== 'Escape') {
                 return;
             }
-            if (!document.getElementById('confirmation-modal').hidden) {
+            if (!document.getElementById('preview-edit-modal').hidden) {
+                closePreviewEditDialog();
+            } else if (!document.getElementById('confirmation-modal').hidden) {
                 closeConfirmationDialog(false);
             } else if (!document.getElementById('directoryModal').hidden) {
                 closeDirectoryModal();
@@ -1307,11 +1584,42 @@
             });
         }
 
+        function getPreviewEditActionButton(action, source, label, icon, { disabled = false, danger = false } = {}) {
+            const dangerClass = danger ? ' preview-edit-delete' : '';
+            return `<button type="button" class="preview-edit-action${dangerClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
+        }
+
+        function getGroupEditControls(source, position, groupCount) {
+            return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('group.rename', source, 'Rename group', '&#9998;')}
+                ${getPreviewEditActionButton('group.move-up', source, 'Move group up', '&uarr;', { disabled: position === 0 })}
+                ${getPreviewEditActionButton('group.move-down', source, 'Move group down', '&darr;', { disabled: position === groupCount - 1 })}
+                ${getPreviewEditActionButton('group.remove', source, 'Delete group', '&times;', { danger: true })}
+            </span>`;
+        }
+
+        function getServiceEditControls(source, position, serviceCount) {
+            return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('service.edit', source, 'Edit service', '&#9998;')}
+                ${getPreviewEditActionButton('service.move-up', source, 'Move service up', '&uarr;', { disabled: position === 0 })}
+                ${getPreviewEditActionButton('service.move-down', source, 'Move service down', '&darr;', { disabled: position === serviceCount - 1 })}
+                ${getPreviewEditActionButton('service.remove', source, 'Delete service', '&times;', { danger: true })}
+            </span>`;
+        }
+
         function updateVisualPreview() {
             const previewDiv = document.getElementById('visual-preview');
             const parsed = Object.fromEntries(
                 configTabNames.map((tabName) => [tabName, parseTabConfig(tabName)])
             );
+            const previewEditToggleElement = document.getElementById('preview-edit-toggle');
+            previewEditToggleElement.disabled = sampleModeEnabled || Boolean(parsed.services.error);
+            if (parsed.services.error && previewEditToggleElement.checked) {
+                previewEditToggleElement.checked = false;
+                document.getElementById('preview-edit-label').textContent = 'Preview editing off';
+                previewEditToggleElement.setAttribute('aria-label', 'Enable Preview editing');
+            }
+            const previewEditMode = previewEditToggleElement.checked && !previewEditToggleElement.disabled;
 
             const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
             const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
@@ -1374,9 +1682,11 @@
             let groupsHtml = '';
             const groupOccurrenceCounter = new Map();
             const groupOccurrenceByItem = new Map();
-            services.forEach((group) => {
+            const groupPositionByItem = new Map();
+            services.forEach((group, groupPosition) => {
                 const name = Object.keys(group || {})[0] || '';
                 groupOccurrenceByItem.set(group, takeOccurrence(groupOccurrenceCounter, name));
+                groupPositionByItem.set(group, groupPosition);
             });
             filteredServices.forEach((group) => {
                 const groupName = Object.keys(group || {})[0];
@@ -1389,8 +1699,12 @@
                     servicesSource: { tab: 'services', kind: 'services-group', groupName, groupIndex },
                     settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
                 };
+                const serviceGroupSource = groupSource.servicesSource;
+                const groupEditControls = previewEditMode
+                    ? getGroupEditControls(serviceGroupSource, groupPositionByItem.get(group) || 0, services.length)
+                    : '';
                 const serviceOccurrenceCounter = new Map();
-                const cards = Array.isArray(entries) ? entries.map((service) => {
+                const cards = Array.isArray(entries) ? entries.map((service, servicePosition) => {
                     const name = Object.keys(service || {})[0] || 'Service';
                     const serviceOccurrenceIndex = takeOccurrence(serviceOccurrenceCounter, name);
                     const data = service[name] || {};
@@ -1406,7 +1720,10 @@
                         ...getPreviewDetailLines(data, ['description', 'href', 'icon', 'siteMonitor', 'ping', 'container', 'server']),
                         ...getPreviewDetailLines(data.widget, ['type', 'url'])
                     ]);
-                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} ${serviceTooltip}><div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                    const serviceEditControls = previewEditMode
+                        ? getServiceEditControls(serviceSource.servicesSource, servicePosition, entries.length)
+                        : '';
+                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
                 }).join('') : '';
                 const groupSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
                 const groupTooltip = getPreviewTooltipAttributes([
@@ -1415,7 +1732,10 @@
                     `Services: ${Array.isArray(entries) ? entries.length : 0}`,
                     ...getPreviewDetailLines(layoutConfig, ['icon', 'style', 'columns', 'header'])
                 ], { focusable: false });
-                groupsHtml += `<details class="dashboard-group" ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span></summary><div class="dashboard-cards">${cards || '<div class="dashboard-empty">No services in this group</div>'}</div></details>`;
+                const addServiceButton = previewEditMode
+                    ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(serviceGroupSource)}><span aria-hidden="true">+</span> Add service</button>`
+                    : '';
+                groupsHtml += `<details class="dashboard-group" ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary><div class="dashboard-cards">${cards || '<div class="dashboard-empty">No services in this group</div>'}</div>${addServiceButton}</details>`;
             });
 
             const bookmarkOccurrenceCounter = new Map();
@@ -1454,9 +1774,13 @@
                 </div>`
                 : '';
 
+            const addGroupButton = previewEditMode
+                ? '<button type="button" class="preview-add-button preview-add-group" data-preview-action="group.add"><span aria-hidden="true">+</span> Add service group</button>'
+                : '';
             previewDiv.innerHTML = `
-                <div class="dashboard-shell">
+                <div class="dashboard-shell ${previewEditMode ? 'preview-edit-enabled' : ''}">
                     ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
+                    ${previewEditMode ? '<div class="preview-edit-mode-note">Preview editing is on. Changes update the YAML editor and remain pending until Save is clicked.</div>' : ''}
                     ${previewTabsHtml}
                     <div class="dashboard-top">
                         <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'services', line: 1 })} ${getPreviewTooltipAttributes(['Jump to services.yaml', `Service groups: ${filteredServices.length}`])}><span>Service Groups</span><strong>${filteredServices.length}</strong></div>
@@ -1466,7 +1790,7 @@
                     </div>
                     <div class="dashboard-widgets">${widgetsHtml || '<div class="dashboard-empty">No widgets configured</div>'}</div>
                     <div class="dashboard-bookmarks">${bookmarksHtml || '<div class="dashboard-empty">No bookmarks configured</div>'}</div>
-                    <div class="dashboard-grid">${groupsHtml || '<div class="dashboard-empty">No service groups configured</div>'}</div>
+                    <div class="dashboard-grid">${groupsHtml || '<div class="dashboard-empty">No service groups configured</div>'}${addGroupButton}</div>
                 </div>`;
 
         }
@@ -1520,14 +1844,24 @@
         const autoIndentLabel = document.getElementById('auto-indent-label');
         const previewAutoRefreshToggle = document.getElementById('preview-auto-refresh-toggle');
         const previewAutoRefreshLabel = document.getElementById('preview-auto-refresh-label');
+        const previewEditToggle = document.getElementById('preview-edit-toggle');
+        const previewEditLabel = document.getElementById('preview-edit-label');
         const manualRefreshButton = document.getElementById('manual-refresh-button');
         const toggleCommentButton = document.getElementById('toggle-comment-button');
         const jumpSectionButton = document.getElementById('jump-section-button');
         function updateAutoIndentLabel() {
             autoIndentLabel.textContent = `Auto Indent ${autoIndentToggle.checked ? 'on' : 'off'}`;
         }
+        function updatePreviewEditMode() {
+            const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
+            previewEditLabel.textContent = `Preview editing ${isEnabled ? 'on' : 'off'}`;
+            previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Preview editing`);
+            updatePreview({ force: true });
+        }
         autoIndentToggle.addEventListener('change', updateAutoIndentLabel);
         updateAutoIndentLabel();
+        previewEditToggle.addEventListener('change', updatePreviewEditMode);
+        document.getElementById('preview-undo-button').addEventListener('click', undoPreviewEdit);
         previewAutoRefreshToggle.addEventListener('change', function() {
             const isEnabled = previewAutoRefreshToggle.checked;
             previewAutoRefreshLabel.textContent = `Auto Refresh ${isEnabled ? 'on' : 'off'}`;
@@ -1552,13 +1886,25 @@
         });
         jumpSectionButton.addEventListener('click', jumpToMatchingConfigSection);
 
-        yamlCodeEditor.on('change', function() {
+        yamlCodeEditor.on('change', function(editor, change) {
+            if (!applyingPreviewFiles && previewUndoState && change.origin !== 'setValue') {
+                previewUndoState = null;
+                updatePreviewUndoButton();
+            }
             clearSaveStatus();
             updateUnsavedIndicators();
             scheduleVisualPreview();
         });
 
         document.getElementById('visual-preview').addEventListener('click', function(event) {
+            const actionTarget = event.target.closest('[data-preview-action]');
+            if (actionTarget && this.contains(actionTarget)) {
+                event.preventDefault();
+                event.stopPropagation();
+                const source = JSON.parse(actionTarget.getAttribute('data-source') || '{}');
+                handlePreviewEditAction(actionTarget.getAttribute('data-preview-action'), source);
+                return;
+            }
             const target = event.target.closest('[data-source]');
             if (!target || !this.contains(target)) {
                 return;

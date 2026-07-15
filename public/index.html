@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=59">
+    <link rel="stylesheet" href="styles.css?v=61">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -140,6 +140,21 @@
                     <span>Preview</span>
                 </div>
                 <div class="preview-refresh-controls">
+                    <label class="preview-refresh-toggle preview-edit-toggle">
+                        <input type="checkbox" id="preview-edit-toggle" aria-label="Enable Preview editing">
+                        <span class="preview-refresh-toggle-icon" aria-hidden="true">
+                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
+                                <path d="M4 20l4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>
+                            </svg>
+                        </span>
+                        <span id="preview-edit-label" class="preview-control-label" aria-hidden="true">Preview editing off</span>
+                    </label>
+                    <button type="button" id="preview-undo-button" class="refresh-btn preview-undo-btn" aria-label="Undo last Preview edit" hidden>
+                        <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M9 7L4 12l5 5M5 12h8a6 6 0 0 1 6 6"></path>
+                        </svg>
+                        <span class="preview-control-label" aria-hidden="true">Undo last Preview edit</span>
+                    </button>
                     <label class="preview-refresh-toggle">
                         <input type="checkbox" id="preview-auto-refresh-toggle" aria-label="Auto Refresh" checked>
                         <span class="preview-refresh-toggle-icon" aria-hidden="true">
@@ -192,9 +207,44 @@
         </div>
     </div>
 
+    <div id="preview-edit-modal" class="modal-overlay" hidden>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="preview-edit-modal-title">
+            <div class="modal-header">
+                <h3 id="preview-edit-modal-title" class="modal-title">Edit Preview item</h3>
+                <button type="button" class="modal-close" id="preview-edit-modal-close" aria-label="Close Preview edit dialog">&times;</button>
+            </div>
+            <form id="preview-edit-form">
+                <div class="preview-edit-field">
+                    <label for="preview-edit-name">Name</label>
+                    <input type="text" id="preview-edit-name" class="modal-input" autocomplete="off" required>
+                </div>
+                <div id="preview-service-fields">
+                    <div class="preview-edit-field">
+                        <label for="preview-edit-href">URL</label>
+                        <input type="text" id="preview-edit-href" class="modal-input" autocomplete="off" placeholder="https://example.com">
+                    </div>
+                    <div class="preview-edit-field">
+                        <label for="preview-edit-description">Description</label>
+                        <textarea id="preview-edit-description" class="modal-input preview-edit-textarea" rows="3"></textarea>
+                    </div>
+                    <div class="preview-edit-field">
+                        <label for="preview-edit-icon">Icon</label>
+                        <input type="text" id="preview-edit-icon" class="modal-input" autocomplete="off" placeholder="homepage.png">
+                    </div>
+                    <p class="preview-edit-note">Other service options remain unchanged in the YAML.</p>
+                </div>
+                <p id="preview-edit-modal-status" class="modal-status" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="preview-edit-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                    <button type="submit" id="preview-edit-submit" class="modal-button">Apply edit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=38"></script>
+    <script src="app.js?v=39"></script>
 </body>
 </html>

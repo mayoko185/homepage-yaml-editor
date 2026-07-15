@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const test = require('node:test');
+const YAML = require('yaml');
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -99,6 +100,23 @@ test('serves optimized assets and supports the active configuration APIs', async
     const loaded = await loadResponse.json();
     assert.equal(loadResponse.status, 200);
     assert.equal(loaded.files['services.yaml'], yamlContent);
+
+    const transformResponse = await fetch(`${baseUrl}/api/yaml/transform`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        files: { services: yamlContent, settings: '' },
+        operation: {
+          type: 'service.add',
+          target: { groupName: 'Test', groupIndex: 0 },
+          values: { name: 'Preview Service', href: 'https://preview.example' }
+        }
+      })
+    });
+    const transformed = await transformResponse.json();
+    assert.equal(transformResponse.status, 200);
+    assert.equal(YAML.parse(transformed.files.services)[0].Test[1]['Preview Service'].href, 'https://preview.example');
+    assert.equal(await fs.readFile(path.join(tempRoot, 'services.yaml'), 'utf8'), yamlContent);
 
     const unchangedResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',

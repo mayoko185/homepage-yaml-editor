@@ -656,6 +656,10 @@
             color: white;
             opacity: 1;
         }
+        .preview-refresh-toggle:has(input:disabled) {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
         .preview-refresh-toggle:hover,
         .preview-refresh-toggle:focus-within {
             outline: 2px solid var(--button-bg);
@@ -1256,6 +1260,106 @@
             overflow-wrap: anywhere;
             word-break: break-word;
         }
+        .preview-edit-enabled .preview-jump-target[data-preview-tooltip]::before,
+        .preview-edit-enabled .dashboard-card.preview-jump-target::after {
+            display: none;
+        }
+        .preview-edit-enabled .preview-jump-target:not(.yaml-error-card):hover {
+            outline: none;
+            box-shadow: none;
+        }
+        .preview-edit-enabled .dashboard-card {
+            padding-right: 10px;
+        }
+        .preview-edit-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
+        }
+        .dashboard-group-title .preview-edit-actions + * {
+            margin-left: 0;
+        }
+        .preview-edit-action {
+            position: relative;
+            display: inline-grid;
+            place-items: center;
+            width: 27px;
+            height: 27px;
+            min-width: 27px;
+            margin: 0;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--preview-bg);
+            color: var(--text-color);
+            box-shadow: none;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .preview-edit-action:hover,
+        .preview-edit-action:focus-visible {
+            border-color: var(--button-bg);
+            background: var(--button-bg);
+            color: white;
+            transform: none;
+        }
+        .preview-edit-action.preview-edit-delete:hover,
+        .preview-edit-action.preview-edit-delete:focus-visible {
+            border-color: var(--error-color);
+            background: var(--error-color);
+        }
+        .preview-edit-action:disabled {
+            cursor: not-allowed;
+            opacity: 0.35;
+            transform: none;
+        }
+        .dashboard-card > .preview-edit-actions {
+            position: static;
+            justify-content: flex-end;
+            margin: 0 0 7px;
+        }
+        .preview-edit-enabled .dashboard-group-title::after {
+            margin-left: 0;
+        }
+        .preview-add-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            min-height: 38px;
+            margin: 0;
+            padding: 8px 12px;
+            border: 1px dashed var(--button-bg);
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--button-bg) 8%, transparent);
+            color: var(--text-color);
+            box-shadow: none;
+            font-size: 0.86em;
+            font-weight: 600;
+        }
+        .preview-add-button:hover,
+        .preview-add-button:focus-visible {
+            border-style: solid;
+            background: color-mix(in srgb, var(--button-bg) 18%, transparent);
+            color: var(--text-color);
+            transform: none;
+        }
+        .preview-add-service {
+            margin-top: 10px;
+        }
+        .preview-add-group {
+            justify-self: start;
+        }
+        .preview-edit-mode-note {
+            padding: 8px 10px;
+            border: 1px solid var(--notice-info-color);
+            border-radius: 7px;
+            background: var(--notice-info-bg);
+            color: var(--text-color);
+            font-size: 0.84em;
+        }
         .dashboard-empty {
             padding: 10px;
             border: 1px dashed var(--border-color);
@@ -1538,6 +1642,28 @@
             border-color: var(--button-bg);
             outline: 2px solid color-mix(in srgb, var(--button-bg) 30%, transparent);
             outline-offset: 1px;
+        }
+        .preview-edit-field {
+            margin-top: 15px;
+        }
+        .preview-edit-field label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .preview-edit-field .modal-input {
+            margin-top: 7px;
+        }
+        .preview-edit-textarea {
+            min-height: 82px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .preview-edit-note {
+            margin: 12px 0 0;
+            color: var(--text-color);
+            font-size: 0.82rem;
+            opacity: 0.72;
         }
         .modal-status {
             margin: 10px 0 0;

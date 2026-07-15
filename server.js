@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const YAML = require('yaml');
+const { transformPreviewYaml } = require('./yaml-transform');
 
 const app = express();
 const PORT = process.env.PORT || 8081;
@@ -402,6 +403,17 @@ app.get('/api/startup-directory', async (req, res) => {
     console.error('Startup directory refresh failed:', error);
     return res.status(error.statusCode || 500).json({
       error: 'Failed to refresh startup directory',
+      details: error.message
+    });
+  }
+});
+
+app.post('/api/yaml/transform', (req, res) => {
+  try {
+    return res.json(transformPreviewYaml(req.body));
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      error: error.statusCode ? 'Could not apply preview edit' : 'Preview edit failed',
       details: error.message
     });
   }

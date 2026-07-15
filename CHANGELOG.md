@@ -21,6 +21,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Replaced the Preview refresh action with default-on Auto Refresh and an off-state Manual Refresh control.
 - Wrapped long URLs and unbroken text safely inside Preview tooltips and service cards.
 - Added a header shortcut to the Homepage configuration documentation.
+- Added Preview editing for service groups and services with forms, confirmations, movement controls, unsaved tracking, and one-step Undo.
+- Added atomic YAML transformations that preserve comments and advanced service options while synchronizing matching Settings layout groups.
 
 ### Changed
 

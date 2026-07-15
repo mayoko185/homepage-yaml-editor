@@ -13,6 +13,8 @@ A small browser-based editor for [Homepage](https://gethomepage.dev/) YAML confi
 - Jump between matching service groups and Settings layout sections based on the editor cursor position.
 - Show save results and validation errors inline without interrupting editing with browser popups.
 - Preview Homepage tabs, service groups, collapsed groups, cards, bookmarks, widgets, and dashboard-icons.
+- Add, rename, remove, and reorder service groups directly from Preview.
+- Add, edit, remove, and reorder services directly from Preview with one-step Undo.
 - Supports `.yaml` and `.yml` filenames.
 
 ## Supported Files
@@ -23,6 +25,9 @@ The editor intentionally limits reads and writes to these Homepage config files:
 - `settings.yaml` or `settings.yml`
 - `bookmarks.yaml` or `bookmarks.yml`
 - `widgets.yaml` or `widgets.yml`
+- `docker.yaml` or `docker.yml`
+- `proxmox.yaml` or `proxmox.yml`
+- `kubernetes.yaml` or `kubernetes.yml`
 
 Open the editor at:
 
@@ -79,7 +84,7 @@ The built-in sample content is loaded from the repository's `examples` directory
 
 ## Saving Behavior
 
-When a directory is autoloaded or loaded manually, `Save Configuration` writes the active tab back to that same directory.
+When a directory is autoloaded or loaded manually, `Save` validates and writes every modified YAML tab back to that same directory.
 
 Loaded directories must be `/hp_config`, `DATA_DIR`, `AUTOLOAD_DIR`, or a path listed in `ALLOWED_CONFIG_DIRS`. This keeps LAN clients from reading or writing arbitrary server paths while preserving the normal mounted-config workflow.
 
@@ -87,7 +92,18 @@ If the loaded file was `.yml`, saves keep using `.yml`. If it was `.yaml`, saves
 
 If no directory is loaded, the editor uses read-only examples and Save is disabled. Load a configuration directory before saving changes.
 
-`Download All` creates a zip archive containing all seven supported YAML files from the editor.
+`Download` creates a zip archive containing all seven supported YAML files from the editor after pending changes have been saved or discarded.
+
+## Preview Editing
+
+After loading a writable configuration directory, enable the pencil control in the Preview header to edit service groups and services visually. Preview edits update the YAML editor immediately but remain unsaved until `Save` is clicked.
+
+- Group controls rename, move, or delete a group and can add services.
+- Service controls edit the name, URL, description, and icon, move the service, or delete it.
+- Editing the visible service fields preserves other YAML options such as widgets and monitors.
+- Renaming, moving, or deleting a group also updates a matching `settings.yaml` layout entry when one exists.
+- The Undo control restores the files from immediately before the latest Preview edit. A subsequent manual YAML edit starts a new history and removes that Undo action.
+- Read-only examples and invalid `services.yaml` content keep Preview editing disabled.
 
 ## Icons
 
