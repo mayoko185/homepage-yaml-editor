@@ -1353,7 +1353,7 @@ providers:
 
             const previewTabsHtml = homepageTabs.length > 0
                 ? `<div class="preview-tab-navigation">
-                    <span class="preview-tab-label">Preview pages</span>
+                    <span class="preview-tab-label">Tabs</span>
                     <div class="preview-tab-strip" role="tablist" aria-label="Homepage preview pages">${homepageTabs.map((name) => {
                         const isActive = name === previewHomepageTab;
                         return `<button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`;
