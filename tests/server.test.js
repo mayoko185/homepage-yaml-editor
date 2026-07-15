@@ -66,6 +66,15 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(startup.hasStartupDirectory, true);
     assert.equal(startup.directory, tempRoot);
 
+    const examplesResponse = await fetch(`${baseUrl}/api/examples`);
+    const examples = await examplesResponse.json();
+    assert.equal(examplesResponse.status, 200);
+    assert.equal(examplesResponse.headers.get('cache-control'), 'no-store');
+    for (const baseName of ['bookmarks', 'services', 'settings', 'widgets']) {
+      const expectedExample = await fs.readFile(path.join('examples', `${baseName}.yaml`), 'utf8');
+      assert.equal(examples.samples[baseName], expectedExample);
+    }
+
     const yamlContent = '- Test:\n    - Service:\n        href: http://localhost/';
     const saveResponse = await fetch(`${baseUrl}/api/config/save`, {
       method: 'POST',

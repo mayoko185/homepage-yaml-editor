@@ -1,42 +1,24 @@
-// Sample homepage configuration files
+// Sample homepage configuration files loaded from the server-side examples directory.
         const sampleConfigs = {
-            services: `# For configuration options and examples, please see:
-# https://gethomepage.dev/configs/services/
-
-- My First Group:
-    - My First Service:
-        href: http://localhost/
-        description: Homepage is awesome
-
-- My Second Group:
-    - My Second Service:
-        href: http://localhost/
-        description: Homepage is the best`,
-                    
-            settings: `# For configuration options and examples, please see:
-# https://gethomepage.dev/configs/settings/
-
-providers:
-  openweathermap: openweathermapapikey
-  weatherapi: weatherapiurl`,
-                    
-            bookmarks: `- My First Bookmark:
-    href: http://localhost/
-    description: Homepage is awesome
-    
-- My Second Bookmark:
-    href: http://localhost/
-    description: Homepage is the best`,
-                    
-            widgets: `# For configuration options and examples, please see:
-# https://gethomepage.dev/configs/widgets/
-
-- weather:
-    location: London
-    units: metric
-- clock:
-    format: 12h`
+            services: '',
+            settings: '',
+            bookmarks: '',
+            widgets: ''
         };
+
+        async function loadSampleConfigs() {
+            const response = await fetch('/api/examples', { cache: 'no-store' });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.details || payload.error || 'The example files could not be loaded');
+            }
+            for (const tabName of Object.keys(sampleConfigs)) {
+                if (typeof payload.samples?.[tabName] !== 'string') {
+                    throw new Error(`${tabName}.yaml is missing from the examples directory`);
+                }
+                sampleConfigs[tabName] = payload.samples[tabName];
+            }
+        }
 
         let currentTab = 'services';
         let loadedFiles = {};
@@ -616,6 +598,13 @@ providers:
             const configuredTheme = window.APP_CONFIG && window.APP_CONFIG.defaultTheme;
             applyTheme(configuredTheme !== 'light');
             document.getElementById('logout-form').hidden = !(window.APP_CONFIG && window.APP_CONFIG.loginRequired);
+
+            try {
+                await loadSampleConfigs();
+            } catch (error) {
+                console.error('Example configuration load failed:', error);
+                setSaveStatus(`Could not load examples: ${error.message}`, 'error');
+            }
             
             loadedFiles = {
                 'services': sampleConfigs.services,

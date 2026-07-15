@@ -10,6 +10,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 
 - Added cursor-aware toolbar navigation between matching Services groups and Settings layout sections.
+- Added repository-managed example YAML files as the source for fresh editor sessions and Reset.
 
 ### Changed
 

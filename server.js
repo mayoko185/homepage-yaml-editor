@@ -8,6 +8,7 @@ const YAML = require('yaml');
 const app = express();
 const PORT = process.env.PORT || 8081;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const EXAMPLES_DIR = path.join(__dirname, 'examples');
 const DEFAULT_DATA_DIR = '/hp_config';
 const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
 const AUTOLOAD_DIR = process.env.AUTOLOAD_DIR;
@@ -334,6 +335,27 @@ async function applyStartupDirectoryLoad() {
     console.warn('Startup directory load failed:', error.message);
   }
 }
+
+async function loadExampleConfigs() {
+  const entries = await Promise.all(CONFIG_BASE_NAMES.map(async (baseName) => {
+    const content = await fs.readFile(path.join(EXAMPLES_DIR, `${baseName}.yaml`), 'utf8');
+    return [baseName, content];
+  }));
+  return Object.fromEntries(entries);
+}
+
+app.get('/api/examples', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    return res.json({ samples: await loadExampleConfigs() });
+  } catch (error) {
+    console.error('Example configuration load failed:', error);
+    return res.status(500).json({
+      error: 'Failed to load example configurations',
+      details: error.message
+    });
+  }
+});
 
 app.get('/api/startup-directory', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');

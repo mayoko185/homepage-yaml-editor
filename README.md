@@ -73,6 +73,10 @@ On startup, the app chooses an autoload directory in this order:
 
 If a startup directory is autoloaded successfully, the editor loads files from that directory and replaces the toolbar's `Reset` action with `Reload`. This avoids accidentally replacing real mounted config content with sample YAML.
 
+## Default Samples
+
+The built-in sample content is loaded from the repository's `examples` directory. Replace `services.yaml`, `settings.yaml`, `bookmarks.yaml`, or `widgets.yaml` there to change what a fresh editor session and the `Reset` action use. Rebuild the Docker image after changing these files so the updated examples are copied into the container.
+
 ## Saving Behavior
 
 When a directory is autoloaded or loaded manually, `Save Configuration` writes the active tab back to that same directory.

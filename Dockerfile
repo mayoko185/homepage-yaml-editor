@@ -12,6 +12,7 @@ RUN npm install --global pnpm@11.7.0 && \
 
 COPY server.js ./
 COPY public ./public
+COPY examples ./examples
 COPY --chmod=755 start.sh ./start.sh
 
 RUN sed -i 's/\r$//' ./start.sh && \
