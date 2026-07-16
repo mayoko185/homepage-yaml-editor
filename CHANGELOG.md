@@ -29,6 +29,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Capitalized the Interactive Editor Preview heading.
 - Kept the Interactive Editor control beside Auto Refresh while Preview management controls appear or hide.
 - Positioned Preview-bar hover labels below their controls so they do not obscure neighboring icons.
+- Organized Settings into collapsible Appearance & editor, Preview, and YAML tabs sections.
+- Standardized modal panel headers with a divider and content spacing beneath their title and close control.
 
 ## [1.2.0] - 2026-07-15
 
