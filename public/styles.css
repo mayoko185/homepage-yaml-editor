@@ -1455,37 +1455,6 @@
         .preview-add-group {
             justify-self: start;
         }
-        .preview-edit-mode-note {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 8px 10px;
-            border: 1px solid var(--notice-info-color);
-            border-radius: 7px;
-            background: var(--notice-info-bg);
-            color: var(--text-color);
-            font-size: 0.84em;
-        }
-        .preview-manage-tabs-button {
-            flex: 0 0 auto;
-            min-height: 30px;
-            margin: 0;
-            padding: 5px 10px;
-            border: 1px solid var(--notice-info-color);
-            border-radius: 6px;
-            background: transparent;
-            color: var(--text-color);
-            box-shadow: none;
-            font-size: 0.92em;
-            font-weight: 600;
-        }
-        .preview-manage-tabs-button:hover,
-        .preview-manage-tabs-button:focus-visible {
-            background: var(--notice-info-color);
-            color: white;
-            transform: none;
-        }
         .dashboard-empty {
             padding: 10px;
             border: 1px dashed var(--border-color);
@@ -1679,10 +1648,6 @@
             }
             .header-actions {
                 gap: 6px;
-            }
-            .preview-edit-mode-note {
-                align-items: flex-start;
-                flex-direction: column;
             }
             .preview-tab-add-fields {
                 grid-template-columns: minmax(0, 1fr);

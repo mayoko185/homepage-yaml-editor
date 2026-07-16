@@ -64,6 +64,7 @@ node --check public/app.js
 - Do not rebuild the preview directly on every keystroke. Preserve debouncing and parsed-YAML caching.
 - Do not attach an event listener to every generated preview item. Use delegated events on the preview container.
 - Keep preview indexing linear. Use occurrence counters rather than repeated `findIndex`, `slice`, or prefix scans inside render loops.
+- Put user-visible application notices and status messages in the notification area, not inside content panels; keep validation messages inside the dialog that needs the correction.
 - Preview-to-source navigation must place the cursor on and temporarily highlight only the target line. It must not select the complete document or flash the entire editor.
 - When changing cacheable CSS or JavaScript, increment the corresponding version query in `public/index.html`.
 - Keep HTML responses revalidated while allowing versioned CSS, JavaScript, and icon assets to use longer cache lifetimes.

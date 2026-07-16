@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=96">
+    <link rel="stylesheet" href="styles.css?v=97">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -161,6 +161,15 @@
                         </span>
                         <span id="preview-edit-label" class="preview-control-label" aria-hidden="true">Interactive editor off</span>
                     </label>
+                    <button type="button" id="preview-manage-tabs-button" class="toolbar-button toolbar-icon-control" aria-label="Manage Preview tabs" hidden>
+                        <span class="toolbar-button-icon" aria-hidden="true">
+                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
+                                <path d="M4 5h16M4 12h16M4 19h16"></path>
+                                <circle cx="8" cy="5" r="1.5"></circle><circle cx="16" cy="12" r="1.5"></circle><circle cx="11" cy="19" r="1.5"></circle>
+                            </svg>
+                        </span>
+                        <span class="preview-control-label" aria-hidden="true">Manage Preview tabs</span>
+                    </button>
                     <button type="button" id="preview-option-types-button" class="toolbar-button toolbar-icon-control" aria-label="Manage Preview option types" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">
                             <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
@@ -340,6 +349,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=77"></script>
+    <script src="app.js?v=78"></script>
 </body>
 </html>

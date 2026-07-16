@@ -1597,6 +1597,7 @@
         document.getElementById('preview-tab-modal-done').addEventListener('click', closePreviewTabManager);
         document.getElementById('preview-tab-add-form').addEventListener('submit', submitPreviewTabAdd);
         document.getElementById('preview-tab-group').addEventListener('change', updatePreviewTabGroupMode);
+        document.getElementById('preview-manage-tabs-button').addEventListener('click', openPreviewTabManager);
         document.getElementById('preview-option-types-button').addEventListener('click', openOptionTypesModal);
         document.getElementById('option-types-modal-close').addEventListener('click', closeOptionTypesModal);
         document.getElementById('option-types-cancel').addEventListener('click', closeOptionTypesModal);
@@ -2210,11 +2211,15 @@
                 document.getElementById('preview-edit-label').textContent = 'Interactive editor off';
                 document.getElementById('preview-title-label').textContent = 'Preview';
                 previewEditToggleElement.setAttribute('aria-label', 'Enable Interactive editor');
+                document.getElementById('preview-manage-tabs-button').hidden = true;
                 document.getElementById('preview-option-types-button').hidden = true;
             }
             const previewEditMode = previewEditToggleElement.checked && !previewEditToggleElement.disabled;
             const previewNotices = [];
             const addPreviewNotice = (message) => previewNotices.push(message);
+            if (previewEditMode) {
+                addPreviewNotice('Preview editing is on. Changes update the YAML editor and remain pending until Save is clicked.');
+            }
 
             const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
             const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
@@ -2438,7 +2443,6 @@
             previewDiv.innerHTML = `
                 <div class="dashboard-shell ${previewEditMode ? 'preview-edit-enabled' : ''}">
                     ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
-                    ${previewEditMode ? '<div class="preview-edit-mode-note"><span>Preview editing is on. Changes update the YAML editor and remain pending until Save is clicked.</span><button type="button" class="preview-manage-tabs-button" data-preview-action="tabs.manage">Manage tabs</button></div>' : ''}
                     ${previewTabsHtml}
                     ${widgetsHtml ? `<div class="dashboard-widgets">${widgetsHtml}</div>` : ''}
                     ${bookmarksHtml ? `<div class="dashboard-bookmarks">${bookmarksHtml}</div>` : ''}
@@ -2691,6 +2695,7 @@
             previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
             document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive editor' : 'Preview';
             previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
+            document.getElementById('preview-manage-tabs-button').hidden = !isEnabled;
             document.getElementById('preview-option-types-button').hidden = !isEnabled;
             updatePreview({ force: true });
         }
