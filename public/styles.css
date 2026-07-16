@@ -2179,13 +2179,21 @@
             place-items: center;
             width: 30px;
             height: 30px;
+            padding: 0;
             border: 1px solid var(--border-color);
             border-radius: 6px;
             background: var(--config-item-bg);
             color: var(--text-color);
             cursor: pointer;
-            font-size: 17px;
-            line-height: 1;
+        }
+        .settings-yaml-tab-move svg {
+            width: 17px;
+            height: 17px;
+            fill: none;
+            stroke: currentColor;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 1.8;
         }
         .settings-yaml-tab-move:hover:not(:disabled),
         .settings-yaml-tab-move:focus-visible {

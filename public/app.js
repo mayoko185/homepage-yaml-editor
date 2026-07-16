@@ -2210,6 +2210,7 @@
                 previewEditToggleElement.checked = false;
                 document.getElementById('preview-edit-label').textContent = 'Interactive editor off';
                 document.getElementById('preview-title-label').textContent = 'Preview';
+                document.getElementById('preview-title-icon').innerHTML = '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path><circle cx="12" cy="12" r="2.75"></circle>';
                 previewEditToggleElement.setAttribute('aria-label', 'Enable Interactive editor');
                 document.getElementById('preview-manage-tabs-button').hidden = true;
                 document.getElementById('preview-option-types-button').hidden = true;
@@ -2569,8 +2570,8 @@
                         <span>${escapeHtml(configTabLabels[tabName])}</span>
                     </label>
                     <div class="settings-yaml-tab-actions" aria-label="Reorder ${escapeHtml(configTabLabels[tabName])} tab">
-                        <button type="button" class="settings-yaml-tab-move" data-settings-tab-move="up" aria-label="Move ${escapeHtml(configTabLabels[tabName])} tab up" title="Move up"${index === 0 ? ' disabled' : ''}>&uarr;</button>
-                        <button type="button" class="settings-yaml-tab-move" data-settings-tab-move="down" aria-label="Move ${escapeHtml(configTabLabels[tabName])} tab down" title="Move down"${index === settingsTabOrderDraft.tabOrder.length - 1 ? ' disabled' : ''}>&darr;</button>
+                        <button type="button" class="settings-yaml-tab-move" data-settings-tab-move="up" aria-label="Move ${escapeHtml(configTabLabels[tabName])} tab up" title="Move up"${index === 0 ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 18V6M7 11l5-5 5 5"></path></svg></button>
+                        <button type="button" class="settings-yaml-tab-move" data-settings-tab-move="down" aria-label="Move ${escapeHtml(configTabLabels[tabName])} tab down" title="Move down"${index === settingsTabOrderDraft.tabOrder.length - 1 ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 6v12m-5-5 5 5 5-5"></path></svg></button>
                     </div>
                 </div>`).join('');
         }
@@ -2694,6 +2695,9 @@
             const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
             previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
             document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive editor' : 'Preview';
+            document.getElementById('preview-title-icon').innerHTML = isEnabled
+                ? '<path d="M4 20l4.2-1L18.8 8.4a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>'
+                : '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path><circle cx="12" cy="12" r="2.75"></circle>';
             previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
             document.getElementById('preview-manage-tabs-button').hidden = !isEnabled;
             document.getElementById('preview-option-types-button').hidden = !isEnabled;

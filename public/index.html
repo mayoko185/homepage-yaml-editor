@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=97">
+    <link rel="stylesheet" href="styles.css?v=98">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -145,7 +145,7 @@
         <div class="preview-section homepage-preview" id="homepage-preview-section">
             <div class="preview-header">
                 <div class="preview-title">
-                    <svg class="preview-title-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <svg id="preview-title-icon" class="preview-title-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
                         <circle cx="12" cy="12" r="2.75"></circle>
                     </svg>
@@ -164,11 +164,10 @@
                     <button type="button" id="preview-manage-tabs-button" class="toolbar-button toolbar-icon-control" aria-label="Manage Preview tabs" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">
                             <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
-                                <path d="M4 5h16M4 12h16M4 19h16"></path>
-                                <circle cx="8" cy="5" r="1.5"></circle><circle cx="16" cy="12" r="1.5"></circle><circle cx="11" cy="19" r="1.5"></circle>
+                                <path d="M7 4h13v13H7zM4 7v13h13"></path>
                             </svg>
                         </span>
-                        <span class="preview-control-label" aria-hidden="true">Manage Preview tabs</span>
+                        <span class="preview-control-label" aria-hidden="true">Manage tabs</span>
                     </button>
                     <button type="button" id="preview-option-types-button" class="toolbar-button toolbar-icon-control" aria-label="Manage Preview option types" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">
@@ -349,6 +348,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=78"></script>
+    <script src="app.js?v=81"></script>
 </body>
 </html>

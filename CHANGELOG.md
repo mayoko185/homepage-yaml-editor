@@ -12,6 +12,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Added Settings-panel controls for showing, hiding, and reordering YAML configuration tabs, with persistent preferences and matching editor styling.
 - Moved the Preview editing notice into the notification area and added a matching header icon for managing Preview tabs.
 
+### Changed
+
+- Replaced YAML-tab reorder text arrows with centered SVG icons for a cleaner, consistent appearance.
+- Refined the Preview tab-management icon and shortened its hover label to “Manage tabs”.
+- Updated the Preview heading icon to switch between an eye and pencil with Interactive Editor state.
+
 ## [1.2.0] - 2026-07-15
 
 ### Added
