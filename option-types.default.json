@@ -1,0 +1,92 @@
+[
+  {
+    "name": "description",
+    "type": "textarea",
+    "rows": 4
+  },
+  {
+    "name": "widget",
+    "type": "mapping"
+  },
+  {
+    "name": "tab",
+    "type": "tab"
+  },
+  {
+    "name": "target",
+    "type": "select",
+    "values": ["_blank", "_self", "_top"]
+  },
+  {
+    "name": "header",
+    "type": "boolean"
+  },
+  {
+    "name": "showStats",
+    "type": "boolean"
+  },
+  {
+    "name": "showLabel",
+    "type": "boolean"
+  },
+  {
+    "name": "showStatus",
+    "type": "boolean"
+  },
+  {
+    "name": "showTime",
+    "type": "boolean"
+  },
+  {
+    "name": "showName",
+    "type": "boolean"
+  },
+  {
+    "name": "hideVersion",
+    "type": "boolean"
+  },
+  {
+    "name": "useEqualHeights",
+    "type": "boolean"
+  },
+  {
+    "name": "icon",
+    "type": "text"
+  },
+  {
+    "name": "href",
+    "type": "text"
+  },
+  {
+    "name": "siteMonitor",
+    "type": "text"
+  },
+  {
+    "name": "statusStyle",
+    "type": "text"
+  },
+  {
+    "name": "style",
+    "type": "text"
+  },
+  {
+    "name": "columns",
+    "type": "text"
+  },
+  {
+    "name": "type",
+    "type": "text"
+  },
+  {
+    "name": "fields",
+    "type": "text"
+  },
+  {
+    "name": "url",
+    "type": "text"
+  },
+  {
+    "name": "key",
+    "type": "text"
+  }
+]

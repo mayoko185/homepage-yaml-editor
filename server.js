@@ -5,11 +5,15 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const YAML = require('yaml');
 const { transformPreviewYaml } = require('./yaml-transform');
+const defaultOptionDefinitions = require('./option-types.default.json');
 
 const app = express();
 const PORT = process.env.PORT || 8081;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const EXAMPLES_DIR = path.join(__dirname, 'examples');
+const APP_DATA_DIR = process.env.APP_DATA_DIR || path.join(__dirname, 'data');
+const APP_SETTINGS_PATH = path.join(APP_DATA_DIR, 'settings.json');
+const OPTION_TYPES_PATH = path.join(APP_DATA_DIR, 'option-types.json');
 const DEFAULT_DATA_DIR = '/hp_config';
 const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
 const AUTOLOAD_DIR = process.env.AUTOLOAD_DIR;
@@ -39,6 +43,7 @@ const CONFIG_EXTENSIONS = Object.freeze(['.yaml', '.yml']);
 const ALLOWED_CONFIG_FILES = new Set(
   CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`))
 );
+const OPTION_VALUE_TYPES = new Set(['text', 'textarea', 'boolean', 'tab', 'mapping', 'select']);
 const EXTRA_ALLOWED_CONFIG_DIRS = (process.env.ALLOWED_CONFIG_DIRS || '')
   .split(',')
   .map((dirPath) => dirPath.trim())
@@ -54,6 +59,123 @@ const ALLOWED_CONFIG_DIRECTORIES = Object.freeze(
 
 app.locals.startupDirectory = null;
 app.locals.startupFiles = {};
+
+function getDefaultAppSettings() {
+  return {
+    theme: DEFAULT_THEME,
+    autoIndent: true,
+    previewAutoRefresh: true,
+    editorVisible: true,
+    interactiveEditor: false
+  };
+}
+
+function getDefaultOptionDefinitions() {
+  return defaultOptionDefinitions.map((definition) => ({
+    ...definition,
+    ...(definition.values ? { values: [...definition.values] } : {})
+  }));
+}
+
+function createOptionTypeError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+function normalizeOptionDefinitions(value) {
+  if (!Array.isArray(value)) throw createOptionTypeError('Option definitions must be a list');
+  const names = new Set();
+  return value.map((definition) => {
+    const name = String(definition && definition.name || '').trim();
+    const type = String(definition && definition.type || '').trim();
+    if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each option definition needs a single-line name');
+    if (names.has(name)) throw createOptionTypeError(`Option "${name}" is listed more than once`);
+    names.add(name);
+    if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Option "${name}" has an unsupported value type`);
+    const normalized = { name, type };
+    if (type === 'select') {
+      const values = Array.isArray(definition.values) ? definition.values : [];
+      normalized.values = Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)));
+      if (normalized.values.length === 0) throw createOptionTypeError(`Select option "${name}" needs at least one choice`);
+    }
+    if (type === 'textarea' && Number.isFinite(Number(definition.rows))) {
+      normalized.rows = Math.max(2, Math.min(12, Math.round(Number(definition.rows))));
+    }
+    return normalized;
+  });
+}
+
+async function writeJsonAtomically(filePath, value) {
+  const temporaryPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+  await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  await fs.rename(temporaryPath, filePath);
+}
+
+async function loadOptionDefinitions() {
+  try {
+    return normalizeOptionDefinitions(JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8')));
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.warn('Could not read option type definitions:', error.message);
+    return getDefaultOptionDefinitions();
+  }
+}
+
+async function saveOptionDefinitions(definitions) {
+  const normalized = normalizeOptionDefinitions(definitions);
+  await writeJsonAtomically(OPTION_TYPES_PATH, normalized);
+  return normalized;
+}
+
+async function ensureOptionDefinitions() {
+  try {
+    const localDefinitions = normalizeOptionDefinitions(JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8')));
+    const localNames = new Set(localDefinitions.map((definition) => definition.name));
+    const missingDefaults = getDefaultOptionDefinitions().filter((definition) => !localNames.has(definition.name));
+    if (missingDefaults.length > 0) {
+      await writeJsonAtomically(OPTION_TYPES_PATH, [...localDefinitions, ...missingDefaults]);
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      await saveOptionDefinitions(getDefaultOptionDefinitions());
+      return;
+    }
+    console.warn('Could not merge default option type definitions; keeping the existing file unchanged:', error.message);
+  }
+}
+
+function normalizeAppSettings(value) {
+  const defaults = getDefaultAppSettings();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return defaults;
+  }
+  return {
+    theme: value.theme === 'light' ? 'light' : value.theme === 'dark' ? 'dark' : defaults.theme,
+    autoIndent: typeof value.autoIndent === 'boolean' ? value.autoIndent : defaults.autoIndent,
+    previewAutoRefresh: typeof value.previewAutoRefresh === 'boolean'
+      ? value.previewAutoRefresh : defaults.previewAutoRefresh,
+    editorVisible: typeof value.editorVisible === 'boolean' ? value.editorVisible : defaults.editorVisible,
+    interactiveEditor: typeof value.interactiveEditor === 'boolean'
+      ? value.interactiveEditor : defaults.interactiveEditor
+  };
+}
+
+async function loadAppSettings() {
+  try {
+    return normalizeAppSettings(JSON.parse(await fs.readFile(APP_SETTINGS_PATH, 'utf8')));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('Could not read persistent app settings:', error.message);
+    }
+    return getDefaultAppSettings();
+  }
+}
+
+async function saveAppSettings(settings) {
+  const normalized = normalizeAppSettings(settings);
+  await writeJsonAtomically(APP_SETTINGS_PATH, normalized);
+  return normalized;
+}
 
 app.use(compression());
 app.use(express.json({ limit: '5mb' }));
@@ -371,6 +493,34 @@ app.get('/api/examples', async (req, res) => {
   }
 });
 
+app.get('/api/app-settings', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ settings: await loadAppSettings() });
+});
+
+app.put('/api/app-settings', async (req, res) => {
+  try {
+    return res.json({ settings: await saveAppSettings(req.body && req.body.settings) });
+  } catch (error) {
+    console.error('Could not save persistent app settings:', error);
+    return res.status(500).json({ error: 'Failed to save app settings', details: error.message });
+  }
+});
+
+app.get('/api/option-types', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ options: await loadOptionDefinitions() });
+});
+
+app.put('/api/option-types', async (req, res) => {
+  try {
+    return res.json({ options: await saveOptionDefinitions(req.body && req.body.options) });
+  } catch (error) {
+    console.error('Could not save option type definitions:', error);
+    return res.status(error.statusCode || 500).json({ error: 'Failed to save option types', details: error.message });
+  }
+});
+
 app.get('/api/startup-directory', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const startupDirectory = app.locals.startupDirectory;
@@ -470,6 +620,8 @@ async function startServer() {
     throw new Error('REQUIRE_LOGIN_USER and REQUIRE_LOGIN_PASSWORD must both be set to enable login');
   }
   await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(APP_DATA_DIR, { recursive: true });
+  await ensureOptionDefinitions();
   await applyStartupDirectoryLoad();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

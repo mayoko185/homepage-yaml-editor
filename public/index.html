@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=61">
+    <link rel="stylesheet" href="styles.css?v=95">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -47,6 +47,10 @@
                     <span id="theme-toggle-icon" class="header-control-icon" aria-hidden="true">&#9728;</span>
                     <span id="theme-toggle-label" class="header-control-label" aria-hidden="true">Light mode</span>
                 </button>
+                <button type="button" class="settings-button header-icon-control" id="settings-button" aria-label="Open editor settings">
+                    <svg class="header-control-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0-5 1.1 2.3 2.5.4 1.8-1.8 1.8 1.8-1.8 1.8.4 2.5L21 12l-2.3 1.1-.4 2.5 1.8 1.8-1.8 1.8-1.8-1.8-2.5.4L12 21l-1.1-2.3-2.5-.4-1.8 1.8-1.8-1.8 1.8-1.8-.4-2.5L3 12l2.3-1.1.4-2.5-1.8-1.8 1.8-1.8 1.8 1.8 2.5-.4L12 3z"></path></svg>
+                    <span class="header-control-label" aria-hidden="true">Settings</span>
+                </button>
                 <form method="post" action="/logout" id="logout-form" hidden>
                     <button type="submit" class="logout-button header-icon-control" aria-label="Logout">
                         <svg class="header-control-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -71,6 +75,7 @@
             <section class="notification-area" aria-label="Application notifications">
                 <p id="directory-info" class="directory-status" data-state="idle">No directory loaded.</p>
                 <p id="unsaved-status" class="unsaved-status" role="status" aria-live="polite" hidden></p>
+                <div id="preview-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
                 <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
             </section>
         </div>
@@ -85,6 +90,12 @@
             <div class="editor-toolbar" role="toolbar" aria-label="YAML editor tools">
                 <div class="toolbar-group">
                     <label class="toolbar-toggle toolbar-icon-control">
+                        <input type="checkbox" id="editor-visibility-toggle" aria-label="Hide editor" checked>
+                        <span class="toolbar-button-icon editor-visibility-icon" aria-hidden="true">&#128065;</span>
+                        <span id="editor-visibility-label" class="toolbar-button-label" aria-hidden="true">Hide editor</span>
+                    </label>
+                    <span class="editor-edit-tools">
+                    <label class="toolbar-toggle toolbar-icon-control">
                         <input type="checkbox" id="auto-indent-toggle" aria-label="Auto Indent" checked>
                         <span class="toolbar-button-icon auto-indent-icon" aria-hidden="true">&#8677;</span>
                         <span id="auto-indent-label" class="toolbar-button-label" aria-hidden="true">Auto Indent on</span>
@@ -97,6 +108,7 @@
                         <span class="toolbar-button-icon" aria-hidden="true">&#8644;</span>
                         <span id="jump-section-label" class="toolbar-button-label" aria-hidden="true">Jump to Settings</span>
                     </button>
+                    </span>
                 </div>
                 <div class="toolbar-group toolbar-file-actions" aria-label="Configuration file actions">
                     <button type="button" id="save-config-button" class="toolbar-button toolbar-action-button toolbar-icon-control sample-mode-disabled" onclick="saveConfig()" aria-label="Save unavailable in sample mode" disabled>
@@ -137,18 +149,27 @@
                         <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
                         <circle cx="12" cy="12" r="2.75"></circle>
                     </svg>
-                    <span>Preview</span>
+                    <span id="preview-title-label">Preview</span>
                 </div>
                 <div class="preview-refresh-controls">
-                    <label class="preview-refresh-toggle preview-edit-toggle">
-                        <input type="checkbox" id="preview-edit-toggle" aria-label="Enable Preview editing">
+                    <label class="preview-refresh-toggle preview-edit-toggle preview-toolbar-control">
+                        <input type="checkbox" id="preview-edit-toggle" aria-label="Enable Interactive editor">
                         <span class="preview-refresh-toggle-icon" aria-hidden="true">
                             <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
                                 <path d="M4 20l4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>
                             </svg>
                         </span>
-                        <span id="preview-edit-label" class="preview-control-label" aria-hidden="true">Preview editing off</span>
+                        <span id="preview-edit-label" class="preview-control-label" aria-hidden="true">Interactive editor off</span>
                     </label>
+                    <button type="button" id="preview-option-types-button" class="toolbar-button toolbar-icon-control" aria-label="Manage Preview option types" hidden>
+                        <span class="toolbar-button-icon" aria-hidden="true">
+                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
+                                <path d="M4 6h10M18 6h2M10 12h10M4 12h2M4 18h12M20 18h0"></path>
+                                <circle cx="16" cy="6" r="2"></circle><circle cx="8" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle>
+                            </svg>
+                        </span>
+                        <span class="preview-control-label" aria-hidden="true">Manage option types</span>
+                    </button>
                     <button type="button" id="preview-undo-button" class="refresh-btn preview-undo-btn" aria-label="Undo last Preview edit" hidden>
                         <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                             <path d="M9 7L4 12l5 5M5 12h8a6 6 0 0 1 6 6"></path>
@@ -207,6 +228,32 @@
         </div>
     </div>
 
+    <div id="settings-modal" class="modal-overlay" hidden>
+        <div class="modal-content modal-content-compact settings-modal-content" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+            <div class="modal-header">
+                <h3 id="settings-modal-title" class="modal-title">Settings</h3>
+                <button type="button" class="modal-close" id="settings-modal-close" aria-label="Close editor settings">&times;</button>
+            </div>
+            <form id="settings-form">
+                <fieldset class="settings-fieldset">
+                    <legend>Theme</legend>
+                    <div class="settings-theme-options">
+                        <label class="settings-theme-option"><input type="radio" name="settings-theme" value="dark"><span class="settings-theme-icon" aria-hidden="true">&#9790;</span><span>Dark</span></label>
+                        <label class="settings-theme-option"><input type="radio" name="settings-theme" value="light"><span class="settings-theme-icon" aria-hidden="true">&#9788;</span><span>Light</span></label>
+                    </div>
+                </fieldset>
+                <label class="settings-toggle"><input type="checkbox" id="settings-auto-indent"><span class="settings-control-icon" aria-hidden="true">&#8677;</span><span class="settings-toggle-copy"><strong>Auto Indent</strong><small>Keep YAML indentation aligned while typing</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Preview Auto Refresh</strong><small>Update Preview after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable Preview editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                <div class="modal-actions">
+                    <button type="button" id="settings-modal-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                    <button type="submit" class="modal-button">Save settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="preview-edit-modal" class="modal-overlay" hidden>
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="preview-edit-modal-title">
             <div class="modal-header">
@@ -214,29 +261,72 @@
                 <button type="button" class="modal-close" id="preview-edit-modal-close" aria-label="Close Preview edit dialog">&times;</button>
             </div>
             <form id="preview-edit-form">
+                <datalist id="preview-known-options"></datalist>
                 <div class="preview-edit-field">
                     <label for="preview-edit-name">Name</label>
                     <input type="text" id="preview-edit-name" class="modal-input" autocomplete="off" required>
                 </div>
-                <div id="preview-service-fields">
-                    <div class="preview-edit-field">
-                        <label for="preview-edit-href">URL</label>
-                        <input type="text" id="preview-edit-href" class="modal-input" autocomplete="off" placeholder="https://example.com">
-                    </div>
-                    <div class="preview-edit-field">
-                        <label for="preview-edit-description">Description</label>
-                        <textarea id="preview-edit-description" class="modal-input preview-edit-textarea" rows="3"></textarea>
-                    </div>
-                    <div class="preview-edit-field">
-                        <label for="preview-edit-icon">Icon</label>
-                        <input type="text" id="preview-edit-icon" class="modal-input" autocomplete="off" placeholder="homepage.png">
-                    </div>
-                    <p class="preview-edit-note">Other service options remain unchanged in the YAML.</p>
-                </div>
+                <div id="preview-edit-options" class="preview-edit-options"></div>
+                <button type="button" id="preview-edit-add-option" class="preview-add-option">+ Add option</button>
+                <p id="preview-edit-tab-warning" class="preview-edit-tab-warning" hidden>Changing the <code>tab</code> option moves this group to another Preview tab.</p>
                 <p id="preview-edit-modal-status" class="modal-status" role="alert" hidden></p>
                 <div class="modal-actions">
                     <button type="button" id="preview-edit-cancel" class="modal-button modal-button-secondary">Cancel</button>
-                    <button type="submit" id="preview-edit-submit" class="modal-button">Apply edit</button>
+                    <button type="submit" id="preview-edit-submit" class="modal-button">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="preview-tab-modal" class="modal-overlay" hidden>
+        <div class="modal-content preview-tab-modal-content" role="dialog" aria-modal="true" aria-labelledby="preview-tab-modal-title">
+            <div class="modal-header">
+                <h3 id="preview-tab-modal-title" class="modal-title">Manage Preview tabs</h3>
+                <button type="button" class="modal-close" id="preview-tab-modal-close" aria-label="Close tab manager">&times;</button>
+            </div>
+            <p class="modal-body-text">Tabs come from group assignments in <code>settings.yaml</code>. Removing a tab makes its groups visible on every tab.</p>
+            <div id="preview-tab-manager-list" class="preview-tab-manager-list"></div>
+            <form id="preview-tab-add-form" class="preview-tab-add-form">
+                <h4>Add tab</h4>
+                <div class="preview-tab-add-fields">
+                    <div class="preview-edit-field">
+                        <label for="preview-tab-name">Tab name</label>
+                        <input type="text" id="preview-tab-name" class="modal-input" autocomplete="off" required>
+                    </div>
+                    <div class="preview-edit-field">
+                        <label for="preview-tab-group">Initial group</label>
+                        <select id="preview-tab-group" class="modal-input"></select>
+                    </div>
+                    <div id="preview-tab-new-group-field" class="preview-edit-field preview-tab-new-group-field" hidden>
+                        <label for="preview-tab-new-group">New service group name</label>
+                        <input type="text" id="preview-tab-new-group" class="modal-input" autocomplete="off">
+                    </div>
+                </div>
+                <p class="preview-edit-note">Move an existing group to the new tab or create an empty service group for it. Groups without a tab assignment remain visible everywhere.</p>
+                <p id="preview-tab-modal-status" class="modal-status" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="preview-tab-modal-done" class="modal-button modal-button-secondary">Done</button>
+                    <button type="submit" id="preview-tab-add-submit" class="modal-button">Add tab</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="option-types-modal" class="modal-overlay" hidden>
+        <div class="modal-content option-types-modal-content" role="dialog" aria-modal="true" aria-labelledby="option-types-modal-title">
+            <div class="modal-header">
+                <h3 id="option-types-modal-title" class="modal-title">Option types</h3>
+                <button type="button" class="modal-close" id="option-types-modal-close" aria-label="Close option types">&times;</button>
+            </div>
+            <p class="modal-body-text">Choose how each YAML option is edited. <strong>Text</strong> is a one-line field; <strong>Textarea</strong> supports longer text; <strong>Boolean</strong> shows true/false controls; <strong>Tab</strong> selects a Preview tab; <strong>Mapping</strong> opens nested options; and <strong>Select</strong> uses the comma-separated choices you provide.</p>
+            <form id="option-types-form">
+                <div class="option-types-heading" aria-hidden="true"><span>Option</span><span>Value type</span></div>
+                <div id="option-types-list" class="option-types-list"></div>
+                <button type="button" id="option-types-add" class="preview-add-option">+ Add option type</button>
+                <p id="option-types-status" class="modal-status" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="option-types-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                    <button type="submit" id="option-types-save" class="modal-button">Save option types</button>
                 </div>
             </form>
         </div>
@@ -245,6 +335,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=39"></script>
+    <script src="app.js?v=75"></script>
 </body>
 </html>

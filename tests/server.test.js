@@ -32,6 +32,7 @@ test('Docker image copies every runtime server module', async () => {
   const dockerfile = await fs.readFile(path.resolve(__dirname, '..', 'Dockerfile'), 'utf8');
   assert.match(dockerfile, /^COPY server\.js \.\/$/m);
   assert.match(dockerfile, /^COPY yaml-transform\.js \.\/$/m);
+  assert.match(dockerfile, /^COPY option-types\.default\.json \.\/$/m);
 });
 
 async function waitForServer(baseUrl, child) {
@@ -54,8 +55,14 @@ async function waitForServer(baseUrl, child) {
 
 test('serves optimized assets and supports the active configuration APIs', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-test-'));
+  const appDataDir = path.join(tempRoot, 'app-data');
   const yamlContent = '- Test:\n    - Service:\n        href: http://localhost/';
   await fs.writeFile(path.join(tempRoot, 'services.yaml'), yamlContent, 'utf8');
+  await fs.mkdir(appDataDir);
+  await fs.writeFile(path.join(appDataDir, 'option-types.json'), JSON.stringify([
+    { name: 'description', type: 'text' },
+    { name: 'localOnly', type: 'boolean' }
+  ]), 'utf8');
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ['server.js'], {
@@ -64,6 +71,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       PORT: String(port),
       DATA_DIR: tempRoot,
       AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: appDataDir,
       DEFAULT_THEME: 'light'
     }),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -84,6 +92,64 @@ test('serves optimized assets and supports the active configuration APIs', async
       const expectedExample = await fs.readFile(path.join('examples', `${baseName}.yaml`), 'utf8');
       assert.equal(examples.samples[baseName], expectedExample);
     }
+
+    const defaultAppSettings = await (await fetch(`${baseUrl}/api/app-settings`)).json();
+    assert.deepEqual(defaultAppSettings.settings, {
+      theme: 'light',
+      autoIndent: true,
+      previewAutoRefresh: true,
+      editorVisible: true,
+      interactiveEditor: false
+    });
+    const settingsSaveResponse = await fetch(`${baseUrl}/api/app-settings`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        settings: { theme: 'dark', autoIndent: false, previewAutoRefresh: false, editorVisible: false, interactiveEditor: true, ignored: 'value' }
+      })
+    });
+    assert.equal(settingsSaveResponse.status, 200);
+    assert.deepEqual((await settingsSaveResponse.json()).settings, {
+      theme: 'dark',
+      autoIndent: false,
+      previewAutoRefresh: false,
+      editorVisible: false,
+      interactiveEditor: true
+    });
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'settings.json'), 'utf8')), {
+      theme: 'dark',
+      autoIndent: false,
+      previewAutoRefresh: false,
+      editorVisible: false,
+      interactiveEditor: true
+    });
+
+    const optionTypesResponse = await fetch(`${baseUrl}/api/option-types`);
+    const optionTypes = await optionTypesResponse.json();
+    assert.equal(optionTypesResponse.status, 200);
+    assert.deepEqual(optionTypes.options.find((option) => option.name === 'description'), {
+      name: 'description', type: 'text'
+    });
+    assert.deepEqual(optionTypes.options.find((option) => option.name === 'localOnly'), {
+      name: 'localOnly', type: 'boolean'
+    });
+    assert.deepEqual(optionTypes.options.find((option) => option.name === 'target'), {
+      name: 'target', type: 'select', values: ['_blank', '_self', '_top']
+    });
+    const optionTypesSaveResponse = await fetch(`${baseUrl}/api/option-types`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ options: [{ name: 'customFlag', type: 'boolean' }, { name: 'customText', type: 'text' }] })
+    });
+    assert.equal(optionTypesSaveResponse.status, 200);
+    assert.deepEqual((await optionTypesSaveResponse.json()).options, [
+      { name: 'customFlag', type: 'boolean' },
+      { name: 'customText', type: 'text' }
+    ]);
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'option-types.json'), 'utf8')), [
+      { name: 'customFlag', type: 'boolean' },
+      { name: 'customText', type: 'text' }
+    ]);
 
     const removedSaveResponse = await fetch(`${baseUrl}/api/config/save`, {
       method: 'POST',
@@ -187,7 +253,8 @@ test('keeps an empty startup directory in read-only sample mode', async () => {
     env: createServerEnv({
       PORT: String(port),
       DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot
+      AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: path.join(tempRoot, 'app-data')
     }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -203,7 +270,8 @@ test('keeps an empty startup directory in read-only sample mode', async () => {
       hasStartupDirectory: false
     });
     assert.equal((await fetch(`${baseUrl}/api/config/save`, { method: 'POST' })).status, 404);
-    assert.deepEqual(await fs.readdir(tempRoot), []);
+    assert.deepEqual(await fs.readdir(tempRoot), ['app-data']);
+    assert.deepEqual(await fs.readdir(path.join(tempRoot, 'app-data')), ['option-types.json']);
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => child.once('exit', resolve));
@@ -224,6 +292,7 @@ test('optional login protects the editor and APIs with a form-based session', as
       PORT: String(port),
       DATA_DIR: tempRoot,
       AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: path.join(tempRoot, 'app-data'),
       REQUIRE_LOGIN_USER: 'test-user',
       REQUIRE_LOGIN_PASSWORD: 'test-password'
     }),

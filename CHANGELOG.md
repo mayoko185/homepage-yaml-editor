@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-15
+
 ### Added
 
 - Added cursor-aware toolbar navigation between matching Services groups and Settings layout sections.
@@ -23,6 +25,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Added a header shortcut to the Homepage configuration documentation.
 - Added Preview editing for service groups and services with forms, confirmations, movement controls, unsaved tracking, and one-step Undo.
 - Added atomic YAML transformations that preserve comments and advanced service options while synchronizing matching Settings layout groups.
+- Added an in-page Preview tab manager for creating, removing, and reordering Homepage layout tabs, including creating a new service group while adding a tab.
+- Expanded Preview service and group editing to expose ordered YAML option rows with add, remove, and move controls; group layout options are edited through `settings.yaml` with a tab-assignment warning.
+- Added persistent editor preferences for theme, editor visibility, Auto Indent, and Preview Auto Refresh in `/app/data/settings.json`.
+- Added a persistent Interactive Editor preference, disabled by default.
+- Added a header settings dialog for managing persistent editor preferences.
+- Added persistent, editable Preview option type definitions in `/app/data/option-types.json` and a Preview-header management dialog.
+- Startup now adds newly bundled Preview option types to an existing `option-types.json` without replacing custom or modified definitions.
 
 ### Changed
 

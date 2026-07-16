@@ -13,7 +13,7 @@ A small browser-based editor for [Homepage](https://gethomepage.dev/) YAML confi
 - Jump between matching service groups and Settings layout sections based on the editor cursor position.
 - Show save results and validation errors inline without interrupting editing with browser popups.
 - Preview Homepage tabs, service groups, collapsed groups, cards, bookmarks, widgets, and dashboard-icons.
-- Add, rename, remove, and reorder service groups directly from Preview.
+- Add, edit, remove, and reorder service groups directly from Preview.
 - Add, edit, remove, and reorder services directly from Preview with one-step Undo.
 - Supports `.yaml` and `.yml` filenames.
 
@@ -43,6 +43,7 @@ http://localhost:8081
 | `PUID` | `1001` | User ID used by `start.sh` inside the Docker container. |
 | `PGID` | `1001` | Group ID used by `start.sh` inside the Docker container. |
 | `DATA_DIR` | `/hp_config` | Directory used by the built-in `/api/config/*` data-file endpoints. |
+| `APP_DATA_DIR` | `/app/data` | Directory for persistent editor preferences in `settings.json` and Preview option definitions in `option-types.json`. |
 | `AUTOLOAD_DIR` | unset | Preferred startup autoload directory. Set this to the mounted Homepage config path you want loaded automatically. |
 | `ALLOWED_CONFIG_DIRS` | unset | Optional comma-separated list of additional server-side directories that can be loaded from or saved to. `/hp_config`, `DATA_DIR`, and `AUTOLOAD_DIR` are always allowed. |
 | `DEFAULT_THEME` | `dark` | Initial interface theme. Set to `light` for light mode; missing or invalid values use dark mode. |
@@ -86,11 +87,21 @@ The built-in sample content is loaded from the repository's `examples` directory
 
 When a directory is autoloaded or loaded manually, `Save` validates and writes every modified YAML tab back to that same directory.
 
+If one or more supported YAML files are absent, the editor loads the matching examples, warns how many files are missing, and marks those example-backed tabs as pending changes. The next Save creates the missing files in the loaded directory.
+
 Loaded directories must be `/hp_config`, `DATA_DIR`, `AUTOLOAD_DIR`, or a path listed in `ALLOWED_CONFIG_DIRS`. This keeps LAN clients from reading or writing arbitrary server paths while preserving the normal mounted-config workflow.
 
 If the loaded file was `.yml`, saves keep using `.yml`. If it was `.yaml`, saves keep using `.yaml`.
 
 If no directory is loaded, the editor uses read-only examples and Save is disabled. Load a configuration directory before saving changes.
+
+## Persistent Editor Preferences
+
+The selected theme, editor visibility, Auto Indent setting, Preview Auto Refresh setting, and Interactive Editor setting are available from the gear icon in the header and saved in `settings.json` under `APP_DATA_DIR` (default: `/app/data`). The included Compose file mounts `./data` there, so these preferences survive container recreation.
+
+## Preview Option Types
+
+The control immediately to the right of Preview editing opens the Preview Option Types dialog. Its definitions are stored in `option-types.json` under `APP_DATA_DIR`, and determine whether an option uses a single-line input, text area, boolean icons, tab selector, nested mapping, or a fixed-choice dropdown. Select choices are managed as comma-separated values in that dialog. On startup, a missing file is created from the bundled defaults; when it already exists, only newly bundled option names are appended. Existing definitions and custom extra options are never replaced or removed.
 
 `Download` creates a zip archive containing all seven supported YAML files from the editor after pending changes have been saved or discarded.
 
@@ -98,11 +109,12 @@ If no directory is loaded, the editor uses read-only examples and Save is disabl
 
 After loading a writable configuration directory, enable the pencil control in the Preview header to edit service groups and services visually. Preview edits update the YAML editor immediately but remain unsaved until `Save` is clicked.
 
-- Group controls rename, move, or delete a group and can add services.
-- Service controls edit the name, URL, description, and icon, move the service, or delete it.
-- Editing the visible service fields preserves other YAML options such as widgets and monitors.
-- Renaming, moving, or deleting a group also updates a matching `settings.yaml` layout entry when one exists.
+- Group and service edit dialogs list the YAML options currently configured for that item. Existing option names are fixed; remove and re-add an option to change its name. Options can be added, removed, or reordered before applying the edit, and nested mappings such as `widget` expand into their own editable option rows.
+- New services begin with `href`, `description`, and `icon` option rows for faster entry.
+- Group options are read from the matching `settings.yaml` layout entry. Editing its `tab` option shows a warning because it changes where the group appears in Preview.
+- Renaming, moving, deleting, or editing a group keeps its matching `settings.yaml` layout entry synchronized.
 - The Undo control restores the files from immediately before the latest Preview edit. A subsequent manual YAML edit starts a new history and removes that Undo action.
+- Manage tabs creates a tab by moving an existing group or creating a new empty service group, reorders tabs through Settings layout order, and removes tabs without deleting their groups or services.
 - Read-only examples and invalid `services.yaml` content keep Preview editing disabled.
 
 ## Icons

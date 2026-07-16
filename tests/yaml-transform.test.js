@@ -69,6 +69,54 @@ test('edits, adds, moves and removes services without losing advanced fields or 
   assert.deepEqual(parsed[0]['First Group'].map((item) => Object.keys(item)[0]), ['Renamed Service', 'Added Service']);
 });
 
+test('edits ordered service and group options from the Preview editor', () => {
+  let files = transform({
+    type: 'service.edit',
+    target: { groupName: 'First Group', groupIndex: 0, serviceName: 'First Service', serviceIndex: 0 },
+    values: {
+      name: 'First Service',
+      fields: [
+        { key: 'description', value: 'Updated description' },
+        { key: 'href', value: 'https://updated.example' },
+        { key: 'ping', value: 'https://status.example' },
+        {
+          key: 'widget',
+          fields: [
+            { key: 'type', value: 'customapi' },
+            { key: 'key', value: 'kept-and-edited' },
+            { key: 'options', value: '["movies", "series", "episodes"]' }
+          ]
+        }
+      ]
+    }
+  });
+  let parsedServices = YAML.parse(files.services);
+  let service = parsedServices[0]['First Group'][0]['First Service'];
+  assert.deepEqual(Object.keys(service), ['description', 'href', 'ping', 'widget']);
+  assert.equal(service.widget.key, 'kept-and-edited');
+  assert.deepEqual(service.widget.options, ['movies', 'series', 'episodes']);
+  assert.equal(service.icon, undefined);
+
+  files = transform({
+    type: 'group.edit',
+    target: { groupName: 'First Group', groupIndex: 0 },
+    values: {
+      name: 'Renamed Group',
+      fields: [
+        { key: 'style', value: 'row' },
+        { key: 'tab', value: 'Operations' },
+        { key: 'columns', value: '4' }
+      ]
+    }
+  }, files);
+  parsedServices = YAML.parse(files.services);
+  const parsedSettings = YAML.parse(files.settings);
+  assert.equal(Object.keys(parsedServices[0])[0], 'Renamed Group');
+  assert.deepEqual(Object.keys(parsedSettings.layout['Renamed Group']), ['style', 'tab', 'columns']);
+  assert.equal(parsedSettings.layout['Renamed Group'].tab, 'Operations');
+  assert.equal(parsedSettings.layout['First Group'], undefined);
+});
+
 test('group changes keep matching layout entries synchronized', () => {
   let files = transform({
     type: 'group.rename',
@@ -104,6 +152,69 @@ test('group changes keep matching layout entries synchronized', () => {
   files = transform({ type: 'group.add', values: { name: 'Added Group' } }, files);
   parsedServices = YAML.parse(files.services);
   assert.deepEqual(parsedServices.map((group) => Object.keys(group)[0]), ['Second Group', 'Added Group']);
+});
+
+test('manages Homepage layout tabs and can create an initial service group', () => {
+  let files = transform({
+    type: 'tab.add',
+    values: { name: 'Archive', groupName: 'Second Group' }
+  });
+  let parsedSettings = YAML.parse(files.settings);
+  assert.equal(files.services, services);
+  assert.equal(parsedSettings.layout['Second Group'].tab, 'Archive');
+  assert.match(files.settings, /keep this settings comment/);
+
+  files = transform({
+    type: 'tab.move',
+    target: { name: 'Archive' },
+    direction: 'up'
+  }, files);
+  parsedSettings = YAML.parse(files.settings);
+  assert.deepEqual(Object.keys(parsedSettings.layout), ['Second Group', 'First Group']);
+
+  files = transform({
+    type: 'tab.remove',
+    target: { name: 'Archive' }
+  }, files);
+  parsedSettings = YAML.parse(files.settings);
+  assert.equal(parsedSettings.layout['Second Group'].tab, undefined);
+  assert.equal(parsedSettings.layout['First Group'].tab, 'Main');
+
+  assert.throws(() => transform({
+    type: 'tab.add',
+    values: { name: 'Missing', groupName: 'Unknown Group' }
+  }), /could not be found/);
+
+  const filesWithoutLayout = transformPreviewYaml({
+    files: { services, settings: 'title: Test\n' },
+    operation: {
+      type: 'tab.add',
+      values: { name: 'First Tab', groupName: 'First Group' }
+    }
+  }).files;
+  assert.equal(YAML.parse(filesWithoutLayout.settings).layout['First Group'].tab, 'First Tab');
+
+  const filesWithNewGroup = transformPreviewYaml({
+    files: { services, settings: 'title: Test\n' },
+    operation: {
+      type: 'tab.add',
+      values: { name: 'New Tab', groupName: 'New Group', createGroup: true }
+    }
+  }).files;
+  assert.deepEqual(
+    YAML.parse(filesWithNewGroup.services).map((group) => Object.keys(group)[0]),
+    ['First Group', 'Second Group', 'New Group']
+  );
+  assert.deepEqual(YAML.parse(filesWithNewGroup.services)[2]['New Group'], []);
+  assert.equal(YAML.parse(filesWithNewGroup.settings).layout['New Group'].tab, 'New Tab');
+
+  assert.throws(() => transformPreviewYaml({
+    files: { services, settings },
+    operation: {
+      type: 'tab.add',
+      values: { name: 'Duplicate Group Tab', groupName: 'First Group', createGroup: true }
+    }
+  }), /already exists/);
 });
 
 test('rejects invalid YAML and invalid movement', () => {

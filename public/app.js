@@ -9,6 +9,7 @@
             'kubernetes'
         ]);
         const sampleConfigs = Object.fromEntries(configTabNames.map((tabName) => [tabName, '']));
+        const createNewTabGroupValue = '__create_new_service_group__';
 
         async function loadSampleConfigs() {
             const response = await fetch('/api/examples', { cache: 'no-store' });
@@ -42,6 +43,7 @@
         let applyingPreviewFiles = false;
         let previewEditDialogState = null;
         let previewEditPreviousFocus = null;
+        let previewTabPreviousFocus = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
             mode: 'yaml',
             lineNumbers: true,
@@ -133,7 +135,7 @@
 
         function normalizeLoadedFiles(files) {
             const normalizedFiles = {};
-            const normalizedFileNames = { ...loadedFileNames };
+            const normalizedFileNames = {};
 
             Object.entries(files || {}).forEach(([filename, content]) => {
                 const tabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
@@ -318,13 +320,20 @@
             previewUndoState = null;
             updatePreviewUndoButton();
             const normalized = normalizeLoadedFiles(data.files);
+            const missingTabs = configTabNames.filter((tabName) => !Object.prototype.hasOwnProperty.call(normalized.files, tabName));
             loadedFiles = normalized.files;
-            originalLoadedFiles = { ...normalized.files };
+            originalLoadedFiles = Object.fromEntries(configTabNames.map((tabName) => [
+                tabName,
+                Object.prototype.hasOwnProperty.call(normalized.files, tabName) ? normalized.files[tabName] : ''
+            ]));
             loadedFileNames = normalized.fileNames;
             currentDirectoryPath = data.directory;
             currentDirectoryWasAutoloaded = autoloaded;
 
-            setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length, { autoloaded });
+            setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length, {
+                autoloaded,
+                missingCount: missingTabs.length
+            });
             setSampleMode(false);
             setResetSampleVisible(false);
             setReloadDirectoryVisible(true);
@@ -350,12 +359,24 @@
             }
         }
 
-        function setDirectoryStatus(directory, fileCount, { autoloaded = false } = {}) {
+        function setPreviewStatus(messages = []) {
+            const statusElement = document.getElementById('preview-status');
+            const uniqueMessages = Array.from(new Set(messages.filter(Boolean)));
+            statusElement.textContent = uniqueMessages.join(' ');
+            statusElement.hidden = uniqueMessages.length === 0;
+            statusElement.dataset.state = 'info';
+        }
+
+        function setDirectoryStatus(directory, fileCount, { autoloaded = false, missingCount = 0 } = {}) {
             const statusElement = document.getElementById('directory-info');
-            statusElement.textContent = autoloaded
+            const loadedMessage = autoloaded
                 ? `Autoloaded ${fileCount}/${configTabNames.length}`
                 : `Loaded ${fileCount}/${configTabNames.length} from ${directory}`;
-            statusElement.dataset.state = 'loaded';
+            statusElement.textContent = missingCount > 0
+                ? `${missingCount} YAML file${missingCount === 1 ? '' : 's'} missing; examples marked to save. ${loadedMessage}`
+                : loadedMessage;
+            statusElement.title = statusElement.textContent;
+            statusElement.dataset.state = missingCount > 0 ? 'warning' : 'loaded';
         }
 
         function clearSaveStatus() {
@@ -632,6 +653,18 @@
             document.getElementById('logout-form').hidden = !(window.APP_CONFIG && window.APP_CONFIG.loginRequired);
 
             try {
+                applyPersistentAppSettings(await loadPersistentAppSettings());
+            } catch (error) {
+                console.warn('Could not load persistent app settings', error);
+            }
+
+            try {
+                await loadOptionDefinitions();
+            } catch (error) {
+                console.warn('Could not load option type definitions', error);
+            }
+
+            try {
                 await loadSampleConfigs();
             } catch (error) {
                 console.error('Example configuration load failed:', error);
@@ -763,55 +796,276 @@
             throw new Error(`Could not find service "${source.serviceName}".`);
         }
 
+        let optionDefinitions = new Map();
+
+        function setOptionDefinitions(definitions) {
+            optionDefinitions = new Map((definitions || []).map((definition) => [definition.name, definition]));
+            const datalist = document.getElementById('preview-known-options');
+            datalist.innerHTML = Array.from(optionDefinitions.keys())
+                .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+                .join('');
+        }
+
+        function getOptionDefinition(name) {
+            return optionDefinitions.get(String(name || '').trim()) || null;
+        }
+
+        async function loadOptionDefinitions() {
+            const response = await fetch('/api/option-types', { cache: 'no-store' });
+            if (!response.ok) throw new Error('Option type definitions request failed');
+            const data = await response.json();
+            setOptionDefinitions(data.options);
+            return data.options;
+        }
+
+        const optionValueTypeChoices = ['text', 'textarea', 'boolean', 'tab', 'mapping', 'select'];
+        let optionTypesDraft = [];
+        let optionTypesPreviousFocus = null;
+
+        function setOptionTypesStatus(message = '') {
+            const status = document.getElementById('option-types-status');
+            status.textContent = message;
+            status.hidden = !message;
+        }
+
+        function readOptionTypesDraft() {
+            optionTypesDraft = Array.from(document.querySelectorAll('#option-types-list > [data-option-type-row]')).map((row) => ({
+                name: row.querySelector('[data-option-type-name]').value,
+                type: row.querySelector('[data-option-value-type]').value,
+                values: (row.querySelector('[data-option-select-values]')?.value || '').split(',').map((value) => value.trim()).filter(Boolean),
+                rows: Number(row.querySelector('[data-option-textarea-rows]')?.value) || 2
+            }));
+        }
+
+        function renderOptionTypesDraft() {
+            const list = document.getElementById('option-types-list');
+            list.innerHTML = optionTypesDraft.map((definition, index) => {
+                const typeOptions = optionValueTypeChoices.map((type) => `<option value="${type}"${type === definition.type ? ' selected' : ''}>${type}</option>`).join('');
+                const needsSelectValues = definition.type === 'select';
+                const needsRows = definition.name.trim().toLowerCase() === 'description' && definition.type === 'textarea';
+                return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row>
+                    <input type="text" class="modal-input" data-option-type-name aria-label="Option name" value="${escapeHtml(definition.name)}" placeholder="Option name">
+                    <select class="modal-input" data-option-value-type aria-label="Value type">${typeOptions}</select>
+                    ${needsSelectValues ? `<input type="text" class="modal-input" data-option-select-values aria-label="Select choices" value="${escapeHtml((definition.values || []).join(', '))}" placeholder="Select choices">` : ''}
+                    ${needsRows ? `<input type="number" class="modal-input" data-option-textarea-rows aria-label="Textarea rows" min="2" max="12" value="${definition.rows || 2}" placeholder="Rows">` : ''}
+                    <button type="button" class="preview-edit-action preview-edit-delete" data-option-type-remove="${index}" aria-label="Remove ${escapeHtml(definition.name || 'option')}" title="Remove option type">&times;</button>
+                </div>`;
+            }).join('') || '<div class="preview-tab-manager-empty">No option types are configured.</div>';
+        }
+
+        function openOptionTypesModal() {
+            optionTypesPreviousFocus = document.activeElement;
+            optionTypesDraft = Array.from(optionDefinitions.values()).map((definition) => ({ ...definition, values: [...(definition.values || [])] }));
+            renderOptionTypesDraft();
+            setOptionTypesStatus();
+            const modal = document.getElementById('option-types-modal');
+            modal.hidden = false;
+            window.requestAnimationFrame(() => document.querySelector('#option-types-list [data-option-type-name]')?.focus());
+        }
+
+        function closeOptionTypesModal() {
+            const modal = document.getElementById('option-types-modal');
+            if (modal.hidden) return;
+            modal.hidden = true;
+            setOptionTypesStatus();
+            if (optionTypesPreviousFocus && typeof optionTypesPreviousFocus.focus === 'function') optionTypesPreviousFocus.focus();
+            optionTypesPreviousFocus = null;
+        }
+
+        async function saveOptionTypes(event) {
+            event.preventDefault();
+            readOptionTypesDraft();
+            const saveButton = document.getElementById('option-types-save');
+            saveButton.disabled = true;
+            setOptionTypesStatus();
+            try {
+                const response = await fetch('/api/option-types', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ options: optionTypesDraft })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || data.error) throw new Error(data.details || data.error || 'Could not save option types');
+                setOptionDefinitions(data.options);
+                setSaveStatus('Preview option types saved.', 'success');
+                closeOptionTypesModal();
+            } catch (error) {
+                setOptionTypesStatus(getSaveErrorSummary(error));
+            } finally {
+                saveButton.disabled = false;
+            }
+        }
+
+        function getPreviewOptionFields(value) {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+            return Object.entries(value).map(([key, optionValue]) => (
+                optionValue && typeof optionValue === 'object' && !Array.isArray(optionValue)
+                    ? { key, fields: getPreviewOptionFields(optionValue), locked: true }
+                    : { key, value: Array.isArray(optionValue) ? JSON.stringify(optionValue) : optionValue === null ? 'null' : String(optionValue ?? ''), locked: true }
+            ));
+        }
+
+        function normalizePreviewOptionStyles(fields) {
+            fields.forEach((field) => {
+                const definition = getOptionDefinition(field.key);
+                if (Array.isArray(field.fields)) {
+                    if (!field.locked && definition?.type !== 'mapping' && field.fields.length === 0) {
+                        delete field.fields;
+                        field.value = '';
+                    } else {
+                        normalizePreviewOptionStyles(field.fields);
+                    }
+                } else if (definition?.type === 'mapping' && !field.value) {
+                    delete field.value;
+                    field.fields = [];
+                }
+            });
+        }
+
+        function readPreviewOptionRows(container) {
+            return Array.from(container.children)
+                .filter((child) => child.matches('[data-preview-option-row]'))
+                .map((row) => {
+                    const keyControl = row.querySelector(':scope > [data-preview-option-key]');
+                    const key = keyControl instanceof HTMLInputElement ? keyControl.value : keyControl.textContent;
+                    const locked = row.dataset.previewOptionLocked === 'true';
+                    const nested = row.querySelector(':scope > [data-preview-nested-options]');
+                    const booleanValue = row.querySelector(':scope > [data-preview-option-value] input:checked');
+                    return nested
+                        ? { key, fields: readPreviewOptionRows(nested), locked }
+                        : { key, value: booleanValue ? booleanValue.value : row.querySelector(':scope > [data-preview-option-value]').value || '', locked };
+                });
+        }
+
+        function syncPreviewEditOptionState() {
+            if (!previewEditDialogState) return;
+            previewEditDialogState.fields = readPreviewOptionRows(document.getElementById('preview-edit-options'));
+            normalizePreviewOptionStyles(previewEditDialogState.fields);
+        }
+
+        function updatePreviewEditTabWarning() {
+            const warning = document.getElementById('preview-edit-tab-warning');
+            const isGroupEdit = previewEditDialogState && previewEditDialogState.action === 'group.edit';
+            const hasTabOption = isGroupEdit && previewEditDialogState.fields.some((field) => field.key.trim() === 'tab');
+            warning.hidden = !hasTabOption;
+        }
+
+        function renderPreviewEditOptions() {
+            const options = document.getElementById('preview-edit-options');
+            const addButton = document.getElementById('preview-edit-add-option');
+            const state = previewEditDialogState;
+            const supportsOptions = state && ['service.add', 'service.edit', 'group.edit'].includes(state.action);
+            options.hidden = !supportsOptions;
+            addButton.hidden = !supportsOptions;
+            if (!supportsOptions) {
+                options.innerHTML = '';
+                document.getElementById('preview-edit-tab-warning').hidden = true;
+                return;
+            }
+            function getFieldCollection(path = '') {
+                if (!path) return state.fields;
+                return path.split('.').reduce((fields, index) => fields[Number(index)].fields, state.fields);
+            }
+            function renderRows(fields, parentPath = '') {
+                return fields.map((field, index) => {
+                const path = parentPath ? `${parentPath}.${index}` : String(index);
+                const definition = getOptionDefinition(field.key);
+                const optionType = definition?.type;
+                const isTabOption = optionType === 'tab';
+                const isSelectOption = optionType === 'select';
+                const isBooleanOption = !field.fields && (optionType === 'boolean' || field.value.trim() === 'true' || field.value.trim() === 'false');
+                const isTextareaOption = optionType === 'textarea';
+                const isSingleLineOption = optionType === 'text';
+                const tabNames = state.availableTabs || [];
+                const tabOptions = [...new Set(field.value && !tabNames.includes(field.value)
+                    ? [field.value, ...tabNames] : tabNames)]
+                    .map((tabName) => `<option value="${escapeHtml(tabName)}"${tabName === field.value ? ' selected' : ''}>${escapeHtml(tabName)}</option>`)
+                    .join('');
+                const selectValues = definition?.values || [];
+                const selectOptions = [...new Set(field.value && !selectValues.includes(field.value)
+                    ? [field.value, ...selectValues] : selectValues)]
+                    .map((value) => `<option value="${escapeHtml(value)}"${value === field.value ? ' selected' : ''}>${escapeHtml(value)}</option>`)
+                    .join('');
+                const valueControl = field.fields
+                    ? `<div class="preview-edit-nested-options" data-preview-nested-options>${renderRows(field.fields, path)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
+                    : isTabOption
+                    ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Preview tab"><option value="" disabled${field.value ? '' : ' selected'}>Select a tab</option>${tabOptions}</select>`
+                    : isSelectOption
+                    ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}"><option value="" disabled${field.value ? '' : ' selected'}>Select a value</option>${selectOptions}</select>`
+                    : isBooleanOption
+                        ? `<fieldset class="preview-edit-boolean-options" data-preview-option-value aria-label="Boolean value for ${escapeHtml(field.key || 'option')}"><legend>${escapeHtml(field.key || 'Option')}</legend><label title="true"><input type="radio" name="preview-option-${path}" value="true"${field.value === 'true' ? ' checked' : ''}><span class="preview-boolean-icon" aria-hidden="true">&#10003;</span><span class="sr-only">true</span></label><label title="false"><input type="radio" name="preview-option-${path}" value="false"${field.value === 'false' ? ' checked' : ''}><span class="preview-boolean-icon" aria-hidden="true">&times;</span><span class="sr-only">false</span></label></fieldset>`
+                    : isSingleLineOption
+                        ? `<input type="text" class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}" value="${escapeHtml(field.value)}" placeholder="Value">`
+                    : `<textarea class="modal-input preview-edit-option-value${isTextareaOption && (definition.rows || 2) > 2 ? ' preview-edit-option-description' : ''}" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}" rows="${isTextareaOption ? (definition.rows || 2) : 2}" placeholder="Value">${escapeHtml(field.value)}</textarea>`;
+                const keyControl = field.locked
+                    ? `<span class="preview-edit-option-key" data-preview-option-key>${escapeHtml(field.key)}</span>`
+                    : `<input type="text" class="modal-input" data-preview-option-key list="preview-known-options" aria-label="Option name" value="${escapeHtml(field.key)}" placeholder="Option">`;
+                return `<div class="preview-edit-option-row" data-preview-option-row data-preview-option-locked="${field.locked ? 'true' : 'false'}">
+                ${keyControl}
+                ${valueControl}
+                <span class="preview-edit-actions preview-edit-option-actions">
+                    <button type="button" class="preview-edit-action preview-edit-move-up" data-preview-option-action="up" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} up" title="Move option up"${index === 0 ? ' disabled' : ''}>&uarr;</button>
+                    <button type="button" class="preview-edit-action preview-edit-move-down" data-preview-option-action="down" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} down" title="Move option down"${index === fields.length - 1 ? ' disabled' : ''}>&darr;</button>
+                    <button type="button" class="preview-edit-action preview-edit-delete" data-preview-option-action="remove" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Remove ${escapeHtml(field.key || 'option')}" title="Remove option">&times;</button>
+                </span>
+            </div>`;
+                }).join('');
+            }
+            options.innerHTML = renderRows(state.fields) || '<p class="preview-edit-note">No options are currently configured.</p>';
+            updatePreviewEditTabWarning();
+        }
+
         function openPreviewEditDialog(action, source) {
             if (sampleModeEnabled) {
                 setSaveStatus('Load a configuration directory before editing the Preview.', 'error');
                 return;
             }
             const modal = document.getElementById('preview-edit-modal');
-            const serviceFields = document.getElementById('preview-service-fields');
             const title = document.getElementById('preview-edit-modal-title');
             const submit = document.getElementById('preview-edit-submit');
             const nameInput = document.getElementById('preview-edit-name');
-            const hrefInput = document.getElementById('preview-edit-href');
-            const descriptionInput = document.getElementById('preview-edit-description');
-            const iconInput = document.getElementById('preview-edit-icon');
-            const isService = action.startsWith('service.');
 
-            previewEditDialogState = { action, source };
+            previewEditDialogState = { action, source, fields: [] };
             previewEditPreviousFocus = document.activeElement;
-            serviceFields.hidden = !isService;
+            modal.querySelector('.modal-content').classList.toggle('preview-edit-modal-wide', action === 'group.edit' || action.startsWith('service.'));
             nameInput.value = '';
-            hrefInput.value = '';
-            descriptionInput.value = '';
-            iconInput.value = '';
             setPreviewEditModalStatus();
 
             if (action === 'group.add') {
                 title.textContent = 'Add service group';
                 submit.textContent = 'Add group';
-            } else if (action === 'group.rename') {
+            } else if (action === 'group.edit') {
                 const group = findPreviewGroup(source);
-                title.textContent = 'Rename service group';
-                submit.textContent = 'Apply edit';
+                const settings = parseTabConfig('settings');
+                if (settings.error) throw new Error('Fix the settings.yaml error before editing this group.');
+                const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
+                    ? settings.data.layout : {};
+                title.textContent = 'Edit service group';
+                submit.textContent = 'Apply';
                 nameInput.value = group.groupName;
+                previewEditDialogState.fields = getPreviewOptionFields(layout[group.groupName]);
+                previewEditDialogState.availableTabs = getPreviewTabManagerData().tabs;
             } else if (action === 'service.add') {
                 title.textContent = `Add service to ${source.groupName}`;
                 submit.textContent = 'Add service';
+                previewEditDialogState.fields = [
+                    { key: 'href', value: '' },
+                    { key: 'description', value: '' },
+                    { key: 'icon', value: '' }
+                ];
             } else if (action === 'service.edit') {
                 const service = findPreviewService(source);
                 title.textContent = 'Edit service';
-                submit.textContent = 'Apply edit';
+                submit.textContent = 'Apply';
                 nameInput.value = service.serviceName;
-                hrefInput.value = service.data.href || '';
-                descriptionInput.value = service.data.description || '';
-                iconInput.value = service.data.icon || '';
+                previewEditDialogState.fields = getPreviewOptionFields(service.data);
             }
 
+            renderPreviewEditOptions();
             modal.hidden = false;
             window.requestAnimationFrame(() => {
                 nameInput.focus();
-                if (action.endsWith('.edit') || action === 'group.rename') nameInput.select();
+                if (action.endsWith('.edit')) nameInput.select();
             });
         }
 
@@ -825,6 +1079,196 @@
                 previewEditPreviousFocus.focus();
             }
             previewEditPreviousFocus = null;
+        }
+
+        function setPreviewTabModalStatus(message = '') {
+            const statusElement = document.getElementById('preview-tab-modal-status');
+            statusElement.textContent = message;
+            statusElement.hidden = !message;
+        }
+
+        function getPreviewTabManagerData() {
+            const settings = parseTabConfig('settings');
+            const services = parseTabConfig('services');
+            if (settings.error) {
+                throw new Error('Fix the settings.yaml error before managing tabs.');
+            }
+            if (services.error || !Array.isArray(services.data)) {
+                throw new Error('Fix the services.yaml error before managing tabs.');
+            }
+            const settingsData = settings.data && typeof settings.data === 'object' ? settings.data : {};
+            const layout = settingsData.layout;
+            if (layout !== undefined && (typeof layout !== 'object' || Array.isArray(layout) || layout === null)) {
+                throw new Error('Tab management currently requires settings.yaml layout to use a group mapping.');
+            }
+            const layoutGroups = layout || {};
+            const tabs = [];
+            const groupsByTab = {};
+            Object.entries(layoutGroups).forEach(([groupName, config]) => {
+                const tabName = config && typeof config === 'object' && typeof config.tab === 'string'
+                    ? config.tab.trim()
+                    : '';
+                if (!tabName) return;
+                if (!groupsByTab[tabName]) {
+                    tabs.push(tabName);
+                    groupsByTab[tabName] = [];
+                }
+                groupsByTab[tabName].push(groupName);
+            });
+            const groupNames = [];
+            const seenGroups = new Set();
+            services.data.forEach((group) => {
+                const groupName = Object.keys(group || {})[0];
+                if (groupName && !seenGroups.has(groupName)) {
+                    seenGroups.add(groupName);
+                    groupNames.push(groupName);
+                }
+            });
+            Object.keys(layoutGroups).forEach((groupName) => {
+                if (!seenGroups.has(groupName)) {
+                    seenGroups.add(groupName);
+                    groupNames.push(groupName);
+                }
+            });
+            return { tabs, groupsByTab, groupNames, layoutGroups };
+        }
+
+        function getTabManagerActionButton(action, tabName, label, icon, { disabled = false, danger = false } = {}) {
+            const dangerClass = danger ? ' preview-edit-delete' : '';
+            const actionClass = action === 'move-up' ? ' preview-edit-move-up' : action === 'move-down' ? ' preview-edit-move-down' : '';
+            return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-tab-manager-action="${escapeHtml(action)}" data-tab-name="${escapeHtml(tabName)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
+        }
+
+        function renderPreviewTabManager() {
+            const list = document.getElementById('preview-tab-manager-list');
+            const groupSelect = document.getElementById('preview-tab-group');
+            const submitButton = document.getElementById('preview-tab-add-submit');
+            try {
+                const data = getPreviewTabManagerData();
+                list.innerHTML = data.tabs.length > 0
+                    ? data.tabs.map((tabName, index) => {
+                        const groupCount = (data.groupsByTab[tabName] || []).length;
+                        return `<div class="preview-tab-manager-row">
+                            <span class="preview-tab-manager-name">${escapeHtml(tabName)}</span>
+                            <span class="preview-tab-manager-count">${groupCount} group${groupCount === 1 ? '' : 's'}</span>
+                            <span class="preview-edit-actions">
+                                ${getTabManagerActionButton('move-up', tabName, `Move ${tabName} up`, '&uarr;', { disabled: index === 0 })}
+                                ${getTabManagerActionButton('move-down', tabName, `Move ${tabName} down`, '&darr;', { disabled: index === data.tabs.length - 1 })}
+                                ${getTabManagerActionButton('remove', tabName, `Remove ${tabName}`, '&times;', { danger: true })}
+                            </span>
+                        </div>`;
+                    }).join('')
+                    : '<div class="preview-tab-manager-empty">No tabs are configured yet.</div>';
+                const existingGroupOptions = data.groupNames.map((groupName) => {
+                    const layoutConfig = data.layoutGroups[groupName];
+                    const assignedTab = layoutConfig && typeof layoutConfig === 'object' ? layoutConfig.tab : '';
+                    const suffix = assignedTab ? ` — currently ${assignedTab}` : ' — visible on all tabs';
+                    return `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName + suffix)}</option>`;
+                }).join('');
+                groupSelect.innerHTML = `<option value="" selected disabled>Select an initial group</option><option value="${createNewTabGroupValue}">+ Create a new service group</option>${existingGroupOptions}`;
+                groupSelect.value = '';
+                submitButton.disabled = false;
+                setPreviewTabModalStatus();
+                updatePreviewTabGroupMode();
+            } catch (error) {
+                list.innerHTML = `<div class="preview-tab-manager-empty">${escapeHtml(getSaveErrorSummary(error))}</div>`;
+                groupSelect.innerHTML = '';
+                submitButton.disabled = true;
+                setPreviewTabModalStatus(getSaveErrorSummary(error));
+            }
+        }
+
+        function updatePreviewTabGroupMode() {
+            const groupSelect = document.getElementById('preview-tab-group');
+            const newGroupField = document.getElementById('preview-tab-new-group-field');
+            const newGroupInput = document.getElementById('preview-tab-new-group');
+            const isCreatingGroup = groupSelect.value === createNewTabGroupValue;
+            newGroupField.hidden = !isCreatingGroup;
+            newGroupInput.setAttribute('aria-required', String(isCreatingGroup));
+        }
+
+        function openPreviewTabManager() {
+            if (sampleModeEnabled) {
+                setSaveStatus('Load a configuration directory before managing Preview tabs.', 'error');
+                return;
+            }
+            const modal = document.getElementById('preview-tab-modal');
+            previewTabPreviousFocus = document.activeElement;
+            document.getElementById('preview-tab-name').value = '';
+            document.getElementById('preview-tab-new-group').value = '';
+            renderPreviewTabManager();
+            modal.hidden = false;
+            window.requestAnimationFrame(() => document.getElementById('preview-tab-name').focus());
+        }
+
+        function closePreviewTabManager() {
+            const modal = document.getElementById('preview-tab-modal');
+            if (modal.hidden) return;
+            modal.hidden = true;
+            setPreviewTabModalStatus();
+            if (previewTabPreviousFocus && typeof previewTabPreviousFocus.focus === 'function') {
+                previewTabPreviousFocus.focus();
+            }
+            previewTabPreviousFocus = null;
+        }
+
+        async function submitPreviewTabAdd(event) {
+            event.preventDefault();
+            const nameInput = document.getElementById('preview-tab-name');
+            const groupSelect = document.getElementById('preview-tab-group');
+            const newGroupInput = document.getElementById('preview-tab-new-group');
+            const name = nameInput.value.trim();
+            const createGroup = groupSelect.value === createNewTabGroupValue;
+            const groupName = createGroup ? newGroupInput.value.trim() : groupSelect.value;
+            if (!name || !groupName) {
+                setPreviewTabModalStatus(createGroup
+                    ? 'Enter a tab name and a new service group name.'
+                    : 'Enter a tab name and choose its initial group.');
+                return;
+            }
+            const submitButton = document.getElementById('preview-tab-add-submit');
+            submitButton.disabled = true;
+            const applied = await applyPreviewEdit({
+                type: 'tab.add',
+                values: { name, groupName, createGroup }
+            }, createGroup ? `Added tab ${name} with group ${groupName}.` : `Added tab ${name}.`);
+            submitButton.disabled = false;
+            if (applied) {
+                nameInput.value = '';
+                newGroupInput.value = '';
+                renderPreviewTabManager();
+                nameInput.focus();
+            } else {
+                setPreviewTabModalStatus('The tab was not added. Check the page message for details.');
+            }
+        }
+
+        async function handlePreviewTabManagerAction(action, tabName) {
+            if (action === 'move-up' || action === 'move-down') {
+                const direction = action === 'move-up' ? 'up' : 'down';
+                const applied = await applyPreviewEdit(
+                    { type: 'tab.move', target: { name: tabName }, direction },
+                    `Moved tab ${tabName} ${direction}.`
+                );
+                if (applied) renderPreviewTabManager();
+                return;
+            }
+            if (action === 'remove') {
+                const data = getPreviewTabManagerData();
+                const groupCount = (data.groupsByTab[tabName] || []).length;
+                const confirmed = await showConfirmationDialog({
+                    title: 'Remove Preview tab?',
+                    message: `Remove ${tabName}? ${groupCount} assigned group${groupCount === 1 ? '' : 's'} will become visible on every tab. No groups or services will be deleted.`,
+                    confirmText: 'Remove tab'
+                });
+                if (confirmed) {
+                    const applied = await applyPreviewEdit(
+                        { type: 'tab.remove', target: { name: tabName } },
+                        `Removed tab ${tabName}.`
+                    );
+                    if (applied) renderPreviewTabManager();
+                }
+            }
         }
 
         function replacePreviewEditedFiles(files) {
@@ -851,6 +1295,7 @@
             }
             updateUnsavedIndicators();
             updatePreview({ force: true });
+            if (!document.getElementById('preview-tab-modal').hidden) renderPreviewTabManager();
         }
 
         function updatePreviewUndoButton() {
@@ -894,19 +1339,37 @@
                 return;
             }
             const { action, source } = previewEditDialogState;
-            const values = {
-                name,
-                href: document.getElementById('preview-edit-href').value,
-                description: document.getElementById('preview-edit-description').value,
-                icon: document.getElementById('preview-edit-icon').value
-            };
+            syncPreviewEditOptionState();
+            const normalizeFields = (currentFields) => currentFields.map((field) => ({
+                key: field.key.trim(),
+                ...(Array.isArray(field.fields)
+                    ? { fields: normalizeFields(field.fields) }
+                    : { value: field.value })
+            }));
+            const fields = normalizeFields(previewEditDialogState.fields);
+            const findInvalidField = (currentFields) => currentFields.find((field, index) => (
+                !field.key || currentFields.findIndex((candidate) => candidate.key === field.key) !== index ||
+                (Array.isArray(field.fields) && findInvalidField(field.fields))
+            ));
+            const duplicateKey = findInvalidField(fields);
+            if (duplicateKey) {
+                setPreviewEditModalStatus(!duplicateKey.key
+                    ? 'Every option needs a name.'
+                    : `The option "${duplicateKey.key}" is listed more than once.`);
+                return;
+            }
+            if (action === 'group.edit' && fields.some((field) => field.key === 'tab' && !field.value.trim())) {
+                setPreviewEditModalStatus('Choose a Preview tab or remove the tab option.');
+                return;
+            }
+            const values = { name, fields };
             const submitButton = document.getElementById('preview-edit-submit');
             submitButton.disabled = true;
             setPreviewEditModalStatus();
             const message = action === 'group.add'
                 ? `Added group ${name}.`
-                : action === 'group.rename'
-                    ? `Renamed group to ${name}.`
+                : action === 'group.edit'
+                    ? `Updated group ${name}.`
                     : action === 'service.add'
                         ? `Added service ${name}.`
                         : `Updated service ${name}.`;
@@ -927,7 +1390,11 @@
 
         async function handlePreviewEditAction(action, source) {
             try {
-                if (['group.add', 'group.rename', 'service.add', 'service.edit'].includes(action)) {
+                if (action === 'tabs.manage') {
+                    openPreviewTabManager();
+                    return;
+                }
+                if (['group.add', 'group.edit', 'service.add', 'service.edit'].includes(action)) {
                     openPreviewEditDialog(action, source);
                     return;
                 }
@@ -1068,6 +1535,92 @@
         document.getElementById('preview-edit-modal-close').addEventListener('click', closePreviewEditDialog);
         document.getElementById('preview-edit-cancel').addEventListener('click', closePreviewEditDialog);
         document.getElementById('preview-edit-form').addEventListener('submit', submitPreviewEditForm);
+        document.getElementById('preview-edit-add-option').addEventListener('click', () => {
+            syncPreviewEditOptionState();
+            previewEditDialogState.fields.push({ key: '', value: '', locked: false });
+            renderPreviewEditOptions();
+            document.querySelector('[data-preview-option-row]:last-child [data-preview-option-key]')?.focus();
+        });
+        document.getElementById('preview-edit-options').addEventListener('input', () => {
+            syncPreviewEditOptionState();
+            updatePreviewEditTabWarning();
+        });
+        document.getElementById('preview-edit-options').addEventListener('change', function(event) {
+            if (!event.target.matches('[data-preview-option-key], [data-preview-option-value], [data-preview-option-value] input[type="radio"]')) return;
+            syncPreviewEditOptionState();
+            if (event.target.matches('[data-preview-option-key]') || ['true', 'false'].includes(event.target.value.trim())) {
+                renderPreviewEditOptions();
+            }
+        });
+        document.getElementById('preview-edit-options').addEventListener('click', function(event) {
+            const addChildButton = event.target.closest('[data-preview-option-add-child]');
+            if (addChildButton && this.contains(addChildButton)) {
+                syncPreviewEditOptionState();
+                const path = addChildButton.getAttribute('data-preview-option-path');
+                const field = path.split('.').reduce((fields, index) => fields[Number(index)], previewEditDialogState.fields);
+                field.fields.push({ key: '', value: '', locked: false });
+                renderPreviewEditOptions();
+                return;
+            }
+            const button = event.target.closest('[data-preview-option-action]');
+            if (!button || !this.contains(button)) return;
+            syncPreviewEditOptionState();
+            const index = Number(button.getAttribute('data-preview-option-index'));
+            const action = button.getAttribute('data-preview-option-action');
+            const parentPath = button.getAttribute('data-preview-option-parent-path');
+            const fields = parentPath
+                ? parentPath.split('.').reduce((collection, pathIndex) => collection[Number(pathIndex)].fields, previewEditDialogState.fields)
+                : previewEditDialogState.fields;
+            if (action === 'remove') {
+                fields.splice(index, 1);
+            } else {
+                const destination = index + (action === 'up' ? -1 : 1);
+                if (destination < 0 || destination >= fields.length) return;
+                const [field] = fields.splice(index, 1);
+                fields.splice(destination, 0, field);
+            }
+            renderPreviewEditOptions();
+        });
+        document.getElementById('preview-tab-modal').addEventListener('click', function(event) {
+            if (event.target === this) closePreviewTabManager();
+        });
+        document.getElementById('preview-tab-modal-close').addEventListener('click', closePreviewTabManager);
+        document.getElementById('preview-tab-modal-done').addEventListener('click', closePreviewTabManager);
+        document.getElementById('preview-tab-add-form').addEventListener('submit', submitPreviewTabAdd);
+        document.getElementById('preview-tab-group').addEventListener('change', updatePreviewTabGroupMode);
+        document.getElementById('preview-option-types-button').addEventListener('click', openOptionTypesModal);
+        document.getElementById('option-types-modal-close').addEventListener('click', closeOptionTypesModal);
+        document.getElementById('option-types-cancel').addEventListener('click', closeOptionTypesModal);
+        document.getElementById('option-types-form').addEventListener('submit', saveOptionTypes);
+        document.getElementById('option-types-modal').addEventListener('click', function(event) {
+            if (event.target === this) closeOptionTypesModal();
+        });
+        document.getElementById('option-types-add').addEventListener('click', function() {
+            readOptionTypesDraft();
+            optionTypesDraft.push({ name: '', type: 'text', values: [], rows: 2 });
+            renderOptionTypesDraft();
+            document.querySelector('#option-types-list > [data-option-type-row]:last-child [data-option-type-name]')?.focus();
+        });
+        document.getElementById('option-types-list').addEventListener('change', function(event) {
+            if (!event.target.matches('[data-option-value-type], [data-option-type-name]')) return;
+            readOptionTypesDraft();
+            renderOptionTypesDraft();
+        });
+        document.getElementById('option-types-list').addEventListener('click', function(event) {
+            const removeButton = event.target.closest('[data-option-type-remove]');
+            if (!removeButton || !this.contains(removeButton)) return;
+            readOptionTypesDraft();
+            optionTypesDraft.splice(Number(removeButton.getAttribute('data-option-type-remove')), 1);
+            renderOptionTypesDraft();
+        });
+        document.getElementById('preview-tab-manager-list').addEventListener('click', function(event) {
+            const actionButton = event.target.closest('[data-tab-manager-action]');
+            if (!actionButton || !this.contains(actionButton)) return;
+            handlePreviewTabManagerAction(
+                actionButton.getAttribute('data-tab-manager-action'),
+                actionButton.getAttribute('data-tab-name')
+            );
+        });
         document.getElementById('serverPathInput').addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -1078,10 +1631,16 @@
             if (event.key !== 'Escape') {
                 return;
             }
-            if (!document.getElementById('preview-edit-modal').hidden) {
-                closePreviewEditDialog();
-            } else if (!document.getElementById('confirmation-modal').hidden) {
+            if (!document.getElementById('confirmation-modal').hidden) {
                 closeConfirmationDialog(false);
+            } else if (!document.getElementById('settings-modal').hidden) {
+                closeSettingsModal();
+            } else if (!document.getElementById('option-types-modal').hidden) {
+                closeOptionTypesModal();
+            } else if (!document.getElementById('preview-edit-modal').hidden) {
+                closePreviewEditDialog();
+            } else if (!document.getElementById('preview-tab-modal').hidden) {
+                closePreviewTabManager();
             } else if (!document.getElementById('directoryModal').hidden) {
                 closeDirectoryModal();
             }
@@ -1554,6 +2113,11 @@
             const tabName = resolvedSource && resolvedSource.tab ? resolvedSource.tab : currentTab;
             const targetLine = Math.max(1, Number(findSourceLine(resolvedSource)) || 1);
 
+            if (!editorVisibilityToggle.checked) {
+                editorVisibilityToggle.checked = true;
+                updateEditorVisibility();
+            }
+
             if (tabName !== currentTab) {
                 switchTab(tabName, null);
             }
@@ -1586,12 +2150,19 @@
 
         function getPreviewEditActionButton(action, source, label, icon, { disabled = false, danger = false } = {}) {
             const dangerClass = danger ? ' preview-edit-delete' : '';
-            return `<button type="button" class="preview-edit-action${dangerClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
+            const actionClass = action.endsWith('.edit')
+                ? ' preview-edit-modify'
+                : action.endsWith('.move-up')
+                    ? ' preview-edit-move-up'
+                    : action.endsWith('.move-down')
+                        ? ' preview-edit-move-down'
+                        : '';
+            return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
         }
 
         function getGroupEditControls(source, position, groupCount) {
             return `<span class="preview-edit-actions">
-                ${getPreviewEditActionButton('group.rename', source, 'Rename group', '&#9998;')}
+                ${getPreviewEditActionButton('group.edit', source, 'Edit group', '&#9998;')}
                 ${getPreviewEditActionButton('group.move-up', source, 'Move group up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('group.move-down', source, 'Move group down', '&darr;', { disabled: position === groupCount - 1 })}
                 ${getPreviewEditActionButton('group.remove', source, 'Delete group', '&times;', { danger: true })}
@@ -1616,22 +2187,24 @@
             previewEditToggleElement.disabled = sampleModeEnabled || Boolean(parsed.services.error);
             if (parsed.services.error && previewEditToggleElement.checked) {
                 previewEditToggleElement.checked = false;
-                document.getElementById('preview-edit-label').textContent = 'Preview editing off';
-                previewEditToggleElement.setAttribute('aria-label', 'Enable Preview editing');
+                document.getElementById('preview-edit-label').textContent = 'Interactive editor off';
+                document.getElementById('preview-title-label').textContent = 'Preview';
+                previewEditToggleElement.setAttribute('aria-label', 'Enable Interactive editor');
+                document.getElementById('preview-option-types-button').hidden = true;
             }
             const previewEditMode = previewEditToggleElement.checked && !previewEditToggleElement.disabled;
+            const previewNotices = [];
+            const addPreviewNotice = (message) => previewNotices.push(message);
 
             const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
             const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
-            const settingsProviders = parsed.settings.data && parsed.settings.data.providers && typeof parsed.settings.data.providers === 'object'
-                ? Object.entries(parsed.settings.data.providers)
-                : [];
             const widgetsData = parsed.widgets.data;
             const widgets = Array.isArray(widgetsData)
                 ? widgetsData.map((item) => Object.keys(item || {})[0]).filter(Boolean)
                 : widgetsData && typeof widgetsData === 'object'
                     ? Object.keys(widgetsData)
                     : [];
+            const previewWidgets = widgets.filter((name) => String(name).trim().toLowerCase() !== 'search');
 
             const homepageTabInfo = getHomepageTabInfo(parsed.settings.data);
             const homepageTabs = homepageTabInfo.tabs;
@@ -1664,7 +2237,11 @@
                 if (allowedGroups.length > 0) {
                     filteredServices = services.filter((group) => {
                         const groupName = Object.keys(group || {})[0] || '';
-                        return allowedGroups.includes(groupName);
+                        const layoutConfig = groupLayout[groupName];
+                        const assignedTab = layoutConfig && typeof layoutConfig === 'object'
+                            ? String(layoutConfig.tab || '').trim()
+                            : '';
+                        return allowedGroups.includes(groupName) || !assignedTab;
                     });
                 } else {
                     filteredServices = services.filter((group) => {
@@ -1688,6 +2265,75 @@
                 groupOccurrenceByItem.set(group, takeOccurrence(groupOccurrenceCounter, name));
                 groupPositionByItem.set(group, groupPosition);
             });
+
+            function getPreviewLayoutAttributes(layoutConfig) {
+                const style = String(layoutConfig && layoutConfig.style || '').trim().toLowerCase();
+                const columns = Math.max(1, Math.min(12, Number.parseInt(layoutConfig && layoutConfig.columns, 10) || 1));
+                return style === 'row'
+                    ? ` data-preview-layout-style="row" style="--preview-card-columns: ${columns}"`
+                    : '';
+            }
+
+            function getNestedGroupColumns(layoutConfig) {
+                return Math.max(1, Math.min(8, Number.parseInt(layoutConfig && layoutConfig.columns, 10) || 2));
+            }
+
+            function isNestedServiceGroup(item) {
+                const name = Object.keys(item || {})[0];
+                return Boolean(name && Array.isArray(item[name]));
+            }
+
+            function renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig, nested = false, parentSource = null } = {}) {
+                const servicesOnly = Array.isArray(entries) ? entries.filter((entry) => !isNestedServiceGroup(entry)) : [];
+                const serviceOccurrenceCounter = new Map();
+                return servicesOnly.map((service, servicePosition) => {
+                    const name = Object.keys(service || {})[0] || 'Service';
+                    const serviceOccurrenceIndex = takeOccurrence(serviceOccurrenceCounter, name);
+                    const data = service[name] || {};
+                    const directSource = {
+                        servicesSource: { tab: 'services', kind: 'service', groupName, groupIndex, serviceName: name, serviceIndex: serviceOccurrenceIndex },
+                        settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
+                    };
+                    const serviceSource = nested ? parentSource : directSource;
+                    const serviceIcon = renderIcon(data.icon, name);
+                    const serviceSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
+                    const serviceTooltip = getPreviewTooltipAttributes([
+                        nested ? `Nested service in ${groupName}` : `Jump to this item in ${serviceSourceFile}`,
+                        `Service: ${name}`,
+                        ...getPreviewDetailLines(data, ['description', 'href', 'icon', 'siteMonitor', 'ping', 'container', 'server']),
+                        ...getPreviewDetailLines(data.widget, ['type', 'url'])
+                    ]);
+                    const serviceEditControls = previewEditMode && !nested
+                        ? getServiceEditControls(directSource.servicesSource, servicePosition, servicesOnly.length)
+                        : '';
+                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                }).join('');
+            }
+
+            function renderNestedPreviewGroups(entries, layoutConfig, groupName, groupIndex, parentSource) {
+                if (!Array.isArray(entries)) return '';
+                return entries.filter(isNestedServiceGroup).map((nestedGroup) => {
+                    const nestedName = Object.keys(nestedGroup)[0];
+                    const nestedEntries = nestedGroup[nestedName];
+                    const nestedLayout = layoutConfig && typeof layoutConfig === 'object' && !Array.isArray(layoutConfig)
+                        ? layoutConfig[nestedName]
+                        : null;
+                    const nestedIcon = renderIcon(nestedLayout && nestedLayout.icon, nestedName);
+                    const nestedCards = renderPreviewServiceCards(nestedEntries, {
+                        groupName,
+                        groupIndex,
+                        layoutConfig: nestedLayout,
+                        nested: true,
+                        parentSource
+                    });
+                    const nestedChildren = renderNestedPreviewGroups(nestedEntries, nestedLayout, groupName, groupIndex, parentSource);
+                    if (!nestedCards && !nestedChildren) {
+                        addPreviewNotice(`No services configured in ${nestedName}.`);
+                    }
+                    return `<section class="dashboard-nested-group"${getPreviewLayoutAttributes(nestedLayout)}><div class="dashboard-nested-group-title">${nestedIcon}<span>${escapeHtml(nestedName)}</span></div>${nestedCards ? `<div class="dashboard-cards">${nestedCards}</div>` : ''}${nestedChildren}</section>`;
+                }).join('');
+            }
+
             filteredServices.forEach((group) => {
                 const groupName = Object.keys(group || {})[0];
                 const groupIndex = groupOccurrenceByItem.get(group) || 0;
@@ -1703,28 +2349,8 @@
                 const groupEditControls = previewEditMode
                     ? getGroupEditControls(serviceGroupSource, groupPositionByItem.get(group) || 0, services.length)
                     : '';
-                const serviceOccurrenceCounter = new Map();
-                const cards = Array.isArray(entries) ? entries.map((service, servicePosition) => {
-                    const name = Object.keys(service || {})[0] || 'Service';
-                    const serviceOccurrenceIndex = takeOccurrence(serviceOccurrenceCounter, name);
-                    const data = service[name] || {};
-                    const serviceSource = {
-                        servicesSource: { tab: 'services', kind: 'service', groupName, groupIndex, serviceName: name, serviceIndex: serviceOccurrenceIndex },
-                        settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
-                    };
-                    const serviceIcon = renderIcon(data.icon, name);
-                    const serviceSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
-                    const serviceTooltip = getPreviewTooltipAttributes([
-                        `Jump to this item in ${serviceSourceFile}`,
-                        `Service: ${name}`,
-                        ...getPreviewDetailLines(data, ['description', 'href', 'icon', 'siteMonitor', 'ping', 'container', 'server']),
-                        ...getPreviewDetailLines(data.widget, ['type', 'url'])
-                    ]);
-                    const serviceEditControls = previewEditMode
-                        ? getServiceEditControls(serviceSource.servicesSource, servicePosition, entries.length)
-                        : '';
-                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
-                }).join('') : '';
+                const cards = renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig });
+                const nestedGroups = renderNestedPreviewGroups(entries, layoutConfig, groupName, groupIndex, groupSource);
                 const groupSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
                 const groupTooltip = getPreviewTooltipAttributes([
                     `Jump to this group in ${groupSourceFile}`,
@@ -1735,8 +2361,20 @@
                 const addServiceButton = previewEditMode
                     ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(serviceGroupSource)}><span aria-hidden="true">+</span> Add service</button>`
                     : '';
-                groupsHtml += `<details class="dashboard-group" ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary><div class="dashboard-cards">${cards || '<div class="dashboard-empty">No services in this group</div>'}</div>${addServiceButton}</details>`;
+                const hasNestedGroups = Array.isArray(entries) && entries.some(isNestedServiceGroup);
+                if (hasNestedGroups) {
+                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root"${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${cards ? `<div class="dashboard-cards">${cards}</div>` : ''}<div class="dashboard-nested-groups" style="--preview-nested-columns: ${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div>${addServiceButton}</section>`;
+                } else {
+                    if (!cards) {
+                        addPreviewNotice(`No services configured in ${groupName || 'this group'}.`);
+                    }
+                    groupsHtml += `<details class="dashboard-group"${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${cards ? `<div class="dashboard-cards">${cards}</div>` : ''}${addServiceButton}</details>`;
+                }
             });
+
+            if (!parsed.widgets.error && widgets.length === 0) addPreviewNotice('No widgets configured.');
+            if (!parsed.bookmarks.error && bookmarks.length === 0) addPreviewNotice('No bookmarks configured.');
+            if (!parsed.services.error && services.length === 0) addPreviewNotice('No service groups configured.');
 
             const bookmarkOccurrenceCounter = new Map();
             const bookmarksHtml = bookmarks.map((item) => {
@@ -1751,7 +2389,7 @@
             }).join('');
 
             const widgetOccurrenceCounter = new Map();
-            const widgetsHtml = widgets.map((name) => {
+            const widgetsHtml = previewWidgets.map((name) => {
                 const occurrenceIndex = takeOccurrence(widgetOccurrenceCounter, name);
                 const widgetData = Array.isArray(widgetsData)
                     ? widgetsData.filter((item) => Object.prototype.hasOwnProperty.call(item || {}, name))[occurrenceIndex]?.[name]
@@ -1780,18 +2418,13 @@
             previewDiv.innerHTML = `
                 <div class="dashboard-shell ${previewEditMode ? 'preview-edit-enabled' : ''}">
                     ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
-                    ${previewEditMode ? '<div class="preview-edit-mode-note">Preview editing is on. Changes update the YAML editor and remain pending until Save is clicked.</div>' : ''}
+                    ${previewEditMode ? '<div class="preview-edit-mode-note"><span>Preview editing is on. Changes update the YAML editor and remain pending until Save is clicked.</span><button type="button" class="preview-manage-tabs-button" data-preview-action="tabs.manage">Manage tabs</button></div>' : ''}
                     ${previewTabsHtml}
-                    <div class="dashboard-top">
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'services', line: 1 })} ${getPreviewTooltipAttributes(['Jump to services.yaml', `Service groups: ${filteredServices.length}`])}><span>Service Groups</span><strong>${filteredServices.length}</strong></div>
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'bookmarks', line: 1 })} ${getPreviewTooltipAttributes(['Jump to bookmarks.yaml', `Bookmark groups: ${bookmarks.length}`])}><span>Bookmarks</span><strong>${bookmarks.length}</strong></div>
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'widgets', line: 1 })} ${getPreviewTooltipAttributes(['Jump to widgets.yaml', `Widgets: ${widgets.join(', ') || 'none'}`])}><span>Widgets</span><strong>${widgets.length}</strong></div>
-                        <div class="dashboard-stat preview-jump-target" ${getSourceAttributes({ tab: 'settings', kind: 'settings-key', key: 'providers' })} ${getPreviewTooltipAttributes(['Jump to providers in settings.yaml', `Providers: ${settingsProviders.map(([name]) => name).join(', ') || 'none'}`])}><span>Providers</span><strong>${settingsProviders.length}</strong></div>
-                    </div>
-                    <div class="dashboard-widgets">${widgetsHtml || '<div class="dashboard-empty">No widgets configured</div>'}</div>
-                    <div class="dashboard-bookmarks">${bookmarksHtml || '<div class="dashboard-empty">No bookmarks configured</div>'}</div>
-                    <div class="dashboard-grid">${groupsHtml || '<div class="dashboard-empty">No service groups configured</div>'}${addGroupButton}</div>
+                    ${widgetsHtml ? `<div class="dashboard-widgets">${widgetsHtml}</div>` : ''}
+                    ${bookmarksHtml ? `<div class="dashboard-bookmarks">${bookmarksHtml}</div>` : ''}
+                    ${groupsHtml || addGroupButton ? `<div class="dashboard-grid">${groupsHtml}${addGroupButton}</div>` : ''}
                 </div>`;
+            setPreviewStatus(previewNotices);
 
         }
 
@@ -1842,6 +2475,8 @@
         const themeToggle = document.getElementById('themeToggle');
         const autoIndentToggle = document.getElementById('auto-indent-toggle');
         const autoIndentLabel = document.getElementById('auto-indent-label');
+        const editorVisibilityToggle = document.getElementById('editor-visibility-toggle');
+        const editorVisibilityLabel = document.getElementById('editor-visibility-label');
         const previewAutoRefreshToggle = document.getElementById('preview-auto-refresh-toggle');
         const previewAutoRefreshLabel = document.getElementById('preview-auto-refresh-label');
         const previewEditToggle = document.getElementById('preview-edit-toggle');
@@ -1849,17 +2484,136 @@
         const manualRefreshButton = document.getElementById('manual-refresh-button');
         const toggleCommentButton = document.getElementById('toggle-comment-button');
         const jumpSectionButton = document.getElementById('jump-section-button');
+        let pendingAppSettingsSave = Promise.resolve();
+        let savedAppSettings = {
+            theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
+            autoIndent: autoIndentToggle.checked,
+            previewAutoRefresh: previewAutoRefreshToggle.checked,
+            editorVisible: editorVisibilityToggle.checked,
+            interactiveEditor: previewEditToggle.checked
+        };
+        function getPersistentAppSettings() {
+            return { ...savedAppSettings };
+        }
+        async function loadPersistentAppSettings() {
+            const response = await fetch('/api/app-settings', { cache: 'no-store' });
+            if (!response.ok) throw new Error('Settings request failed');
+            const data = await response.json();
+            return data.settings || {};
+        }
+        function applyPersistentAppSettings(settings) {
+            savedAppSettings = {
+                theme: settings.theme === 'light' ? 'light' : 'dark',
+                autoIndent: settings.autoIndent !== false,
+                previewAutoRefresh: settings.previewAutoRefresh !== false,
+                editorVisible: settings.editorVisible !== false,
+                interactiveEditor: settings.interactiveEditor === true
+            };
+            applyTheme(savedAppSettings.theme !== 'light');
+            autoIndentToggle.checked = savedAppSettings.autoIndent;
+            previewAutoRefreshToggle.checked = savedAppSettings.previewAutoRefresh;
+            editorVisibilityToggle.checked = savedAppSettings.editorVisible;
+            previewEditToggle.checked = savedAppSettings.interactiveEditor;
+            updateAutoIndentLabel();
+            updateEditorVisibility();
+            previewAutoRefreshLabel.textContent = `Auto Refresh ${previewAutoRefreshToggle.checked ? 'on' : 'off'}`;
+            manualRefreshButton.hidden = previewAutoRefreshToggle.checked;
+            updatePreviewEditMode();
+            yamlCodeEditor.refresh();
+        }
+        function persistAppSettings() {
+            const settings = getPersistentAppSettings();
+            pendingAppSettingsSave = pendingAppSettingsSave
+                .catch(() => undefined)
+                .then(async () => {
+                    const response = await fetch('/api/app-settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ settings })
+                    });
+                    if (!response.ok) throw new Error('Settings save failed');
+                })
+                .then(() => true)
+                .catch((error) => {
+                    console.warn('Could not save persistent app settings', error);
+                    return false;
+                });
+            return pendingAppSettingsSave;
+        }
+        let settingsModalPreviousFocus = null;
+        function openSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            settingsModalPreviousFocus = document.activeElement;
+            const settings = getPersistentAppSettings();
+            document.querySelector(`input[name="settings-theme"][value="${settings.theme}"]`).checked = true;
+            document.getElementById('settings-auto-indent').checked = settings.autoIndent;
+            document.getElementById('settings-preview-auto-refresh').checked = settings.previewAutoRefresh;
+            document.getElementById('settings-editor-visible').checked = settings.editorVisible;
+            document.getElementById('settings-interactive-editor').checked = settings.interactiveEditor;
+            modal.hidden = false;
+            window.requestAnimationFrame(() => document.querySelector('input[name="settings-theme"]:checked').focus());
+        }
+        function closeSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal.hidden) return;
+            modal.hidden = true;
+            if (settingsModalPreviousFocus && typeof settingsModalPreviousFocus.focus === 'function') {
+                settingsModalPreviousFocus.focus();
+            }
+            settingsModalPreviousFocus = null;
+        }
+        async function submitSettingsModal(event) {
+            event.preventDefault();
+            const theme = document.querySelector('input[name="settings-theme"]:checked').value;
+            applyPersistentAppSettings({
+                theme,
+                autoIndent: document.getElementById('settings-auto-indent').checked,
+                previewAutoRefresh: document.getElementById('settings-preview-auto-refresh').checked,
+                editorVisible: document.getElementById('settings-editor-visible').checked,
+                interactiveEditor: document.getElementById('settings-interactive-editor').checked
+            });
+            if (await persistAppSettings()) {
+                setSaveStatus('Editor settings saved.', 'success');
+                closeSettingsModal();
+            } else {
+                setSaveStatus('Could not save editor settings.', 'error');
+            }
+        }
         function updateAutoIndentLabel() {
             autoIndentLabel.textContent = `Auto Indent ${autoIndentToggle.checked ? 'on' : 'off'}`;
         }
+        function updateEditorVisibility() {
+            const isVisible = editorVisibilityToggle.checked;
+            document.getElementById('yaml-editor-section').classList.toggle('editor-collapsed', !isVisible);
+            editorVisibilityLabel.textContent = isVisible ? 'Hide editor' : 'Show editor';
+            editorVisibilityToggle.setAttribute('aria-label', isVisible ? 'Hide editor' : 'Show editor');
+            if (isVisible) {
+                window.requestAnimationFrame(() => yamlCodeEditor.refresh());
+            }
+        }
         function updatePreviewEditMode() {
             const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
-            previewEditLabel.textContent = `Preview editing ${isEnabled ? 'on' : 'off'}`;
-            previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Preview editing`);
+            previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
+            document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive editor' : 'Preview';
+            previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
+            document.getElementById('preview-option-types-button').hidden = !isEnabled;
             updatePreview({ force: true });
         }
-        autoIndentToggle.addEventListener('change', updateAutoIndentLabel);
+        autoIndentToggle.addEventListener('change', function() {
+            updateAutoIndentLabel();
+        });
         updateAutoIndentLabel();
+        editorVisibilityToggle.addEventListener('change', function() {
+            updateEditorVisibility();
+        });
+        updateEditorVisibility();
+        document.getElementById('settings-button').addEventListener('click', openSettingsModal);
+        document.getElementById('settings-modal-close').addEventListener('click', closeSettingsModal);
+        document.getElementById('settings-modal-cancel').addEventListener('click', closeSettingsModal);
+        document.getElementById('settings-form').addEventListener('submit', submitSettingsModal);
+        document.getElementById('settings-modal').addEventListener('click', function(event) {
+            if (event.target === this) closeSettingsModal();
+        });
         previewEditToggle.addEventListener('change', updatePreviewEditMode);
         document.getElementById('preview-undo-button').addEventListener('click', undoPreviewEdit);
         previewAutoRefreshToggle.addEventListener('change', function() {
