@@ -220,6 +220,9 @@ test('serves optimized assets and supports the active configuration APIs', async
 
     const documentResponse = await fetch(`${baseUrl}/`);
     assert.equal(documentResponse.headers.get('cache-control'), 'no-cache');
+    assert.match(documentResponse.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    assert.equal(documentResponse.headers.get('x-frame-options'), 'DENY');
+    assert.equal(documentResponse.headers.get('x-content-type-options'), 'nosniff');
 
     const runtimeConfigResponse = await fetch(`${baseUrl}/runtime-config.js`);
     assert.equal(runtimeConfigResponse.status, 200);
@@ -282,6 +285,60 @@ test('keeps an empty startup directory in read-only sample mode', async () => {
   }
 });
 
+test('rejects allowed-root symlink escapes', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-symlink-test-'));
+  const outsideRoot = `${tempRoot}-outside`;
+  const escapePath = path.join(tempRoot, 'escape');
+  await fs.mkdir(outsideRoot);
+  await fs.writeFile(path.join(outsideRoot, 'services.yaml'), '- Outside: []\n', 'utf8');
+  await fs.symlink(outsideRoot, escapePath, 'junction');
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      DATA_DIR: tempRoot,
+      AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: path.join(tempRoot, 'app-data')
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+    const response = await fetch(`${baseUrl}/api/directory/load`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: escapePath })
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: 'Failed to load configs from directory',
+      details: 'Directory is not allowed'
+    });
+
+    const linkedConfigPath = path.join(tempRoot, 'services.yaml');
+    await fs.symlink(path.join(outsideRoot, 'services.yaml'), linkedConfigPath, 'file');
+    const saveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: '- Safe: []\n' })
+    });
+    assert.equal(saveResponse.status, 400);
+    assert.deepEqual(await saveResponse.json(), {
+      error: 'Failed to save file',
+      details: 'Configuration file must be a regular file'
+    });
+    assert.equal(await fs.readFile(path.join(outsideRoot, 'services.yaml'), 'utf8'), '- Outside: []\n');
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    await fs.rm(tempRoot, { recursive: true, force: true });
+    await fs.rm(outsideRoot, { recursive: true, force: true });
+  }
+});
+
 test('optional login protects the editor and APIs with a form-based session', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-auth-test-'));
   const port = await getFreePort();
@@ -294,7 +351,8 @@ test('optional login protects the editor and APIs with a form-based session', as
       AUTOLOAD_DIR: tempRoot,
       APP_DATA_DIR: path.join(tempRoot, 'app-data'),
       REQUIRE_LOGIN_USER: 'test-user',
-      REQUIRE_LOGIN_PASSWORD: 'test-password'
+      REQUIRE_LOGIN_PASSWORD: 'test-password',
+      TRUST_PROXY: 'true'
     }),
     stdio: ['ignore', 'pipe', 'pipe']
   });

@@ -1786,6 +1786,17 @@
             return `<img class="dashboard-icon" src="${escapeHtml(iconUrl)}" alt="" title="${escapeHtml(label || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">`;
         }
 
+        function getSafeLinkUrl(value) {
+            const rawValue = String(value || '').trim();
+            if (!rawValue) return '#';
+            try {
+                const url = new URL(rawValue, window.location.origin);
+                return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? url.href : '#';
+            } catch {
+                return '#';
+            }
+        }
+
         function getYamlLines(tabName) {
             return String(getTabYamlText(tabName) || '').replace(/\r\n/g, '\n').split('\n');
         }
@@ -2385,7 +2396,7 @@
                     'Jump to this bookmark in bookmarks.yaml',
                     ...getBookmarkTooltipLines(name, data)
                 ], { focusable: false });
-                return `<a class="bookmark-chip preview-jump-target" href="${escapeHtml(data.href || '#')}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes({ tab: 'bookmarks', kind: 'bookmark', name, index: occurrenceIndex })} ${bookmarkTooltip}>${escapeHtml(name)}</a>`;
+                return `<a class="bookmark-chip preview-jump-target" href="${escapeHtml(getSafeLinkUrl(data.href))}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes({ tab: 'bookmarks', kind: 'bookmark', name, index: occurrenceIndex })} ${bookmarkTooltip}>${escapeHtml(name)}</a>`;
             }).join('');
 
             const widgetOccurrenceCounter = new Map();

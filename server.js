@@ -24,6 +24,7 @@ const LOGIN_USER = process.env.REQUIRE_LOGIN_USER || '';
 const LOGIN_PASSWORD = process.env.REQUIRE_LOGIN_PASSWORD || '';
 const LOGIN_ENABLED = Boolean(LOGIN_USER && LOGIN_PASSWORD);
 const LOGIN_PARTIALLY_CONFIGURED = Boolean(LOGIN_USER || LOGIN_PASSWORD) && !LOGIN_ENABLED;
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
 const SESSION_COOKIE_NAME = 'homepage_editor_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
@@ -57,6 +58,7 @@ const ALLOWED_CONFIG_DIRECTORIES = Object.freeze(
   ].filter(Boolean))).map((dirPath) => path.resolve(dirPath))
 );
 
+app.set('trust proxy', TRUST_PROXY);
 app.locals.startupDirectory = null;
 app.locals.startupFiles = {};
 
@@ -180,6 +182,25 @@ async function saveAppSettings(settings) {
 app.use(compression());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: false, limit: '16kb' }));
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "img-src 'self' https: data:",
+    "connect-src 'self'",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ].join('; '));
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
     return res.status(400).json({ error: 'Invalid JSON request body', details: error.message });
@@ -249,11 +270,7 @@ function getLoginAttemptState(req) {
 }
 
 function isSecureRequest(req) {
-  const forwardedProtocol = String(req.headers['x-forwarded-proto'] || '')
-    .split(',')[0]
-    .trim()
-    .toLowerCase();
-  return req.secure || forwardedProtocol === 'https';
+  return req.secure;
 }
 
 function setSessionCookie(req, res, token) {
@@ -383,11 +400,37 @@ function resolveAllowedConfigDirectory(dirPath) {
 
   const resolvedDir = path.resolve(dirPath);
   if (!ALLOWED_CONFIG_DIRECTORIES.some((allowedDir) => isSameOrChildPath(resolvedDir, allowedDir))) {
-    const error = new Error(`Directory is not in the allowed config paths: ${ALLOWED_CONFIG_DIRECTORIES.join(', ')}`);
+    const error = new Error('Directory is not allowed');
     error.statusCode = 400;
     throw error;
   }
   return resolvedDir;
+}
+
+async function resolveRealAllowedConfigDirectory(dirPath) {
+  const resolvedDir = resolveAllowedConfigDirectory(dirPath);
+  let realDir;
+  try {
+    realDir = await fs.realpath(resolvedDir);
+  } catch {
+    const error = new Error('Directory does not exist or is not accessible');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const realAllowedDirectories = (await Promise.all(ALLOWED_CONFIG_DIRECTORIES.map(async (allowedDir) => {
+    try {
+      return await fs.realpath(allowedDir);
+    } catch {
+      return null;
+    }
+  }))).filter(Boolean);
+  if (!realAllowedDirectories.some((allowedDir) => isSameOrChildPath(realDir, allowedDir))) {
+    const error = new Error('Directory is not allowed');
+    error.statusCode = 400;
+    throw error;
+  }
+  return realDir;
 }
 
 async function assertDirectory(dirPath) {
@@ -432,10 +475,29 @@ async function loadDirectoryContents(dirPath) {
   };
 }
 
+async function assertRegularConfigFile(filePath, { allowMissing = false } = {}) {
+  try {
+    const stats = await fs.lstat(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      const error = new Error('Configuration file must be a regular file');
+      error.statusCode = 400;
+      throw error;
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT' && allowMissing) return;
+    if (error.statusCode) throw error;
+    const wrappedError = new Error('Configuration file is not accessible');
+    wrappedError.statusCode = 400;
+    throw wrappedError;
+  }
+}
+
 async function saveConfigFile(dirPath, filename, content, { skipUnchanged = false } = {}) {
   const filePath = resolveConfigFilePath(dirPath, filename);
   const yamlContent = typeof content === 'string' ? content : YAML.stringify(content);
   YAML.parse(yamlContent);
+
+  await assertRegularConfigFile(filePath, { allowMissing: true });
 
   if (skipUnchanged) {
     try {
@@ -450,6 +512,9 @@ async function saveConfigFile(dirPath, filename, content, { skipUnchanged = fals
     }
   }
 
+  // Check again immediately before the write so an existing file cannot be
+  // replaced with a symlink between validation and persistence.
+  await assertRegularConfigFile(filePath, { allowMissing: true });
   await fs.writeFile(filePath, yamlContent, 'utf8');
   return { filePath, changed: true };
 }
@@ -457,7 +522,7 @@ async function saveConfigFile(dirPath, filename, content, { skipUnchanged = fals
 async function applyStartupDirectoryLoad() {
   const startupDir = AUTOLOAD_DIR || DEFAULT_DATA_DIR;
   try {
-    const resolvedStartupDir = resolveAllowedConfigDirectory(startupDir);
+    const resolvedStartupDir = await resolveRealAllowedConfigDirectory(startupDir);
     await assertDirectory(resolvedStartupDir);
     const { fileContents, loadedCount } = await loadDirectoryContents(resolvedStartupDir);
     if (loadedCount === 0) {
@@ -571,7 +636,7 @@ app.post('/api/yaml/transform', (req, res) => {
 
 app.post('/api/directory/load', async (req, res) => {
   try {
-    const configDir = resolveAllowedConfigDirectory(req.body.dirPath);
+    const configDir = await resolveRealAllowedConfigDirectory(req.body.dirPath);
     await assertDirectory(configDir);
     const { fileContents, loadedCount, totalCount } = await loadDirectoryContents(configDir);
     return res.json({
@@ -583,7 +648,7 @@ app.post('/api/directory/load', async (req, res) => {
     console.error('Directory load error:', error);
     return res.status(error.statusCode || 500).json({
       error: 'Failed to load configs from directory',
-      details: error.message
+      details: error.statusCode ? error.message : 'The requested directory could not be loaded'
     });
   }
 });
@@ -597,7 +662,7 @@ app.post('/api/directory/file/save', async (req, res) => {
       });
     }
 
-    const configDir = resolveAllowedConfigDirectory(dirPath);
+    const configDir = await resolveRealAllowedConfigDirectory(dirPath);
     await assertDirectory(configDir);
     const result = await saveConfigFile(configDir, filename, content, { skipUnchanged: true });
     return res.json({
@@ -610,7 +675,7 @@ app.post('/api/directory/file/save', async (req, res) => {
     const isYamlError = error && (error.name === 'YAMLParseError' || error.code === 'BAD_INDENT');
     return res.status(error.statusCode || (isYamlError ? 400 : 500)).json({
       error: isYamlError ? 'Invalid YAML' : 'Failed to save file',
-      details: error.message
+      details: isYamlError ? error.message : (error.statusCode ? error.message : 'The configuration file could not be saved')
     });
   }
 });

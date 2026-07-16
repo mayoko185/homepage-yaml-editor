@@ -49,6 +49,7 @@ http://localhost:8081
 | `DEFAULT_THEME` | `dark` | Initial interface theme. Set to `light` for light mode; missing or invalid values use dark mode. |
 | `REQUIRE_LOGIN_USER` | unset | Username for optional form-based login. Login is enabled only when this and `REQUIRE_LOGIN_PASSWORD` are both set. |
 | `REQUIRE_LOGIN_PASSWORD` | unset | Password for optional form-based login. Login is enabled only when this and `REQUIRE_LOGIN_USER` are both set. |
+| `TRUST_PROXY` | `false` | Set to `true` only when every direct connection comes through a trusted reverse proxy. This allows Express to honor `X-Forwarded-Proto` for secure session cookies. |
 
 ## Optional Login
 
@@ -64,11 +65,13 @@ If neither variable is set, the editor remains open as before. If only one is se
 
 Successful sign-in creates an HTTP-only, `SameSite=Strict` session that lasts for 12 hours or until the container restarts. Use HTTPS through a reverse proxy when exposing the editor outside a trusted network.
 
-When login is enabled over plain HTTP, the login page displays a warning but still allows sign-in. When using Nginx for HTTPS termination, forward the original protocol so session cookies receive the `Secure` attribute:
+When login is enabled over plain HTTP, the login page displays a warning but still allows sign-in. The bundled Compose file binds to loopback by default, so use a reverse proxy to expose the editor. When using Nginx for HTTPS termination, set `TRUST_PROXY=true` and forward the original protocol so session cookies receive the `Secure` attribute:
 
 ```nginx
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
+
+Do not set `TRUST_PROXY=true` when the application port is directly reachable by untrusted clients.
 
 ## Startup Autoload Behavior
 
