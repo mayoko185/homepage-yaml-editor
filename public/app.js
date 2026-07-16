@@ -936,7 +936,8 @@
                 .filter((child) => child.matches('[data-preview-option-row]'))
                 .map((row) => {
                     const keyControl = row.querySelector(':scope > [data-preview-option-key]');
-                    const key = keyControl instanceof HTMLInputElement ? keyControl.value : keyControl.textContent;
+                    const key = keyControl instanceof HTMLInputElement || keyControl instanceof HTMLSelectElement
+                        ? keyControl.value : keyControl.textContent;
                     const locked = row.dataset.previewOptionLocked === 'true';
                     const nested = row.querySelector(':scope > [data-preview-nested-options]');
                     const booleanValue = row.querySelector(':scope > [data-preview-option-value] input:checked');
@@ -955,17 +956,20 @@
         function updatePreviewEditTabWarning() {
             const warning = document.getElementById('preview-edit-tab-warning');
             const isGroupEdit = previewEditDialogState && previewEditDialogState.action === 'group.edit';
-            const hasTabOption = isGroupEdit && previewEditDialogState.fields.some((field) => field.key.trim() === 'tab');
-            warning.hidden = !hasTabOption;
+            const tabField = isGroupEdit && previewEditDialogState.fields.find((field) => field.key.trim() === 'tab');
+            const selectedTab = tabField && typeof tabField.value === 'string' ? tabField.value.trim() : '';
+            warning.hidden = !(selectedTab && selectedTab !== previewEditDialogState.originalTab);
         }
 
         function renderPreviewEditOptions() {
             const options = document.getElementById('preview-edit-options');
             const addButton = document.getElementById('preview-edit-add-option');
+            const addOptionNote = document.getElementById('preview-edit-add-option-note');
             const state = previewEditDialogState;
             const supportsOptions = state && ['service.add', 'service.edit', 'group.edit'].includes(state.action);
             options.hidden = !supportsOptions;
             addButton.hidden = !supportsOptions;
+            addOptionNote.hidden = !supportsOptions || !state.hasAddedOption;
             if (!supportsOptions) {
                 options.innerHTML = '';
                 document.getElementById('preview-edit-tab-warning').hidden = true;
@@ -995,6 +999,9 @@
                     ? [field.value, ...selectValues] : selectValues)]
                     .map((value) => `<option value="${escapeHtml(value)}"${value === field.value ? ' selected' : ''}>${escapeHtml(value)}</option>`)
                     .join('');
+                const knownOptionChoices = Array.from(optionDefinitions.keys())
+                    .map((optionName) => `<option value="${escapeHtml(optionName)}"${optionName === field.key ? ' selected' : ''}>${escapeHtml(optionName)}</option>`)
+                    .join('');
                 const valueControl = field.fields
                     ? `<div class="preview-edit-nested-options" data-preview-nested-options>${renderRows(field.fields, path)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
                     : isTabOption
@@ -1008,8 +1015,8 @@
                     : `<textarea class="modal-input preview-edit-option-value${isTextareaOption && (definition.rows || 2) > 2 ? ' preview-edit-option-description' : ''}" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}" rows="${isTextareaOption ? (definition.rows || 2) : 2}" placeholder="Value">${escapeHtml(field.value)}</textarea>`;
                 const keyControl = field.locked
                     ? `<span class="preview-edit-option-key" data-preview-option-key>${escapeHtml(field.key)}</span>`
-                    : `<input type="text" class="modal-input" data-preview-option-key list="preview-known-options" aria-label="Option name" value="${escapeHtml(field.key)}" placeholder="Option">`;
-                return `<div class="preview-edit-option-row" data-preview-option-row data-preview-option-locked="${field.locked ? 'true' : 'false'}">
+                    : `<select class="modal-input" data-preview-option-key aria-label="Option name"><option value="" disabled${field.key ? '' : ' selected'}>Choose an option</option>${knownOptionChoices}</select>`;
+                return `<div class="preview-edit-option-row" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}">
                 ${keyControl}
                 ${valueControl}
                 <span class="preview-edit-actions preview-edit-option-actions">
@@ -1054,6 +1061,7 @@
                 nameInput.value = group.groupName;
                 previewEditDialogState.fields = getPreviewOptionFields(layout[group.groupName]);
                 previewEditDialogState.availableTabs = getPreviewTabManagerData().tabs;
+                previewEditDialogState.originalTab = String(layout[group.groupName]?.tab || '').trim();
             } else if (action === 'service.add') {
                 title.textContent = `Add service to ${source.groupName}`;
                 submit.textContent = 'Add service';
@@ -1546,6 +1554,7 @@
         document.getElementById('preview-edit-form').addEventListener('submit', submitPreviewEditForm);
         document.getElementById('preview-edit-add-option').addEventListener('click', () => {
             syncPreviewEditOptionState();
+            previewEditDialogState.hasAddedOption = true;
             previewEditDialogState.fields.push({ key: '', value: '', locked: false });
             renderPreviewEditOptions();
             document.querySelector('[data-preview-option-row]:last-child [data-preview-option-key]')?.focus();
@@ -1556,9 +1565,21 @@
         });
         document.getElementById('preview-edit-options').addEventListener('change', function(event) {
             if (!event.target.matches('[data-preview-option-key], [data-preview-option-value], [data-preview-option-value] input[type="radio"]')) return;
+            const optionRow = event.target.closest('[data-preview-option-row]');
+            const optionPath = optionRow && optionRow.getAttribute('data-preview-option-path');
             syncPreviewEditOptionState();
+            updatePreviewEditTabWarning();
             if (event.target.matches('[data-preview-option-key]') || ['true', 'false'].includes(event.target.value.trim())) {
                 renderPreviewEditOptions();
+                if (event.target.matches('[data-preview-option-key]') && optionPath !== null) {
+                    const replacementRow = Array.from(document.querySelectorAll('[data-preview-option-row]'))
+                        .find((row) => row.getAttribute('data-preview-option-path') === optionPath);
+                    const replacementKey = replacementRow && replacementRow.querySelector('[data-preview-option-key]');
+                    if (replacementKey instanceof HTMLInputElement || replacementKey instanceof HTMLSelectElement) {
+                        replacementKey.focus();
+                        if (replacementKey instanceof HTMLInputElement) replacementKey.select();
+                    }
+                }
             }
         });
         document.getElementById('preview-edit-options').addEventListener('click', function(event) {
@@ -1567,6 +1588,7 @@
                 syncPreviewEditOptionState();
                 const path = addChildButton.getAttribute('data-preview-option-path');
                 const field = path.split('.').reduce((fields, index) => fields[Number(index)], previewEditDialogState.fields);
+                previewEditDialogState.hasAddedOption = true;
                 field.fields.push({ key: '', value: '', locked: false });
                 renderPreviewEditOptions();
                 return;
@@ -2694,7 +2716,7 @@
         function updatePreviewEditMode() {
             const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
             previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
-            document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive editor' : 'Preview';
+            document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive Editor' : 'Preview';
             document.getElementById('preview-title-icon').innerHTML = isEnabled
                 ? '<path d="M4 20l4.2-1L18.8 8.4a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>'
                 : '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path><circle cx="12" cy="12" r="2.75"></circle>';

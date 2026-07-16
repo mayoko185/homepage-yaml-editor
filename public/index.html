@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=98">
+    <link rel="stylesheet" href="styles.css?v=102">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -152,15 +152,6 @@
                     <span id="preview-title-label">Preview</span>
                 </div>
                 <div class="preview-refresh-controls">
-                    <label class="preview-refresh-toggle preview-edit-toggle preview-toolbar-control">
-                        <input type="checkbox" id="preview-edit-toggle" aria-label="Enable Interactive editor">
-                        <span class="preview-refresh-toggle-icon" aria-hidden="true">
-                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
-                                <path d="M4 20l4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>
-                            </svg>
-                        </span>
-                        <span id="preview-edit-label" class="preview-control-label" aria-hidden="true">Interactive editor off</span>
-                    </label>
                     <button type="button" id="preview-manage-tabs-button" class="toolbar-button toolbar-icon-control" aria-label="Manage Preview tabs" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">
                             <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
@@ -184,6 +175,15 @@
                         </svg>
                         <span class="preview-control-label" aria-hidden="true">Undo last Preview edit</span>
                     </button>
+                    <label class="preview-refresh-toggle preview-edit-toggle preview-toolbar-control">
+                        <input type="checkbox" id="preview-edit-toggle" aria-label="Enable Interactive editor">
+                        <span class="preview-refresh-toggle-icon" aria-hidden="true">
+                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
+                                <path d="M4 20l4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>
+                            </svg>
+                        </span>
+                        <span id="preview-edit-label" class="preview-control-label" aria-hidden="true">Interactive editor off</span>
+                    </label>
                     <label class="preview-refresh-toggle">
                         <input type="checkbox" id="preview-auto-refresh-toggle" aria-label="Auto Refresh" checked>
                         <span class="preview-refresh-toggle-icon" aria-hidden="true">
@@ -281,6 +281,7 @@
                 </div>
                 <div id="preview-edit-options" class="preview-edit-options"></div>
                 <button type="button" id="preview-edit-add-option" class="preview-add-option">+ Add option</button>
+                <p id="preview-edit-add-option-note" class="preview-edit-tab-warning preview-edit-option-guidance" hidden>Need another option? Add it in the Option Types panel, then return here to select it.</p>
                 <p id="preview-edit-tab-warning" class="preview-edit-tab-warning" hidden>Changing the <code>tab</code> option moves this group to another Preview tab.</p>
                 <p id="preview-edit-modal-status" class="modal-status" role="alert" hidden></p>
                 <div class="modal-actions">
@@ -348,6 +349,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=81"></script>
+    <script src="app.js?v=86"></script>
 </body>
 </html>

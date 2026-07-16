@@ -17,6 +17,18 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Replaced YAML-tab reorder text arrows with centered SVG icons for a cleaner, consistent appearance.
 - Refined the Preview tab-management icon and shortened its hover label to “Manage tabs”.
 - Updated the Preview heading icon to switch between an eye and pencil with Interactive Editor state.
+- Replaced the page’s diamond background pattern with a restrained radial gradient.
+- Tightened Preview edit modal padding, option rows, nested fields, and action spacing to show more configuration at once.
+
+### Fixed
+
+- Kept focus on a newly selected Preview option name so it can be changed again without closing the edit dialog.
+- Replaced the filtered option-name autocomplete for newly added Preview fields with a selectable list sourced from Option Types.
+- Added in-dialog guidance to use Option Types when a needed Preview option is missing, and show the tab-move warning only after selecting a different tab.
+- Styled the Option Types guidance as an in-dialog information callout.
+- Capitalized the Interactive Editor Preview heading.
+- Kept the Interactive Editor control beside Auto Refresh while Preview management controls appear or hide.
+- Positioned Preview-bar hover labels below their controls so they do not obscure neighboring icons.
 
 ## [1.2.0] - 2026-07-15
 
