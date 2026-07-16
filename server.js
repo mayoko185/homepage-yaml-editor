@@ -41,6 +41,7 @@ const CONFIG_BASE_NAMES = Object.freeze([
   'kubernetes'
 ]);
 const CONFIG_EXTENSIONS = Object.freeze(['.yaml', '.yml']);
+const DEFAULT_CONFIG_TAB_ORDER = Object.freeze([...CONFIG_BASE_NAMES]);
 const ALLOWED_CONFIG_FILES = new Set(
   CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`))
 );
@@ -68,8 +69,26 @@ function getDefaultAppSettings() {
     autoIndent: true,
     previewAutoRefresh: true,
     editorVisible: true,
-    interactiveEditor: false
+    interactiveEditor: false,
+    visibleTabs: [...DEFAULT_CONFIG_TAB_ORDER],
+    tabOrder: [...DEFAULT_CONFIG_TAB_ORDER]
   };
+}
+
+function normalizeTabOrder(value) {
+  const requestedOrder = Array.isArray(value) ? value : [];
+  const uniqueKnownTabs = requestedOrder.filter((tabName, index) => (
+    typeof tabName === 'string'
+      && DEFAULT_CONFIG_TAB_ORDER.includes(tabName)
+      && requestedOrder.indexOf(tabName) === index
+  ));
+  return [...uniqueKnownTabs, ...DEFAULT_CONFIG_TAB_ORDER.filter((tabName) => !uniqueKnownTabs.includes(tabName))];
+}
+
+function normalizeVisibleTabs(value, tabOrder) {
+  const requestedTabs = Array.isArray(value) ? value : [];
+  const visibleTabs = tabOrder.filter((tabName) => requestedTabs.includes(tabName));
+  return visibleTabs.length > 0 ? visibleTabs : [...tabOrder];
 }
 
 function getDefaultOptionDefinitions() {
@@ -151,6 +170,7 @@ function normalizeAppSettings(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return defaults;
   }
+  const tabOrder = normalizeTabOrder(value.tabOrder);
   return {
     theme: value.theme === 'light' ? 'light' : value.theme === 'dark' ? 'dark' : defaults.theme,
     autoIndent: typeof value.autoIndent === 'boolean' ? value.autoIndent : defaults.autoIndent,
@@ -158,7 +178,9 @@ function normalizeAppSettings(value) {
       ? value.previewAutoRefresh : defaults.previewAutoRefresh,
     editorVisible: typeof value.editorVisible === 'boolean' ? value.editorVisible : defaults.editorVisible,
     interactiveEditor: typeof value.interactiveEditor === 'boolean'
-      ? value.interactiveEditor : defaults.interactiveEditor
+      ? value.interactiveEditor : defaults.interactiveEditor,
+    visibleTabs: normalizeVisibleTabs(value.visibleTabs, tabOrder),
+    tabOrder
   };
 }
 

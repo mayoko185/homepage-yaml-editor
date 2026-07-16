@@ -2142,6 +2142,97 @@
             font-size: 0.9rem;
             font-weight: 600;
         }
+        .settings-fieldset-help {
+            margin: 0 0 9px;
+            color: var(--text-color);
+            font-size: 0.78rem;
+            line-height: 1.35;
+            opacity: 0.7;
+        }
+        .settings-yaml-tabs {
+            display: grid;
+            gap: 6px;
+        }
+        .settings-yaml-tab-row {
+            display: flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 5px 6px 5px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--preview-bg);
+        }
+        .settings-yaml-tab-visibility {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            gap: 9px;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 0.87rem;
+            font-weight: 600;
+        }
+        .settings-yaml-tab-visibility > input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+        }
+        .settings-yaml-tab-check {
+            display: inline-grid;
+            place-items: center;
+            width: 20px;
+            height: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--config-item-bg);
+            color: transparent;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .settings-yaml-tab-visibility:has(input:checked) .settings-yaml-tab-check {
+            border-color: var(--button-bg);
+            background: var(--button-bg);
+            color: white;
+        }
+        .settings-yaml-tab-visibility:has(input:disabled) {
+            cursor: default;
+        }
+        .settings-yaml-tab-visibility:focus-within .settings-yaml-tab-check {
+            outline: 2px solid var(--button-bg);
+            outline-offset: 2px;
+        }
+        .settings-yaml-tab-actions {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+        .settings-yaml-tab-move {
+            display: inline-grid;
+            place-items: center;
+            width: 30px;
+            height: 30px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 17px;
+            line-height: 1;
+        }
+        .settings-yaml-tab-move:hover:not(:disabled),
+        .settings-yaml-tab-move:focus-visible {
+            border-color: var(--button-bg);
+            background: color-mix(in srgb, var(--button-bg) 14%, var(--config-item-bg));
+            color: var(--button-bg);
+            outline: none;
+        }
+        .settings-yaml-tab-move:disabled {
+            cursor: default;
+            opacity: 0.38;
+        }
         .settings-theme-options {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));

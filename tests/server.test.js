@@ -99,13 +99,18 @@ test('serves optimized assets and supports the active configuration APIs', async
       autoIndent: true,
       previewAutoRefresh: true,
       editorVisible: true,
-      interactiveEditor: false
+      interactiveEditor: false,
+      visibleTabs: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'],
+      tabOrder: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes']
     });
     const settingsSaveResponse = await fetch(`${baseUrl}/api/app-settings`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        settings: { theme: 'dark', autoIndent: false, previewAutoRefresh: false, editorVisible: false, interactiveEditor: true, ignored: 'value' }
+        settings: {
+          theme: 'dark', autoIndent: false, previewAutoRefresh: false, editorVisible: false, interactiveEditor: true,
+          visibleTabs: ['kubernetes', 'services'], tabOrder: ['kubernetes', 'services'], ignored: 'value'
+        }
       })
     });
     assert.equal(settingsSaveResponse.status, 200);
@@ -114,14 +119,18 @@ test('serves optimized assets and supports the active configuration APIs', async
       autoIndent: false,
       previewAutoRefresh: false,
       editorVisible: false,
-      interactiveEditor: true
+      interactiveEditor: true,
+      visibleTabs: ['kubernetes', 'services'],
+      tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'settings.json'), 'utf8')), {
       theme: 'dark',
       autoIndent: false,
       previewAutoRefresh: false,
       editorVisible: false,
-      interactiveEditor: true
+      interactiveEditor: true,
+      visibleTabs: ['kubernetes', 'services'],
+      tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });
 
     const optionTypesResponse = await fetch(`${baseUrl}/api/option-types`);

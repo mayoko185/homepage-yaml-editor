@@ -7,6 +7,10 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Added Settings-panel controls for showing, hiding, and reordering YAML configuration tabs, with persistent preferences and matching editor styling.
+
 ## [1.2.0] - 2026-07-15
 
 ### Added

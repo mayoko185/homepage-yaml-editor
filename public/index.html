@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=95">
+    <link rel="stylesheet" href="styles.css?v=96">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -246,6 +246,11 @@
                 <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Preview Auto Refresh</strong><small>Update Preview after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                 <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                 <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable Preview editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                <fieldset class="settings-fieldset settings-tabs-fieldset">
+                    <legend>YAML tabs</legend>
+                    <p class="settings-fieldset-help">Choose which configuration tabs appear in the editor and arrange their order.</p>
+                    <div id="settings-yaml-tabs" class="settings-yaml-tabs"></div>
+                </fieldset>
                 <div class="modal-actions">
                     <button type="button" id="settings-modal-cancel" class="modal-button modal-button-secondary">Cancel</button>
                     <button type="submit" class="modal-button">Save settings</button>
@@ -335,6 +340,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=76"></script>
+    <script src="app.js?v=77"></script>
 </body>
 </html>

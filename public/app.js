@@ -8,6 +8,15 @@
             'proxmox',
             'kubernetes'
         ]);
+        const configTabLabels = Object.freeze({
+            services: 'Services',
+            settings: 'Settings',
+            bookmarks: 'Bookmarks',
+            widgets: 'Widgets',
+            docker: 'Docker',
+            proxmox: 'Proxmox',
+            kubernetes: 'Kubernetes'
+        });
         const sampleConfigs = Object.fromEntries(configTabNames.map((tabName) => [tabName, '']));
         const createNewTabGroupValue = '__create_new_service_group__';
 
@@ -679,7 +688,7 @@
             directoryInfo.textContent = 'Examples loaded (read-only).';
             directoryInfo.dataset.state = 'idle';
             
-            setEditorValue(sampleConfigs.services);
+            switchTab(getFirstVisibleConfigTab(), null, { skipRemember: true });
             updatePreview();
 
             try {
@@ -2496,13 +2505,80 @@
         const toggleCommentButton = document.getElementById('toggle-comment-button');
         const jumpSectionButton = document.getElementById('jump-section-button');
         let pendingAppSettingsSave = Promise.resolve();
+        let settingsTabOrderDraft = [...configTabNames];
         let savedAppSettings = {
             theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
             autoIndent: autoIndentToggle.checked,
             previewAutoRefresh: previewAutoRefreshToggle.checked,
             editorVisible: editorVisibilityToggle.checked,
-            interactiveEditor: previewEditToggle.checked
+            interactiveEditor: previewEditToggle.checked,
+            visibleTabs: [...configTabNames],
+            tabOrder: [...configTabNames]
         };
+        function normalizeConfigTabOrder(tabOrder) {
+            const requestedOrder = Array.isArray(tabOrder) ? tabOrder : [];
+            const knownTabs = requestedOrder.filter((tabName, index) => (
+                configTabNames.includes(tabName) && requestedOrder.indexOf(tabName) === index
+            ));
+            return [...knownTabs, ...configTabNames.filter((tabName) => !knownTabs.includes(tabName))];
+        }
+        function normalizeVisibleConfigTabs(visibleTabs, tabOrder) {
+            const requestedTabs = Array.isArray(visibleTabs) ? visibleTabs : [];
+            const normalizedTabs = tabOrder.filter((tabName) => requestedTabs.includes(tabName));
+            return normalizedTabs.length > 0 ? normalizedTabs : [...tabOrder];
+        }
+        function getFirstVisibleConfigTab() {
+            return savedAppSettings.tabOrder.find((tabName) => savedAppSettings.visibleTabs.includes(tabName)) || 'services';
+        }
+        function applyConfigTabNavigation() {
+            const tabContainer = document.querySelector('.config-tabs');
+            const visibleTabs = new Set(savedAppSettings.visibleTabs);
+            savedAppSettings.tabOrder.forEach((tabName) => {
+                const tab = tabContainer.querySelector(`.tab[data-tab="${tabName}"]`);
+                if (!tab) return;
+                tab.hidden = !visibleTabs.has(tabName);
+                tabContainer.append(tab);
+            });
+            if (!visibleTabs.has(currentTab) && Object.keys(loadedFiles).length > 0) {
+                switchTab(getFirstVisibleConfigTab(), null);
+            }
+        }
+        function getSettingsTabDraftFromControls() {
+            const rows = document.querySelectorAll('#settings-yaml-tabs [data-settings-tab]');
+            const tabOrder = Array.from(rows, (row) => row.getAttribute('data-settings-tab'));
+            const visibleTabs = Array.from(rows)
+                .filter((row) => row.querySelector('[data-settings-tab-visible]').checked)
+                .map((row) => row.getAttribute('data-settings-tab'));
+            return {
+                tabOrder: normalizeConfigTabOrder(tabOrder),
+                visibleTabs: normalizeVisibleConfigTabs(visibleTabs, normalizeConfigTabOrder(tabOrder))
+            };
+        }
+        function renderSettingsTabControls() {
+            const container = document.getElementById('settings-yaml-tabs');
+            const visibleTabs = new Set(settingsTabOrderDraft.visibleTabs);
+            container.innerHTML = settingsTabOrderDraft.tabOrder.map((tabName, index) => `
+                <div class="settings-yaml-tab-row" data-settings-tab="${tabName}">
+                    <label class="settings-yaml-tab-visibility">
+                        <input type="checkbox" data-settings-tab-visible${visibleTabs.has(tabName) ? ' checked' : ''}${visibleTabs.size === 1 && visibleTabs.has(tabName) ? ' disabled' : ''}>
+                        <span class="settings-yaml-tab-check" aria-hidden="true">&#10003;</span>
+                        <span>${escapeHtml(configTabLabels[tabName])}</span>
+                    </label>
+                    <div class="settings-yaml-tab-actions" aria-label="Reorder ${escapeHtml(configTabLabels[tabName])} tab">
+                        <button type="button" class="settings-yaml-tab-move" data-settings-tab-move="up" aria-label="Move ${escapeHtml(configTabLabels[tabName])} tab up" title="Move up"${index === 0 ? ' disabled' : ''}>&uarr;</button>
+                        <button type="button" class="settings-yaml-tab-move" data-settings-tab-move="down" aria-label="Move ${escapeHtml(configTabLabels[tabName])} tab down" title="Move down"${index === settingsTabOrderDraft.tabOrder.length - 1 ? ' disabled' : ''}>&darr;</button>
+                    </div>
+                </div>`).join('');
+        }
+        function moveSettingsTab(tabName, direction) {
+            const draft = getSettingsTabDraftFromControls();
+            const currentIndex = draft.tabOrder.indexOf(tabName);
+            const destination = currentIndex + (direction === 'up' ? -1 : 1);
+            if (currentIndex === -1 || destination < 0 || destination >= draft.tabOrder.length) return;
+            [draft.tabOrder[currentIndex], draft.tabOrder[destination]] = [draft.tabOrder[destination], draft.tabOrder[currentIndex]];
+            settingsTabOrderDraft = draft;
+            renderSettingsTabControls();
+        }
         function getPersistentAppSettings() {
             return { ...savedAppSettings };
         }
@@ -2518,8 +2594,11 @@
                 autoIndent: settings.autoIndent !== false,
                 previewAutoRefresh: settings.previewAutoRefresh !== false,
                 editorVisible: settings.editorVisible !== false,
-                interactiveEditor: settings.interactiveEditor === true
+                interactiveEditor: settings.interactiveEditor === true,
+                tabOrder: normalizeConfigTabOrder(settings.tabOrder),
+                visibleTabs: normalizeVisibleConfigTabs(settings.visibleTabs, normalizeConfigTabOrder(settings.tabOrder))
             };
+            applyConfigTabNavigation();
             applyTheme(savedAppSettings.theme !== 'light');
             autoIndentToggle.checked = savedAppSettings.autoIndent;
             previewAutoRefreshToggle.checked = savedAppSettings.previewAutoRefresh;
@@ -2561,6 +2640,8 @@
             document.getElementById('settings-preview-auto-refresh').checked = settings.previewAutoRefresh;
             document.getElementById('settings-editor-visible').checked = settings.editorVisible;
             document.getElementById('settings-interactive-editor').checked = settings.interactiveEditor;
+            settingsTabOrderDraft = { tabOrder: [...settings.tabOrder], visibleTabs: [...settings.visibleTabs] };
+            renderSettingsTabControls();
             modal.hidden = false;
             window.requestAnimationFrame(() => document.querySelector('input[name="settings-theme"]:checked').focus());
         }
@@ -2576,12 +2657,15 @@
         async function submitSettingsModal(event) {
             event.preventDefault();
             const theme = document.querySelector('input[name="settings-theme"]:checked').value;
+            const tabSettings = getSettingsTabDraftFromControls();
             applyPersistentAppSettings({
                 theme,
                 autoIndent: document.getElementById('settings-auto-indent').checked,
                 previewAutoRefresh: document.getElementById('settings-preview-auto-refresh').checked,
                 editorVisible: document.getElementById('settings-editor-visible').checked,
-                interactiveEditor: document.getElementById('settings-interactive-editor').checked
+                interactiveEditor: document.getElementById('settings-interactive-editor').checked,
+                tabOrder: tabSettings.tabOrder,
+                visibleTabs: tabSettings.visibleTabs
             });
             if (await persistAppSettings()) {
                 setSaveStatus('Editor settings saved.', 'success');
@@ -2622,6 +2706,17 @@
         document.getElementById('settings-modal-close').addEventListener('click', closeSettingsModal);
         document.getElementById('settings-modal-cancel').addEventListener('click', closeSettingsModal);
         document.getElementById('settings-form').addEventListener('submit', submitSettingsModal);
+        document.getElementById('settings-yaml-tabs').addEventListener('click', function(event) {
+            const button = event.target.closest('[data-settings-tab-move]');
+            if (!button || button.disabled) return;
+            const row = button.closest('[data-settings-tab]');
+            moveSettingsTab(row.getAttribute('data-settings-tab'), button.getAttribute('data-settings-tab-move'));
+        });
+        document.getElementById('settings-yaml-tabs').addEventListener('change', function(event) {
+            if (!event.target.matches('[data-settings-tab-visible]')) return;
+            settingsTabOrderDraft = getSettingsTabDraftFromControls();
+            renderSettingsTabControls();
+        });
         document.getElementById('settings-modal').addEventListener('click', function(event) {
             if (event.target === this) closeSettingsModal();
         });
