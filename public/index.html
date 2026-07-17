@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=104">
+    <link rel="stylesheet" href="styles.css?v=118">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -243,34 +243,39 @@
                 <button type="button" class="modal-close" id="settings-modal-close" aria-label="Close editor settings">&times;</button>
             </div>
             <form id="settings-form">
-                <details class="settings-section" open>
-                    <summary>Appearance &amp; editor</summary>
-                    <div class="settings-section-content">
-                        <fieldset class="settings-fieldset">
-                            <legend>Theme</legend>
-                            <div class="settings-theme-options">
-                                <label class="settings-theme-option"><input type="radio" name="settings-theme" value="dark"><span class="settings-theme-icon" aria-hidden="true">&#9790;</span><span>Dark</span></label>
-                                <label class="settings-theme-option"><input type="radio" name="settings-theme" value="light"><span class="settings-theme-icon" aria-hidden="true">&#9788;</span><span>Light</span></label>
+                <div id="settings-tabs" class="settings-tabs">
+                    <div id="settings-tab-list" class="settings-tab-list" role="tablist" aria-orientation="vertical" aria-label="Editor settings categories">
+                        <button type="button" role="tab" id="settings-tab-appearance" class="settings-tab active" data-settings-tab="appearance" aria-controls="settings-panel-appearance" aria-selected="true" tabindex="0">Appearance</button>
+                        <button type="button" role="tab" id="settings-tab-yaml" class="settings-tab" data-settings-tab="yaml" aria-controls="settings-panel-yaml" aria-selected="false" tabindex="-1">YAML tabs</button>
+                    </div>
+                    <section id="settings-panel-appearance" class="settings-tab-panel" data-settings-panel="appearance" role="tabpanel" aria-labelledby="settings-tab-appearance">
+                        <section class="settings-section" aria-labelledby="settings-appearance-title">
+                            <h4 id="settings-appearance-title" class="settings-section-title">Appearance</h4>
+                            <div class="settings-section-content">
+                                <fieldset class="settings-fieldset">
+                                    <legend>Theme</legend>
+                                    <div class="settings-theme-options">
+                                        <label class="settings-theme-option"><input type="radio" name="settings-theme" value="dark"><span class="settings-theme-icon" aria-hidden="true">&#9790;</span><span>Dark</span></label>
+                                        <label class="settings-theme-option"><input type="radio" name="settings-theme" value="light"><span class="settings-theme-icon" aria-hidden="true">&#9788;</span><span>Light</span></label>
+                                    </div>
+                                </fieldset>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable Preview editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-auto-indent"><span class="settings-control-icon" aria-hidden="true">&#8677;</span><span class="settings-toggle-copy"><strong>Auto Indent</strong><small>Keep YAML indentation aligned while typing</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Preview Auto Refresh</strong><small>Update Preview after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                             </div>
-                        </fieldset>
-                        <label class="settings-toggle"><input type="checkbox" id="settings-auto-indent"><span class="settings-control-icon" aria-hidden="true">&#8677;</span><span class="settings-toggle-copy"><strong>Auto Indent</strong><small>Keep YAML indentation aligned while typing</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
-                        <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
-                    </div>
-                </details>
-                <details class="settings-section" open>
-                    <summary>Preview</summary>
-                    <div class="settings-section-content">
-                        <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Preview Auto Refresh</strong><small>Update Preview after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
-                        <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable Preview editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
-                    </div>
-                </details>
-                <details class="settings-section">
-                    <summary>YAML tabs</summary>
-                    <div class="settings-section-content">
-                        <p class="settings-fieldset-help">Choose which configuration tabs appear in the editor and arrange their order.</p>
-                        <div id="settings-yaml-tabs" class="settings-yaml-tabs"></div>
-                    </div>
-                </details>
+                        </section>
+                    </section>
+                    <section id="settings-panel-yaml" class="settings-tab-panel" data-settings-panel="yaml" role="tabpanel" aria-labelledby="settings-tab-yaml" hidden>
+                        <section class="settings-section" aria-labelledby="settings-yaml-title">
+                            <h4 id="settings-yaml-title" class="settings-section-title">YAML tabs</h4>
+                            <div class="settings-section-content">
+                                <p class="settings-fieldset-help">Choose which configuration tabs appear in the editor and arrange their order.</p>
+                                <div id="settings-yaml-tabs" class="settings-yaml-tabs"></div>
+                            </div>
+                        </section>
+                    </section>
+                </div>
                 <div class="modal-actions">
                     <button type="button" id="settings-modal-cancel" class="modal-button modal-button-secondary">Cancel</button>
                     <button type="submit" class="modal-button">Save settings</button>
@@ -344,7 +349,15 @@
                 <h3 id="option-types-modal-title" class="modal-title">Option types</h3>
                 <button type="button" class="modal-close" id="option-types-modal-close" aria-label="Close option types">&times;</button>
             </div>
-            <p class="modal-body-text">Choose how each YAML option is edited. <strong>Text</strong> is a one-line field; <strong>Textarea</strong> supports longer text; <strong>Boolean</strong> shows true/false controls; <strong>Tab</strong> selects a Preview tab; <strong>Mapping</strong> opens nested options; and <strong>Select</strong> uses the comma-separated choices you provide.</p>
+            <p class="modal-body-text">These definitions control how matching YAML options are edited in the Interactive Editor.</p>
+            <ul class="modal-body-list">
+                <li><strong>Text:</strong> uses a short single-line input.</li>
+                <li><strong>Textarea:</strong> uses a multi-line input; its row count controls the height.</li>
+                <li><strong>Boolean:</strong> uses true/false buttons.</li>
+                <li><strong>Tab:</strong> automatically lists the available tabs.</li>
+                <li><strong>Mapping:</strong> opens nested YAML options.</li>
+                <li><strong>Select:</strong> uses a dropdown populated by the comma-separated choices entered for the option.</li>
+            </ul>
             <form id="option-types-form">
                 <div class="option-types-heading" aria-hidden="true"><span>Option</span><span>Value type</span></div>
                 <div id="option-types-list" class="option-types-list"></div>
@@ -361,6 +374,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=86"></script>
+    <script src="app.js?v=95"></script>
 </body>
 </html>

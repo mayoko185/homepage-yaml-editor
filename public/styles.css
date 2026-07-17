@@ -3,7 +3,7 @@
             --container-bg: #2d2d2d;
             --text-color: #e0e0e0;
             --tab-bg: #3c3c3c;
-            --tab-active-bg: #4CAF50;
+            --tab-active-bg: var(--button-bg);
             --tab-active-text: white;
             --border-color: #555;
             --preview-bg: #3a3a3a;
@@ -32,6 +32,7 @@
             --scrollbar-track: #202020;
             --scrollbar-thumb: #555;
             --scrollbar-thumb-hover: #6b6b6b;
+            --icon-control-size: 40px;
         }
 
         .light-mode {
@@ -39,7 +40,7 @@
             --container-bg: white;
             --text-color: #333;
             --tab-bg: #f8f9fa;
-            --tab-active-bg: #4CAF50;
+            --tab-active-bg: var(--button-bg);
             --tab-active-text: white;
             --border-color: #ddd;
             --preview-bg: #f9f9f9;
@@ -105,6 +106,7 @@
         html,
         body {
             background-color: #1a1a1a;
+            overflow-x: clip;
         }
 
         body {
@@ -353,10 +355,10 @@
         .toolbar-icon-control {
             position: relative;
             justify-content: center;
-            width: 40px;
-            min-width: 40px;
-            height: 40px;
-            min-height: 40px;
+            width: var(--icon-control-size);
+            min-width: var(--icon-control-size);
+            height: var(--icon-control-size);
+            min-height: var(--icon-control-size);
             padding: 5px;
             gap: 0;
         }
@@ -395,6 +397,16 @@
             clip-path: none;
             opacity: 1;
             transform: translate(-50%, 0);
+        }
+        .toolbar-file-actions .toolbar-button-label {
+            left: auto;
+            right: 0;
+            transform: translateY(4px);
+        }
+        .toolbar-file-actions .toolbar-icon-control:hover > .toolbar-button-label,
+        .toolbar-file-actions .toolbar-button.toolbar-icon-control:focus-visible > .toolbar-button-label,
+        .toolbar-file-actions .toolbar-toggle.toolbar-icon-control:focus-within > .toolbar-button-label {
+            transform: translateY(0);
         }
         .editor-wrapper {
             margin: 0 12px 12px;
@@ -654,10 +666,10 @@
             position: relative;
             display: inline-grid;
             place-items: center;
-            width: 38px;
-            height: 38px;
-            min-width: 38px;
-            min-height: 38px;
+            width: var(--icon-control-size);
+            height: var(--icon-control-size);
+            min-width: var(--icon-control-size);
+            min-height: var(--icon-control-size);
             margin: 0;
             padding: 4px;
             box-sizing: border-box;
@@ -722,10 +734,10 @@
             position: relative;
             display: inline-grid;
             place-items: center;
-            width: 38px;
-            height: 38px;
-            min-width: 38px;
-            min-height: 38px;
+            width: var(--icon-control-size);
+            height: var(--icon-control-size);
+            min-width: var(--icon-control-size);
+            min-height: var(--icon-control-size);
             margin: 0;
             padding: 0;
             background-color: var(--button-bg);
@@ -1258,7 +1270,7 @@
             line-height: 1.45;
             text-align: left;
             white-space: pre-line;
-            overflow-wrap: anywhere;
+            overflow-wrap: break-word;
             word-break: break-word;
             opacity: 0;
             pointer-events: none;
@@ -1480,10 +1492,10 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 36px;
-            min-width: 36px;
-            min-height: 36px;
+            width: var(--icon-control-size);
+            height: var(--icon-control-size);
+            min-width: var(--icon-control-size);
+            min-height: var(--icon-control-size);
             margin: 0;
             padding: 0;
             background-color: var(--config-item-bg);
@@ -1802,6 +1814,15 @@
             color: var(--text-color);
             line-height: 1.5;
         }
+        .modal-body-list {
+            margin: 14px 0 0;
+            padding-left: 22px;
+            color: var(--text-color);
+            line-height: 1.45;
+        }
+        .modal-body-list li + li {
+            margin-top: 4px;
+        }
         .modal-close {
             width: 38px;
             height: 38px;
@@ -2067,6 +2088,23 @@
         .option-types-row .preview-edit-action {
             justify-self: end;
         }
+        @media (max-width: 720px) {
+            .option-types-row,
+            .option-types-row.has-select-values,
+            .option-types-row.has-textarea-rows {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .option-types-row [data-option-type-name],
+            .option-types-row [data-option-value-type],
+            .option-types-row [data-option-select-values],
+            .option-types-row [data-option-textarea-rows],
+            .option-types-row .preview-edit-action {
+                grid-column: 1;
+            }
+            .option-types-row .preview-edit-action {
+                justify-self: end;
+            }
+        }
         .preview-tab-manager-list {
             display: grid;
             gap: 8px;
@@ -2091,11 +2129,14 @@
             background: var(--config-item-bg);
         }
         .preview-tab-manager-name {
+            flex: 1 1 auto;
             min-width: 0;
-            overflow-wrap: anywhere;
+            overflow-wrap: break-word;
+            word-break: normal;
             font-weight: 600;
         }
         .preview-tab-manager-count {
+            flex: 0 0 auto;
             color: var(--text-color);
             font-size: 0.82rem;
             opacity: 0.68;
@@ -2137,63 +2178,130 @@
             margin-top: 20px;
         }
         .settings-modal-content {
+            width: min(100%, 600px);
             border-radius: 14px;
         }
         #settings-form {
             display: grid;
             gap: 9px;
         }
+        .settings-tabs {
+            display: grid;
+            grid-template-columns: 124px minmax(0, 1fr);
+            align-items: start;
+            gap: 10px;
+        }
+        .settings-tab-list {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            align-content: start;
+            gap: 4px;
+            min-width: 0;
+            padding: 4px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--config-item-bg);
+        }
+        .settings-tab {
+            min-width: 0;
+            min-height: 40px;
+            margin: 0;
+            padding: 10px 9px;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            background: transparent;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+            text-align: left;
+            box-shadow: none;
+            transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+        }
+        .settings-tab:hover:not(.active) {
+            background: var(--preview-bg);
+        }
+        .settings-tab.active {
+            border-color: color-mix(in srgb, var(--button-bg) 55%, var(--border-color));
+            background: color-mix(in srgb, var(--button-bg) 18%, var(--config-item-bg));
+            color: var(--text-color);
+        }
+        .settings-tab:focus-visible {
+            border-color: var(--button-bg);
+            outline: 2px solid var(--button-bg);
+            outline-offset: 1px;
+        }
+        .settings-tab-panel {
+            display: grid;
+            gap: 9px;
+        }
+        .settings-tab-panel[hidden] {
+            display: none;
+        }
+        @media (max-width: 560px) {
+            .settings-tabs {
+                grid-template-columns: 104px minmax(0, 1fr);
+                gap: 8px;
+            }
+            .settings-tab {
+                padding: 9px 5px;
+                font-size: 0.82rem;
+            }
+            .settings-tab-panel .settings-theme-options {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .settings-tab-panel .settings-toggle {
+                gap: 6px;
+                padding: 8px 6px;
+            }
+            .settings-tab-panel .settings-toggle .settings-control-icon {
+                width: 28px;
+                height: 28px;
+                font-size: 17px;
+            }
+            .settings-tab-panel .settings-toggle .settings-toggle-state {
+                flex-basis: 26px;
+                width: 26px;
+                height: 26px;
+                font-size: 20px;
+            }
+            .settings-tab-panel .settings-toggle-copy strong {
+                font-size: 0.82rem;
+            }
+            .settings-tab-panel .settings-toggle-copy small {
+                font-size: 0.7rem;
+            }
+        }
         .settings-section {
             margin: 0;
+            min-width: 0;
             border: 1px solid var(--border-color);
             border-radius: 10px;
             background: var(--config-item-bg);
             overflow: hidden;
         }
-        .settings-section > summary {
+        .settings-section-title {
             display: flex;
             align-items: center;
             min-height: 44px;
             padding: 0 12px;
-            color: var(--text-color);
-            cursor: pointer;
-            font-size: 0.92rem;
-            font-weight: 600;
-            list-style: none;
-        }
-        .settings-section > summary::-webkit-details-marker {
-            display: none;
-        }
-        .settings-section > summary::after {
-            width: 8px;
-            height: 8px;
-            margin-left: auto;
-            border-right: 2px solid currentColor;
-            border-bottom: 2px solid currentColor;
-            content: '';
-            opacity: 0.7;
-            transform: rotate(45deg) translate(-2px, -2px);
-            transition: transform 0.16s ease;
-        }
-        .settings-section[open] > summary {
+            margin: 0;
             border-bottom: 1px solid var(--border-color);
             background: color-mix(in srgb, var(--button-bg) 7%, var(--config-item-bg));
-        }
-        .settings-section[open] > summary::after {
-            transform: rotate(225deg) translate(-2px, -2px);
-        }
-        .settings-section > summary:hover,
-        .settings-section > summary:focus-visible {
-            background: color-mix(in srgb, var(--button-bg) 11%, var(--config-item-bg));
-            outline: none;
+            color: var(--text-color);
+            font-size: 0.92rem;
+            font-weight: 600;
         }
         .settings-section-content {
             display: grid;
             gap: 9px;
+            min-width: 0;
             padding: 9px;
         }
         .settings-fieldset {
             margin: 0;
+            min-width: 0;
             padding: 9px;
             border: 1px solid var(--border-color);
             border-radius: 10px;
@@ -2219,11 +2327,13 @@
         .settings-yaml-tab-row {
             display: flex;
             align-items: center;
+            min-width: 0;
             min-height: 42px;
             padding: 5px 6px 5px 10px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: var(--preview-bg);
+            box-sizing: border-box;
         }
         .settings-yaml-tab-visibility {
             display: flex;
@@ -2269,14 +2379,17 @@
         }
         .settings-yaml-tab-actions {
             display: flex;
+            flex: 0 0 auto;
             gap: 4px;
             margin-left: auto;
         }
         .settings-yaml-tab-move {
             display: inline-grid;
             place-items: center;
+            flex: 0 0 30px;
             width: 30px;
             height: 30px;
+            margin: 0;
             padding: 0;
             border: 1px solid var(--border-color);
             border-radius: 6px;
@@ -2314,6 +2427,8 @@
             position: relative;
             display: flex;
             align-items: center;
+            min-width: 0;
+            box-sizing: border-box;
             color: var(--text-color);
             cursor: pointer;
         }
@@ -2384,6 +2499,7 @@
             display: grid;
             min-width: 0;
             gap: 2px;
+            overflow-wrap: anywhere;
         }
         .settings-toggle-copy strong {
             font-size: 0.92rem;
@@ -2397,8 +2513,10 @@
         .settings-toggle-state {
             display: inline-grid;
             place-items: center;
+            flex: 0 0 32px;
             width: 32px;
             height: 32px;
+            box-sizing: border-box;
             margin-left: auto;
             border-radius: 6px;
             background: color-mix(in srgb, var(--error-color) 16%, transparent);

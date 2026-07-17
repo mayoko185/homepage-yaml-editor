@@ -851,7 +851,7 @@
             list.innerHTML = optionTypesDraft.map((definition, index) => {
                 const typeOptions = optionValueTypeChoices.map((type) => `<option value="${type}"${type === definition.type ? ' selected' : ''}>${type}</option>`).join('');
                 const needsSelectValues = definition.type === 'select';
-                const needsRows = definition.name.trim().toLowerCase() === 'description' && definition.type === 'textarea';
+                const needsRows = definition.type === 'textarea';
                 return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row>
                     <input type="text" class="modal-input" data-option-type-name aria-label="Option name" value="${escapeHtml(definition.name)}" placeholder="Option name">
                     <select class="modal-input" data-option-value-type aria-label="Value type">${typeOptions}</select>
@@ -896,6 +896,7 @@
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || data.error) throw new Error(data.details || data.error || 'Could not save option types');
                 setOptionDefinitions(data.options);
+                if (previewEditDialogState) renderPreviewEditOptions();
                 setSaveStatus('Preview option types saved.', 'success');
                 closeOptionTypesModal();
             } catch (error) {
@@ -1041,11 +1042,16 @@
             const submit = document.getElementById('preview-edit-submit');
             const nameInput = document.getElementById('preview-edit-name');
 
-            previewEditDialogState = { action, source, fields: [] };
+            previewEditDialogState = { action, source, fields: [], availableTabs: [] };
             previewEditPreviousFocus = document.activeElement;
             modal.querySelector('.modal-content').classList.toggle('preview-edit-modal-wide', action === 'group.edit' || action.startsWith('service.'));
             nameInput.value = '';
             setPreviewEditModalStatus();
+
+            const settingsForTabs = parseTabConfig('settings');
+            if (!settingsForTabs.error) {
+                previewEditDialogState.availableTabs = getHomepageTabInfo(settingsForTabs.data).tabs;
+            }
 
             if (action === 'group.add') {
                 title.textContent = 'Add service group';
@@ -1633,16 +1639,29 @@
             renderOptionTypesDraft();
             document.querySelector('#option-types-list > [data-option-type-row]:last-child [data-option-type-name]')?.focus();
         });
+        document.getElementById('option-types-list').addEventListener('input', function(event) {
+            if (!event.target.matches('[data-option-type-name], [data-option-select-values], [data-option-textarea-rows]')) return;
+            readOptionTypesDraft();
+        });
         document.getElementById('option-types-list').addEventListener('change', function(event) {
-            if (!event.target.matches('[data-option-value-type], [data-option-type-name]')) return;
+            if (!event.target.matches('[data-option-value-type]')) return;
             readOptionTypesDraft();
             renderOptionTypesDraft();
         });
-        document.getElementById('option-types-list').addEventListener('click', function(event) {
+        document.getElementById('option-types-list').addEventListener('click', async function(event) {
             const removeButton = event.target.closest('[data-option-type-remove]');
             if (!removeButton || !this.contains(removeButton)) return;
+            const row = removeButton.closest('[data-option-type-row]');
+            const optionName = row?.querySelector('[data-option-type-name]')?.value.trim() || 'this option';
+            const removeIndex = Number(removeButton.getAttribute('data-option-type-remove'));
+            const confirmed = await showConfirmationDialog({
+                title: 'Remove option type?',
+                message: `Remove "${optionName}" from the Option Types list?`,
+                confirmText: 'Remove option type'
+            });
+            if (!confirmed) return;
             readOptionTypesDraft();
-            optionTypesDraft.splice(Number(removeButton.getAttribute('data-option-type-remove')), 1);
+            optionTypesDraft.splice(removeIndex, 1);
             renderOptionTypesDraft();
         });
         document.getElementById('preview-tab-manager-list').addEventListener('click', function(event) {
@@ -2657,7 +2676,45 @@
                 });
             return pendingAppSettingsSave;
         }
+        const settingsTabNames = ['appearance', 'yaml'];
+        let settingsActiveTab = 'appearance';
         let settingsModalPreviousFocus = null;
+        function activateSettingsTab(tabName, { focus = false } = {}) {
+            const activeTabName = settingsTabNames.includes(tabName) ? tabName : settingsTabNames[0];
+            settingsActiveTab = activeTabName;
+            const tabList = document.getElementById('settings-tab-list');
+            const tabs = Array.from(tabList.querySelectorAll('[role="tab"]'));
+            tabs.forEach((tab) => {
+                const isActive = tab.getAttribute('data-settings-tab') === activeTabName;
+                tab.classList.toggle('active', isActive);
+                tab.setAttribute('aria-selected', String(isActive));
+                tab.tabIndex = isActive ? 0 : -1;
+            });
+            document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
+                panel.hidden = panel.getAttribute('data-settings-panel') !== activeTabName;
+            });
+            if (focus) {
+                tabList.querySelector(`[role="tab"][data-settings-tab="${activeTabName}"]`)?.focus();
+            }
+        }
+        function handleSettingsTabKeydown(event) {
+            if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+            const tabs = Array.from(document.querySelectorAll('#settings-tab-list [role="tab"]'));
+            const currentIndex = tabs.indexOf(event.target);
+            if (currentIndex === -1) return;
+            let nextIndex = currentIndex;
+            if (event.key === 'ArrowUp') {
+                nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            } else if (event.key === 'ArrowDown') {
+                nextIndex = (currentIndex + 1) % tabs.length;
+            } else if (event.key === 'Home') {
+                nextIndex = 0;
+            } else if (event.key === 'End') {
+                nextIndex = tabs.length - 1;
+            }
+            event.preventDefault();
+            activateSettingsTab(tabs[nextIndex].getAttribute('data-settings-tab'), { focus: true });
+        }
         function openSettingsModal() {
             const modal = document.getElementById('settings-modal');
             settingsModalPreviousFocus = document.activeElement;
@@ -2669,8 +2726,10 @@
             document.getElementById('settings-interactive-editor').checked = settings.interactiveEditor;
             settingsTabOrderDraft = { tabOrder: [...settings.tabOrder], visibleTabs: [...settings.visibleTabs] };
             renderSettingsTabControls();
+            activateSettingsTab(settingsActiveTab);
             modal.hidden = false;
-            window.requestAnimationFrame(() => document.querySelector('input[name="settings-theme"]:checked').focus());
+            modal.querySelector('.modal-content').scrollTop = 0;
+            window.requestAnimationFrame(() => document.querySelector('#settings-tab-list [role="tab"][aria-selected="true"]')?.focus({ preventScroll: true }));
         }
         function closeSettingsModal() {
             const modal = document.getElementById('settings-modal');
@@ -2737,6 +2796,12 @@
         document.getElementById('settings-modal-close').addEventListener('click', closeSettingsModal);
         document.getElementById('settings-modal-cancel').addEventListener('click', closeSettingsModal);
         document.getElementById('settings-form').addEventListener('submit', submitSettingsModal);
+        document.getElementById('settings-tab-list').addEventListener('click', function(event) {
+            const tab = event.target.closest('[role="tab"]');
+            if (!tab || !this.contains(tab)) return;
+            activateSettingsTab(tab.getAttribute('data-settings-tab'), { focus: true });
+        });
+        document.getElementById('settings-tab-list').addEventListener('keydown', handleSettingsTabKeydown);
         document.getElementById('settings-yaml-tabs').addEventListener('click', function(event) {
             const button = event.target.closest('[data-settings-tab-move]');
             if (!button || button.disabled) return;

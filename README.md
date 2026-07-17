@@ -100,7 +100,7 @@ If no directory is loaded, the editor uses read-only examples and Save is disabl
 
 ## Persistent Editor Preferences
 
-The selected theme, editor visibility, Auto Indent setting, Preview Auto Refresh setting, and Interactive Editor setting are available from the gear icon in the header and saved in `settings.json` under `APP_DATA_DIR` (default: `/app/data`). The included Compose file mounts `./data` there, so these preferences survive container recreation.
+The selected theme, editor visibility, Auto Indent setting, Preview Auto Refresh setting, and Interactive Editor setting are available from the gear icon in the header. The Settings dialog groups these controls under the `Appearance` tab, while YAML tab visibility and ordering are managed under the `YAML tabs` tab in the left-side navigation. Preferences are saved in `settings.json` under `APP_DATA_DIR` (default: `/app/data`). The included Compose file mounts `./data` there, so these preferences survive container recreation.
 
 ## Preview Option Types
 

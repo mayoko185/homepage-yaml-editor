@@ -14,6 +14,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- Combined the Appearance and Preview options into one ordered Appearance section.
+- Widened the Settings dialog so the left navigation and options panels have more room on desktop.
+- Replaced the collapsible Settings sections with accessible left-side `Appearance` and `YAML tabs` navigation, keeping Preview controls grouped under Appearance.
+- Clarified the Option Types guidance to refer to the Interactive Editor and available tabs.
+- Rewrote the Option Types guidance as a concise list and clarified that Tab automatically uses the available Preview tabs.
 - Replaced YAML-tab reorder text arrows with centered SVG icons for a cleaner, consistent appearance.
 - Refined the Preview tab-management icon and shortened its hover label to “Manage tabs”.
 - Updated the Preview heading icon to switch between an eye and pencil with Interactive Editor state.
@@ -22,6 +27,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Added a confirmation warning before removing an Option Types definition.
+- Simplified the Option Types removal confirmation wording.
+- Fixed Option Types so all textarea options expose their row setting and saved type changes refresh an open Preview editor immediately.
+- Fixed Option Types add/edit controls rebuilding during name changes, which could discard the pending value type change and hide its conditional fields.
+- Fixed mobile Option Types rows and Preview tab-manager names overflowing or wrapping awkwardly, and removed horizontal page scrolling caused by hidden toolbar labels.
+- Standardized the shared icon-only control size across the header, editor toolbar, and Preview controls, and made the active configuration tab use the current theme's primary action color.
 - Kept focus on a newly selected Preview option name so it can be changed again without closing the edit dialog.
 - Replaced the filtered option-name autocomplete for newly added Preview fields with a selectable list sourced from Option Types.
 - Added in-dialog guidance to use Option Types when a needed Preview option is missing, and show the tab-move warning only after selecting a different tab.
