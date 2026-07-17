@@ -835,6 +835,21 @@
             return optionDefinitions.get(String(name || '').trim()) || null;
         }
 
+        function getPreviewOptionTarget(action) {
+            if (String(action || '').startsWith('service.')) return 'service';
+            if (String(action || '').startsWith('group.')) return 'group';
+            return null;
+        }
+
+        function optionDefinitionMatchesTarget(definition, target) {
+            const appliesTo = definition?.appliesTo || 'both';
+            return !target || appliesTo === 'both' || appliesTo === target;
+        }
+
+        function getOptionDefinitionsForTarget(target) {
+            return Array.from(optionDefinitions.values()).filter((definition) => optionDefinitionMatchesTarget(definition, target));
+        }
+
         async function loadOptionDefinitions() {
             const response = await fetch('/api/option-types', { cache: 'no-store' });
             const data = await response.json().catch(() => ({}));
@@ -846,6 +861,11 @@
         }
 
         const optionValueTypeChoices = ['text', 'textarea', 'boolean', 'tab', 'mapping', 'select'];
+        const optionAppliesToChoices = [
+            { value: 'service', label: 'Services' },
+            { value: 'group', label: 'Service groups' },
+            { value: 'both', label: 'Services and groups' }
+        ];
         let optionTypesDraft = [];
         let optionTypesPreviousFocus = null;
 
@@ -859,6 +879,7 @@
             optionTypesDraft = Array.from(document.querySelectorAll('#option-types-list > [data-option-type-row]')).map((row) => ({
                 name: row.querySelector('[data-option-type-name]').value,
                 type: row.querySelector('[data-option-value-type]').value,
+                appliesTo: row.querySelector('[data-option-applies-to]').value,
                 values: (row.querySelector('[data-option-select-values]')?.value || '').split(',').map((value) => value.trim()).filter(Boolean),
                 rows: Number(row.querySelector('[data-option-textarea-rows]')?.value) || 2
             }));
@@ -868,14 +889,27 @@
             const list = document.getElementById('option-types-list');
             list.innerHTML = optionTypesDraft.map((definition, index) => {
                 const typeOptions = optionValueTypeChoices.map((type) => `<option value="${type}"${type === definition.type ? ' selected' : ''}>${type}</option>`).join('');
+                const appliesTo = optionAppliesToChoices.some((choice) => choice.value === definition.appliesTo)
+                    ? definition.appliesTo
+                    : 'both';
+                const appliesToOptions = optionAppliesToChoices.map((choice) => `<option value="${choice.value}"${choice.value === appliesTo ? ' selected' : ''}>${choice.label}</option>`).join('');
                 const needsSelectValues = definition.type === 'select';
                 const needsRows = definition.type === 'textarea';
+                const extraControl = needsSelectValues
+                    ? `<input type="text" class="modal-input" data-option-select-values aria-label="Select choices" value="${escapeHtml((definition.values || []).join(', '))}" placeholder="Select choices">`
+                    : needsRows
+                        ? `<input type="number" class="modal-input" data-option-textarea-rows aria-label="Textarea rows" min="2" max="12" value="${definition.rows || 2}" placeholder="Rows">`
+                        : '<span class="option-types-extra-placeholder" aria-hidden="true"></span>';
                 return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row>
                     <input type="text" class="modal-input" data-option-type-name aria-label="Option name" value="${escapeHtml(definition.name)}" placeholder="Option name">
                     <select class="modal-input" data-option-value-type aria-label="Value type">${typeOptions}</select>
-                    ${needsSelectValues ? `<input type="text" class="modal-input" data-option-select-values aria-label="Select choices" value="${escapeHtml((definition.values || []).join(', '))}" placeholder="Select choices">` : ''}
-                    ${needsRows ? `<input type="number" class="modal-input" data-option-textarea-rows aria-label="Textarea rows" min="2" max="12" value="${definition.rows || 2}" placeholder="Rows">` : ''}
-                    <button type="button" class="preview-edit-action preview-edit-delete" data-option-type-remove="${index}" aria-label="Remove ${escapeHtml(definition.name || 'option')}" title="Remove option type">&times;</button>
+                    <select class="modal-input" data-option-applies-to aria-label="Applies to">${appliesToOptions}</select>
+                    ${extraControl}
+                    <span class="preview-edit-actions option-types-actions">
+                        <button type="button" class="preview-edit-action preview-edit-move-up" data-option-type-move="up" data-option-type-index="${index}" aria-label="Move ${escapeHtml(definition.name || 'option')} up" title="Move option type up"${index === 0 ? ' disabled' : ''}>&uarr;</button>
+                        <button type="button" class="preview-edit-action preview-edit-move-down" data-option-type-move="down" data-option-type-index="${index}" aria-label="Move ${escapeHtml(definition.name || 'option')} down" title="Move option type down"${index === optionTypesDraft.length - 1 ? ' disabled' : ''}>&darr;</button>
+                        <button type="button" class="preview-edit-action preview-edit-delete" data-option-type-remove="${index}" aria-label="Remove ${escapeHtml(definition.name || 'option')}" title="Remove option type">&times;</button>
+                    </span>
                 </div>`;
             }).join('') || '<div class="preview-tab-manager-empty">No option types are configured.</div>';
         }
@@ -996,6 +1030,8 @@
                 document.getElementById('preview-edit-tab-warning').hidden = true;
                 return;
             }
+            const optionTarget = getPreviewOptionTarget(state.action);
+            const availableOptionNames = getOptionDefinitionsForTarget(optionTarget).map((definition) => definition.name);
             function getFieldCollection(path = '') {
                 if (!path) return state.fields;
                 return path.split('.').reduce((fields, index) => fields[Number(index)].fields, state.fields);
@@ -1020,7 +1056,10 @@
                     ? [field.value, ...selectValues] : selectValues)]
                     .map((value) => `<option value="${escapeHtml(value)}"${value === field.value ? ' selected' : ''}>${escapeHtml(value)}</option>`)
                     .join('');
-                const knownOptionChoices = Array.from(optionDefinitions.keys())
+                const knownOptionChoices = [...new Set([
+                    ...availableOptionNames,
+                    ...(field.key ? [field.key] : [])
+                ])]
                     .map((optionName) => `<option value="${escapeHtml(optionName)}"${optionName === field.key ? ' selected' : ''}>${escapeHtml(optionName)}</option>`)
                     .join('');
                 const valueControl = field.fields
@@ -1658,7 +1697,7 @@
         });
         document.getElementById('option-types-add').addEventListener('click', function() {
             readOptionTypesDraft();
-            optionTypesDraft.push({ name: '', type: 'text', values: [], rows: 2 });
+            optionTypesDraft.push({ name: '', type: 'text', appliesTo: 'both', values: [], rows: 2 });
             renderOptionTypesDraft();
             document.querySelector('#option-types-list > [data-option-type-row]:last-child [data-option-type-name]')?.focus();
         });
@@ -1667,11 +1706,25 @@
             readOptionTypesDraft();
         });
         document.getElementById('option-types-list').addEventListener('change', function(event) {
-            if (!event.target.matches('[data-option-value-type]')) return;
+            if (!event.target.matches('[data-option-value-type], [data-option-applies-to]')) return;
             readOptionTypesDraft();
-            renderOptionTypesDraft();
+            if (event.target.matches('[data-option-value-type]')) renderOptionTypesDraft();
         });
         document.getElementById('option-types-list').addEventListener('click', async function(event) {
+            const moveButton = event.target.closest('[data-option-type-move]');
+            if (moveButton && this.contains(moveButton)) {
+                readOptionTypesDraft();
+                const index = Number(moveButton.getAttribute('data-option-type-index'));
+                const direction = moveButton.getAttribute('data-option-type-move');
+                const destination = index + (direction === 'up' ? -1 : 1);
+                if (index >= 0 && destination >= 0 && destination < optionTypesDraft.length) {
+                    const [definition] = optionTypesDraft.splice(index, 1);
+                    optionTypesDraft.splice(destination, 0, definition);
+                    renderOptionTypesDraft();
+                    document.querySelector(`#option-types-list > [data-option-type-row]:nth-child(${destination + 1}) [data-option-type-name]`)?.focus();
+                }
+                return;
+            }
             const removeButton = event.target.closest('[data-option-type-remove]');
             if (!removeButton || !this.contains(removeButton)) return;
             const row = removeButton.closest('[data-option-type-row]');

@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="styles.css?v=118">
+    <link rel="stylesheet" href="styles.css?v=120">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -357,9 +357,10 @@
                 <li><strong>Tab:</strong> automatically lists the available tabs.</li>
                 <li><strong>Mapping:</strong> opens nested YAML options.</li>
                 <li><strong>Select:</strong> uses a dropdown populated by the comma-separated choices entered for the option.</li>
+                <li><strong>Applies to:</strong> limits new option choices to services, service groups, or both. Use the arrows to change the option order.</li>
             </ul>
             <form id="option-types-form">
-                <div class="option-types-heading" aria-hidden="true"><span>Option</span><span>Value type</span></div>
+                <div class="option-types-heading" aria-hidden="true"><span>Option</span><span>Value type</span><span>Applies to</span><span>Additional settings</span><span>Actions</span></div>
                 <div id="option-types-list" class="option-types-list"></div>
                 <button type="button" id="option-types-add" class="preview-add-option">+ Add option type</button>
                 <p id="option-types-status" class="modal-status" role="alert" hidden></p>
@@ -374,6 +375,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=96"></script>
+    <script src="app.js?v=98"></script>
 </body>
 </html>

@@ -14,6 +14,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- Added service/service-group applicability controls to Preview option types, filtered new editor choices by that setting, and added option-type reordering controls.
+- Aligned Option Types rows into a consistent settings-and-actions grid and merged newly introduced definition properties into existing local option-type files without replacing configured values or order.
 - Combined the Appearance and Preview options into one ordered Appearance section.
 - Widened the Settings dialog so the left navigation and options panels have more room on desktop.
 - Replaced the collapsible Settings sections with accessible left-side `Appearance` and `YAML tabs` navigation, keeping Preview controls grouped under Appearance.

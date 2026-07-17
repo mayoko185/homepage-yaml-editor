@@ -104,7 +104,7 @@ The selected theme, editor visibility, Auto Indent setting, Preview Auto Refresh
 
 ## Preview Option Types
 
-The control immediately to the right of Preview editing opens the Preview Option Types dialog. Its definitions are stored in `option-types.json` under `APP_DATA_DIR`, and determine whether an option uses a single-line input, text area, boolean icons, tab selector, nested mapping, or a fixed-choice dropdown. Select choices are managed as comma-separated values in that dialog. On startup, a missing file is created from the bundled defaults; when it already exists, only newly bundled option names are appended. Existing definitions and custom extra options are never replaced or removed.
+The control immediately to the right of Preview editing opens the Preview Option Types dialog. Its definitions are stored in `option-types.json` under `APP_DATA_DIR`, and determine whether an option uses a single-line input, text area, boolean icons, tab selector, nested mapping, or a fixed-choice dropdown. Each definition also specifies whether it applies to `Services`, `Service groups`, or `Services and groups`; the matching options are shown when adding fields in the corresponding Interactive Editor dialog. Use the up/down controls to order the definitions and put frequently used options first. Select choices are managed as comma-separated values in that dialog. On startup, a missing file is created from the bundled defaults. When a local file already exists, matching bundled definitions contribute only missing properties and missing bundled option names are appended; existing property values, custom options, and local order are preserved. Older definitions without an applicability value receive `both` unless the bundled definition provides a more specific default.
 
 `Download` creates a zip archive containing all seven supported YAML files from the editor after pending changes have been saved or discarded.
 
@@ -112,7 +112,7 @@ The control immediately to the right of Preview editing opens the Preview Option
 
 After loading a writable configuration directory, enable the pencil control in the Preview header to edit service groups and services visually. Preview edits update the YAML editor immediately but remain unsaved until `Save` is clicked.
 
-- Group and service edit dialogs list the YAML options currently configured for that item. Existing option names are fixed; remove and re-add an option to change its name. Options can be added, removed, or reordered before applying the edit, and nested mappings such as `widget` expand into their own editable option rows.
+- Group and service edit dialogs list the YAML options currently configured for that item. Existing option names are fixed; remove and re-add an option to change its name. New option choices are limited by the Option Types applicability setting. Options can be added, removed, or reordered before applying the edit, and nested mappings such as `widget` expand into their own editable option rows.
 - New services begin with `href`, `description`, and `icon` option rows for faster entry.
 - Group options are read from the matching `settings.yaml` layout entry. Editing its `tab` option shows a warning because it changes where the group appears in Preview.
 - Renaming, moving, deleting, or editing a group keeps its matching `settings.yaml` layout entry synchronized.

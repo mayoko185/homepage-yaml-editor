@@ -2,19 +2,23 @@
   {
     "name": "description",
     "type": "textarea",
+    "appliesTo": "service",
     "rows": 4
   },
   {
     "name": "widget",
-    "type": "mapping"
+    "type": "mapping",
+    "appliesTo": "service"
   },
   {
     "name": "tab",
-    "type": "tab"
+    "type": "tab",
+    "appliesTo": "group"
   },
   {
     "name": "target",
     "type": "select",
+    "appliesTo": "service",
     "values": [
       "_blank",
       "_self",
@@ -23,74 +27,92 @@
   },
   {
     "name": "header",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "group"
   },
   {
     "name": "showStats",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "service"
   },
   {
     "name": "showLabel",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "service"
   },
   {
     "name": "showStatus",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "service"
   },
   {
     "name": "showTime",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "service"
   },
   {
     "name": "showName",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "service"
   },
   {
     "name": "hideVersion",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "service"
   },
   {
     "name": "useEqualHeights",
-    "type": "boolean"
+    "type": "boolean",
+    "appliesTo": "group"
   },
   {
     "name": "icon",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "both"
   },
   {
     "name": "href",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   },
   {
     "name": "siteMonitor",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   },
   {
     "name": "statusStyle",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   },
   {
     "name": "style",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "group"
   },
   {
     "name": "columns",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "group"
   },
   {
     "name": "type",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   },
   {
     "name": "fields",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   },
   {
     "name": "url",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   },
   {
     "name": "key",
-    "type": "text"
+    "type": "text",
+    "appliesTo": "service"
   }
 ]

@@ -46,6 +46,7 @@ const ALLOWED_CONFIG_FILES = new Set(
   CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`))
 );
 const OPTION_VALUE_TYPES = new Set(['text', 'textarea', 'boolean', 'tab', 'mapping', 'select']);
+const OPTION_APPLIES_TO = new Set(['service', 'group', 'both']);
 const EXTRA_ALLOWED_CONFIG_DIRS = (process.env.ALLOWED_CONFIG_DIRS || '')
   .split(',')
   .map((dirPath) => dirPath.trim())
@@ -110,11 +111,13 @@ function normalizeOptionDefinitions(value) {
   return value.map((definition) => {
     const name = String(definition && definition.name || '').trim();
     const type = String(definition && definition.type || '').trim();
+    const appliesTo = String(definition && definition.appliesTo || 'both').trim();
     if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each Preview option type needs a single-line name');
     if (names.has(name)) throw createOptionTypeError(`Preview option type "${name}" is listed more than once. Remove the duplicate definition`);
     names.add(name);
     if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Preview option type "${name}" has unsupported value type "${type}". Choose text, textarea, boolean, tab, mapping, or select`);
-    const normalized = { name, type };
+    if (!OPTION_APPLIES_TO.has(appliesTo)) throw createOptionTypeError(`Preview option type "${name}" has unsupported applicability "${appliesTo}". Choose service, group, or both`);
+    const normalized = { name, type, appliesTo };
     if (type === 'select') {
       const values = Array.isArray(definition.values) ? definition.values : [];
       normalized.values = Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)));
@@ -150,11 +153,32 @@ async function saveOptionDefinitions(definitions) {
 
 async function ensureOptionDefinitions() {
   try {
-    const localDefinitions = normalizeOptionDefinitions(JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8')));
-    const localNames = new Set(localDefinitions.map((definition) => definition.name));
-    const missingDefaults = getDefaultOptionDefinitions().filter((definition) => !localNames.has(definition.name));
-    if (missingDefaults.length > 0) {
-      await writeJsonAtomically(OPTION_TYPES_PATH, [...localDefinitions, ...missingDefaults]);
+    const storedDefinitions = JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8'));
+    normalizeOptionDefinitions(storedDefinitions);
+    const defaultDefinitions = getDefaultOptionDefinitions();
+    const defaultByName = new Map(defaultDefinitions.map((definition) => [definition.name, definition]));
+    const storedNames = new Set(storedDefinitions.map((definition) => String(definition && definition.name || '').trim()));
+    const mergedLocalDefinitions = storedDefinitions.map((definition) => {
+      const defaults = defaultByName.get(String(definition && definition.name || '').trim());
+      if (!definition || typeof definition !== 'object' || Array.isArray(definition)) return definition;
+      const merged = { ...definition };
+      if (!defaults) {
+        if (!Object.prototype.hasOwnProperty.call(merged, 'appliesTo')) merged.appliesTo = 'both';
+        return merged;
+      }
+      Object.entries(defaults).forEach(([key, value]) => {
+        if ((key === 'values' || key === 'rows') && merged.type !== defaults.type) return;
+        if (!Object.prototype.hasOwnProperty.call(merged, key)) {
+          merged[key] = Array.isArray(value) ? [...value] : value;
+        }
+      });
+      return merged;
+    });
+    const missingDefaults = defaultDefinitions.filter((definition) => !storedNames.has(definition.name));
+    const mergedDefinitions = [...mergedLocalDefinitions, ...missingDefaults];
+    normalizeOptionDefinitions(mergedDefinitions);
+    if (JSON.stringify(mergedDefinitions) !== JSON.stringify(storedDefinitions)) {
+      await writeJsonAtomically(OPTION_TYPES_PATH, mergedDefinitions);
     }
   } catch (error) {
     if (error.code === 'ENOENT') {

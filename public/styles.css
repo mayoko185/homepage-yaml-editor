@@ -2057,7 +2057,7 @@
         }
         .option-types-heading {
             display: grid;
-            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr);
+            grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.85fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
             gap: 8px;
             margin: 16px 8px -8px;
             color: var(--text-color);
@@ -2067,7 +2067,7 @@
         }
         .option-types-row {
             display: grid;
-            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) auto;
+            grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.85fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
             align-items: center;
             gap: 8px;
             padding: 8px;
@@ -2075,17 +2075,22 @@
             border-radius: 9px;
             background: var(--config-item-bg);
         }
-        .option-types-row.has-select-values,
-        .option-types-row.has-textarea-rows {
-            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(170px, 1.3fr) auto;
-        }
         .option-types-row .modal-input {
             min-width: 0;
             margin: 0;
             padding: 8px 9px;
             font-size: 0.88rem;
         }
-        .option-types-row .preview-edit-action {
+        .option-types-extra-placeholder {
+            min-width: 0;
+            min-height: 34px;
+            visibility: hidden;
+        }
+        .option-types-actions {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
             justify-self: end;
         }
         @media (max-width: 720px) {
@@ -2096,12 +2101,17 @@
             }
             .option-types-row [data-option-type-name],
             .option-types-row [data-option-value-type],
+            .option-types-row [data-option-applies-to],
             .option-types-row [data-option-select-values],
             .option-types-row [data-option-textarea-rows],
-            .option-types-row .preview-edit-action {
+            .option-types-row .option-types-extra-placeholder,
+            .option-types-row .option-types-actions {
                 grid-column: 1;
             }
-            .option-types-row .preview-edit-action {
+            .option-types-row .option-types-extra-placeholder {
+                display: none;
+            }
+            .option-types-row .option-types-actions {
                 justify-self: end;
             }
         }
