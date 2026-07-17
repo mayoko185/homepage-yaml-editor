@@ -22,13 +22,13 @@
 
         async function loadSampleConfigs() {
             const response = await fetch('/api/examples', { cache: 'no-store' });
-            const payload = await response.json();
+            const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
-                throw new Error(payload.details || payload.error || 'The example files could not be loaded');
+                throw new Error(getApiErrorMessage(payload, response, 'Could not load example configurations'));
             }
             for (const tabName of Object.keys(sampleConfigs)) {
                 if (typeof payload.samples?.[tabName] !== 'string') {
-                    throw new Error(`${tabName}.yaml is missing from the examples directory`);
+                    throw new Error(`The server did not return the ${tabName}.yaml example configuration`);
                 }
                 sampleConfigs[tabName] = payload.samples[tabName];
             }
@@ -382,7 +382,7 @@
                 ? `Autoloaded ${fileCount}/${configTabNames.length}`
                 : `Loaded ${fileCount}/${configTabNames.length} from ${directory}`;
             statusElement.textContent = missingCount > 0
-                ? `${missingCount} YAML file${missingCount === 1 ? '' : 's'} missing; examples marked to save. ${loadedMessage}`
+                ? `${missingCount} YAML file${missingCount === 1 ? '' : 's'} missing; example content is shown and will be created if saved. ${loadedMessage}`
                 : loadedMessage;
             statusElement.title = statusElement.textContent;
             statusElement.dataset.state = missingCount > 0 ? 'warning' : 'loaded';
@@ -401,7 +401,21 @@
 
         function getSaveErrorSummary(error) {
             const message = error && error.message ? error.message : error;
-            return String(message || 'Unknown error').split('\n')[0];
+            return String(message || 'The operation could not be completed').split('\n')[0].trim();
+        }
+
+        function addErrorGuidance(error, guidance) {
+            const summary = getSaveErrorSummary(error);
+            return `${summary}${/[.!?]$/.test(summary) ? '' : '.'} ${guidance}`;
+        }
+
+        function getApiErrorMessage(data, response, fallback) {
+            const details = typeof data?.details === 'string' ? data.details.trim() : '';
+            const errorMessage = typeof data?.error === 'string' ? data.error.trim() : '';
+            if (details) return details;
+            if (errorMessage) return errorMessage;
+            const status = response && response.status ? ` (HTTP ${response.status})` : '';
+            return `${fallback}${status}`;
         }
 
         function formatYamlError(error) {
@@ -411,14 +425,16 @@
                 || 'Invalid YAML'
             ).replace(/^YAMLException:\s*/i, '').trim();
             const friendlyReasons = [
-                [/duplicated mapping key/i, 'This key is defined more than once.'],
-                [/bad indentation of a mapping entry/i, 'Check the indentation for this key or value.'],
-                [/bad indentation of a sequence entry/i, 'Check the indentation for this list item.'],
+                [/map keys must be unique|duplicated mapping key/i, 'Duplicate mapping key. Each key in a YAML mapping must be unique; rename or remove the duplicate key.'],
+                [/bad indentation of a mapping entry/i, 'Invalid indentation. Align this key with the surrounding YAML structure.'],
+                [/bad indentation of a sequence entry/i, 'Invalid indentation. Align this list item with the surrounding YAML structure.'],
+                [/tab.*indentation/i, 'Tabs cannot be used for YAML indentation; replace tabs with spaces.'],
                 [/can not read a block mapping entry/i, 'A key is missing a value, or the indentation is incorrect.'],
                 [/end of the stream or a document separator is expected/i, 'Check for incorrect indentation or a missing colon.'],
                 [/missed comma between flow collection entries/i, 'Add a comma between the inline list or object values.'],
                 [/unexpected end of the stream/i, 'The YAML ends before this value or block is complete.'],
-                [/unknown escape sequence/i, 'This quoted value contains an unsupported escape sequence.']
+                [/unknown escape sequence/i, 'This quoted value contains an unsupported escape sequence.'],
+                [/unexpected character/i, 'Unexpected character. Check quotes, colons, brackets, and commas near this line.']
             ];
             const matchedReason = friendlyReasons.find(([pattern]) => pattern.test(rawReason));
             const summary = matchedReason
@@ -431,7 +447,7 @@
 
         function formatYamlErrorLocation(error) {
             if (!error.line) {
-                return 'Location unavailable';
+                return 'Line unavailable';
             }
             return `Line ${error.line}${error.column ? `, column ${error.column}` : ''}`;
         }
@@ -492,10 +508,7 @@
                         });
                         const data = await response.json().catch(() => ({}));
                         if (!response.ok || data.error) {
-                            const message = data.details
-                                ? `${data.error}: ${data.details}`
-                                : (data.error || `Request failed with status ${response.status}`);
-                            throw new Error(message);
+                            throw new Error(getApiErrorMessage(data, response, `Could not save ${config.filename}`));
                         }
 
                         loadedFiles[config.tabName] = config.yamlText;
@@ -509,7 +522,7 @@
                 if (failedConfigs.length > 0) {
                     const firstFailure = failedConfigs[0];
                     setSaveStatus(
-                        `Saved ${savedConfigs.length} of ${unsavedConfigs.length}. Could not save ${firstFailure.config.filename}: ${getSaveErrorSummary(firstFailure.error)}`,
+                        `Saved ${savedConfigs.length} of ${unsavedConfigs.length}. Could not save ${firstFailure.config.filename}: ${addErrorGuidance(firstFailure.error, 'Fix the error and try Save again')}`,
                         'error'
                     );
                 } else {
@@ -552,7 +565,7 @@
                 URL.revokeObjectURL(downloadUrl);
             } catch (error) {
                 console.error('Error:', error);
-                setSaveStatus(`Could not download configurations: ${getSaveErrorSummary(error)}`, 'error');
+                setSaveStatus(`Could not create the configuration download: ${getSaveErrorSummary(error)}`, 'error');
             }
         }
 
@@ -665,19 +678,21 @@
                 applyPersistentAppSettings(await loadPersistentAppSettings());
             } catch (error) {
                 console.warn('Could not load persistent app settings', error);
+                setSaveStatus(`Could not load editor settings; using defaults. ${addErrorGuidance(error, 'You can try again from the Settings dialog')}`, 'error');
             }
 
             try {
                 await loadOptionDefinitions();
             } catch (error) {
                 console.warn('Could not load option type definitions', error);
+                setSaveStatus(`Could not load Preview option types. Some editing controls may be unavailable. ${addErrorGuidance(error, 'You can try again by reloading the page')}`, 'error');
             }
 
             try {
                 await loadSampleConfigs();
             } catch (error) {
                 console.error('Example configuration load failed:', error);
-                setSaveStatus(`Could not load examples: ${error.message}`, 'error');
+                setSaveStatus(`Could not load example configurations: ${addErrorGuidance(error, 'Reload the page and try again')}`, 'error');
             }
             
             loadedFiles = { ...sampleConfigs };
@@ -700,6 +715,7 @@
                 }
             } catch (error) {
                 console.error('Startup directory load failed:', error);
+                setSaveStatus(`Could not check the startup directory. ${addErrorGuidance(error, 'Use Load to choose a directory manually')}`, 'error');
             }
         };
 
@@ -777,7 +793,7 @@
         function findPreviewGroup(source) {
             const services = parseTabConfig('services');
             if (services.error || !Array.isArray(services.data)) {
-                throw new Error('Fix the services.yaml error before editing the Preview.');
+                throw new Error('Fix the services.yaml error shown in the Preview before editing it.');
             }
             let seen = 0;
             for (const group of services.data) {
@@ -788,7 +804,7 @@
                 }
                 seen++;
             }
-            throw new Error(`Could not find service group "${source.groupName}".`);
+            throw new Error(`Service group "${source.groupName}" is no longer available. Refresh the Preview and try again.`);
         }
 
         function findPreviewService(source) {
@@ -802,7 +818,7 @@
                 }
                 seen++;
             }
-            throw new Error(`Could not find service "${source.serviceName}".`);
+            throw new Error(`Service "${source.serviceName}" is no longer available. Refresh the Preview and try again.`);
         }
 
         let optionDefinitions = new Map();
@@ -821,8 +837,10 @@
 
         async function loadOptionDefinitions() {
             const response = await fetch('/api/option-types', { cache: 'no-store' });
-            if (!response.ok) throw new Error('Option type definitions request failed');
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(getApiErrorMessage(data, response, 'Could not load Preview option types'));
+            }
             setOptionDefinitions(data.options);
             return data.options;
         }
@@ -894,13 +912,15 @@
                     body: JSON.stringify({ options: optionTypesDraft })
                 });
                 const data = await response.json().catch(() => ({}));
-                if (!response.ok || data.error) throw new Error(data.details || data.error || 'Could not save option types');
+                if (!response.ok || data.error) {
+                    throw new Error(getApiErrorMessage(data, response, 'Could not save Preview option types'));
+                }
                 setOptionDefinitions(data.options);
                 if (previewEditDialogState) renderPreviewEditOptions();
                 setSaveStatus('Preview option types saved.', 'success');
                 closeOptionTypesModal();
             } catch (error) {
-                setOptionTypesStatus(getSaveErrorSummary(error));
+                setOptionTypesStatus(addErrorGuidance(error, 'Review the option type values and try again'));
             } finally {
                 saveButton.disabled = false;
             }
@@ -1059,7 +1079,7 @@
             } else if (action === 'group.edit') {
                 const group = findPreviewGroup(source);
                 const settings = parseTabConfig('settings');
-                if (settings.error) throw new Error('Fix the settings.yaml error before editing this group.');
+                if (settings.error) throw new Error('Fix the settings.yaml error shown in the Preview before editing this group.');
                 const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
                     ? settings.data.layout : {};
                 title.textContent = 'Edit service group';
@@ -1114,15 +1134,15 @@
             const settings = parseTabConfig('settings');
             const services = parseTabConfig('services');
             if (settings.error) {
-                throw new Error('Fix the settings.yaml error before managing tabs.');
+                throw new Error('Fix the settings.yaml error shown in the Preview before managing tabs.');
             }
             if (services.error || !Array.isArray(services.data)) {
-                throw new Error('Fix the services.yaml error before managing tabs.');
+                throw new Error('Fix the services.yaml error shown in the Preview before managing tabs.');
             }
             const settingsData = settings.data && typeof settings.data === 'object' ? settings.data : {};
             const layout = settingsData.layout;
             if (layout !== undefined && (typeof layout !== 'object' || Array.isArray(layout) || layout === null)) {
-                throw new Error('Tab management currently requires settings.yaml layout to use a group mapping.');
+                throw new Error('Preview tab management requires settings.yaml layout to be a mapping of group names to options.');
             }
             const layoutGroups = layout || {};
             const tabs = [];
@@ -1197,7 +1217,7 @@
                 list.innerHTML = `<div class="preview-tab-manager-empty">${escapeHtml(getSaveErrorSummary(error))}</div>`;
                 groupSelect.innerHTML = '';
                 submitButton.disabled = true;
-                setPreviewTabModalStatus(getSaveErrorSummary(error));
+                setPreviewTabModalStatus(addErrorGuidance(error, 'Fix the YAML error and try again'));
             }
         }
 
@@ -1262,35 +1282,39 @@
                 renderPreviewTabManager();
                 nameInput.focus();
             } else {
-                setPreviewTabModalStatus('The tab was not added. Check the page message for details.');
+                setPreviewTabModalStatus('Could not add the tab. See the application notification for the reason.');
             }
         }
 
         async function handlePreviewTabManagerAction(action, tabName) {
-            if (action === 'move-up' || action === 'move-down') {
-                const direction = action === 'move-up' ? 'up' : 'down';
-                const applied = await applyPreviewEdit(
-                    { type: 'tab.move', target: { name: tabName }, direction },
-                    `Moved tab ${tabName} ${direction}.`
-                );
-                if (applied) renderPreviewTabManager();
-                return;
-            }
-            if (action === 'remove') {
-                const data = getPreviewTabManagerData();
-                const groupCount = (data.groupsByTab[tabName] || []).length;
-                const confirmed = await showConfirmationDialog({
-                    title: 'Remove Preview tab?',
-                    message: `Remove ${tabName}? ${groupCount} assigned group${groupCount === 1 ? '' : 's'} will become visible on every tab. No groups or services will be deleted.`,
-                    confirmText: 'Remove tab'
-                });
-                if (confirmed) {
+            try {
+                if (action === 'move-up' || action === 'move-down') {
+                    const direction = action === 'move-up' ? 'up' : 'down';
                     const applied = await applyPreviewEdit(
-                        { type: 'tab.remove', target: { name: tabName } },
-                        `Removed tab ${tabName}.`
+                        { type: 'tab.move', target: { name: tabName }, direction },
+                        `Moved tab ${tabName} ${direction}.`
                     );
                     if (applied) renderPreviewTabManager();
+                    return;
                 }
+                if (action === 'remove') {
+                    const data = getPreviewTabManagerData();
+                    const groupCount = (data.groupsByTab[tabName] || []).length;
+                    const confirmed = await showConfirmationDialog({
+                        title: 'Remove Preview tab?',
+                        message: `Remove ${tabName}? ${groupCount} assigned group${groupCount === 1 ? '' : 's'} will become visible on every tab. No groups or services will be deleted.`,
+                        confirmText: 'Remove tab'
+                    });
+                    if (confirmed) {
+                        const applied = await applyPreviewEdit(
+                            { type: 'tab.remove', target: { name: tabName } },
+                            `Removed tab ${tabName}.`
+                        );
+                        if (applied) renderPreviewTabManager();
+                    }
+                }
+            } catch (error) {
+                setPreviewTabModalStatus(`Could not update Preview tabs. ${addErrorGuidance(error, 'Fix the YAML error and try again')}`);
             }
         }
 
@@ -1339,7 +1363,7 @@
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || data.error) {
-                    throw new Error(data.details || data.error || 'The Preview edit could not be applied');
+                    throw new Error(getApiErrorMessage(data, response, 'Could not apply the Preview edit'));
                 }
                 previewUndoState = { files: beforeFiles, message: successMessage };
                 replacePreviewEditedFiles(data.files);
@@ -1347,7 +1371,7 @@
                 setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
                 return true;
             } catch (error) {
-                setSaveStatus(`Could not edit Preview: ${getSaveErrorSummary(error)}`, 'error');
+                setSaveStatus(`Could not edit Preview: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
                 return false;
             }
         }
@@ -1399,7 +1423,7 @@
             const applied = await applyPreviewEdit({ type: action, target: source, values }, message);
             submitButton.disabled = false;
             if (applied) closePreviewEditDialog();
-            else setPreviewEditModalStatus('The edit was not applied. Check the page message for details.');
+            else setPreviewEditModalStatus('Could not apply the edit. See the application notification for the reason.');
         }
 
         function undoPreviewEdit() {
@@ -1467,7 +1491,7 @@
                     }
                 }
             } catch (error) {
-                setSaveStatus(`Could not edit Preview: ${getSaveErrorSummary(error)}`, 'error');
+                setSaveStatus(`Could not edit Preview: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
             }
         }
 
@@ -1480,10 +1504,9 @@
                 body: JSON.stringify({ dirPath })
             });
 
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
             if (!response.ok || data.error) {
-                const message = data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to load directory');
-                throw new Error(message);
+                throw new Error(getApiErrorMessage(data, response, 'Could not load the configuration directory'));
             }
             return data;
         }
@@ -1505,7 +1528,7 @@
                 closeDirectoryModal();
             } catch (error) {
                 console.error('Directory load error:', error);
-                setDirectoryModalStatus(`Could not load the directory: ${getSaveErrorSummary(error)}`);
+                setDirectoryModalStatus(`Could not load the directory. ${addErrorGuidance(error, 'Check the path and permissions, then try again')}`);
             } finally {
                 loadButton.disabled = false;
             }
@@ -1536,7 +1559,7 @@
                 setSaveStatus(`Reloaded ${Object.keys(data.files || {}).length} configurations.`, 'success');
             } catch (error) {
                 console.error('Directory reload error:', error);
-                setSaveStatus(`Could not reload directory: ${getSaveErrorSummary(error)}`, 'error');
+                setSaveStatus(`Could not reload the directory. ${addErrorGuidance(error, 'Check the path and permissions, then try again')}`, 'error');
             } finally {
                 reloadButton.disabled = false;
             }
@@ -2630,8 +2653,10 @@
         }
         async function loadPersistentAppSettings() {
             const response = await fetch('/api/app-settings', { cache: 'no-store' });
-            if (!response.ok) throw new Error('Settings request failed');
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(getApiErrorMessage(data, response, 'Could not load editor settings'));
+            }
             return data.settings || {};
         }
         function applyPersistentAppSettings(settings) {
@@ -2667,12 +2692,15 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ settings })
                     });
-                    if (!response.ok) throw new Error('Settings save failed');
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || data.error) {
+                        throw new Error(getApiErrorMessage(data, response, 'Could not save editor settings'));
+                    }
                 })
                 .then(() => true)
                 .catch((error) => {
                     console.warn('Could not save persistent app settings', error);
-                    return false;
+                    return { ok: false, error };
                 });
             return pendingAppSettingsSave;
         }
@@ -2753,11 +2781,12 @@
                 tabOrder: tabSettings.tabOrder,
                 visibleTabs: tabSettings.visibleTabs
             });
-            if (await persistAppSettings()) {
+            const saveResult = await persistAppSettings();
+            if (saveResult === true) {
                 setSaveStatus('Editor settings saved.', 'success');
                 closeSettingsModal();
             } else {
-                setSaveStatus('Could not save editor settings.', 'error');
+                setSaveStatus(`Could not save editor settings. ${addErrorGuidance(saveResult.error, 'Check the application data directory and try again')}`, 'error');
             }
         }
         function updateAutoIndentLabel() {

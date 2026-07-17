@@ -8,6 +8,29 @@ class YamlTransformError extends Error {
   }
 }
 
+function formatYamlParseError(error) {
+  const rawReason = String(error && (error.reason || error.message) || 'Invalid YAML')
+    .split('\n')[0]
+    .trim();
+  const friendlyReasons = [
+    [/DUPLICATE_KEY|map keys must be unique|duplicated mapping key/i, 'Duplicate mapping key. Each key in a YAML mapping must be unique. Rename or remove the duplicate key.'],
+    [/BAD_INDENT|bad indentation/i, 'Invalid indentation. Align this key or list item with the surrounding YAML structure.'],
+    [/TAB_AS_INDENT|tab.*indent/i, 'Tabs cannot be used for YAML indentation. Replace tabs with spaces.'],
+    [/MISSING_CHAR|missing.*character/i, 'A YAML punctuation mark is missing. Check nearby colons, brackets, commas, and quotes.'],
+    [/UNEXPECTED_TOKEN|unexpected token/i, 'Unexpected YAML content. Check the syntax near this location.']
+  ];
+  const matchedReason = friendlyReasons.find(([pattern]) => pattern.test(String(error && error.code || '')))
+    || friendlyReasons.find(([pattern]) => pattern.test(rawReason));
+  const summary = matchedReason
+    ? matchedReason[1]
+    : `${rawReason.charAt(0).toUpperCase()}${rawReason.slice(1)}${/[.!?]$/.test(rawReason) ? '' : '.'}`;
+  const position = Array.isArray(error && error.linePos) ? error.linePos[0] : null;
+  const location = position && Number.isInteger(position.line) && Number.isInteger(position.col)
+    ? `at line ${position.line}, column ${position.col}`
+    : '';
+  return location ? `${summary} (${location})` : summary;
+}
+
 function parseDocument(yamlText, filename) {
   if (typeof yamlText !== 'string') {
     throw new YamlTransformError(`${filename} content is required`);
@@ -17,7 +40,7 @@ function parseDocument(yamlText, filename) {
     prettyErrors: true
   });
   if (document.errors.length > 0) {
-    throw new YamlTransformError(`${filename} is invalid: ${document.errors[0].message}`);
+    throw new YamlTransformError(`${filename} is invalid: ${formatYamlParseError(document.errors[0])}`);
   }
   return document;
 }
@@ -30,7 +53,7 @@ function scalarValue(node) {
 
 function getSinglePair(mapNode, label) {
   if (!YAML.isMap(mapNode) || mapNode.items.length === 0) {
-    throw new YamlTransformError(`${label} has an unsupported YAML structure`);
+    throw new YamlTransformError(`${label} must be a YAML mapping with one name and its value`);
   }
   return mapNode.items[0];
 }
@@ -51,7 +74,7 @@ function findNamedSequenceItem(sequence, name, occurrenceIndex, label) {
     }
     seen++;
   }
-  throw new YamlTransformError(`${label} "${name}" could not be found`);
+  throw new YamlTransformError(`${label} "${name}" was not found. It may have been renamed or removed; reload the directory and try again`);
 }
 
 function getServicesSequence(document) {
@@ -59,7 +82,7 @@ function getServicesSequence(document) {
     document.contents = document.createNode([]);
   }
   if (!YAML.isSeq(document.contents)) {
-    throw new YamlTransformError('services.yaml must contain a list of service groups');
+    throw new YamlTransformError('services.yaml must be a YAML list of service groups');
   }
   return document.contents;
 }
@@ -73,10 +96,19 @@ function getGroup(document, target) {
   );
 }
 
+function assertUniqueGroupName(servicesSequence, name, excludedIndex = -1) {
+  const alreadyExists = servicesSequence.items.some((item, index) => (
+    index !== excludedIndex && scalarValue(getSinglePair(item, 'Service group').key) === name
+  ));
+  if (alreadyExists) {
+    throw new YamlTransformError(`Group "${name}" already exists. Choose a different group name`);
+  }
+}
+
 function getService(document, target) {
   const group = getGroup(document, target);
   if (!YAML.isSeq(group.pair.value)) {
-    throw new YamlTransformError(`Service group "${target.groupName}" must contain a list`);
+    throw new YamlTransformError(`Service group "${target.groupName}" must be a YAML list of services`);
   }
   const service = findNamedSequenceItem(
     group.pair.value,
@@ -90,10 +122,10 @@ function getService(document, target) {
 function requireName(value, label) {
   const name = String(value || '').trim();
   if (!name) {
-    throw new YamlTransformError(`${label} name is required`);
+    throw new YamlTransformError(`${label} name is required. Enter a name and try again`);
   }
   if (/\r|\n/.test(name)) {
-    throw new YamlTransformError(`${label} name must be a single line`);
+    throw new YamlTransformError(`${label} name must be a single line. Remove the line break and try again`);
   }
   return name;
 }
@@ -125,13 +157,13 @@ function setServiceFields(document, servicePair, values) {
 
 function normalizeEditableFields(fields) {
   if (!Array.isArray(fields)) {
-    throw new YamlTransformError('Preview options must be a list');
+    throw new YamlTransformError('Preview options must be a YAML list');
   }
   const seen = new Set();
   return fields.map((field) => {
     const key = requireName(field && field.key, 'Option');
     if (seen.has(key)) {
-      throw new YamlTransformError(`Option "${key}" is listed more than once`);
+      throw new YamlTransformError(`Option "${key}" is listed more than once. Keep only one row for each option`);
     }
     seen.add(key);
     if (Array.isArray(field && field.fields)) {
@@ -145,14 +177,14 @@ function parseEditableValue(value, key) {
   if (value === '') return '';
   const document = YAML.parseDocument(value, { prettyErrors: true });
   if (document.errors.length > 0) {
-    throw new YamlTransformError(`Option "${key}" has an invalid YAML value: ${document.errors[0].message}`);
+    throw new YamlTransformError(`Option "${key}" contains invalid YAML: ${formatYamlParseError(document.errors[0])}`);
   }
   return document.toJS();
 }
 
 function setMapFields(document, map, fields) {
   if (!YAML.isMap(map)) {
-    throw new YamlTransformError('Options must use a YAML mapping');
+    throw new YamlTransformError('Preview options must use a YAML mapping of names and values');
   }
   const existingPairs = new Map();
   map.items.forEach((pair) => {
@@ -197,7 +229,7 @@ function getOrCreateLayoutMap(settingsDocument) {
     settingsDocument.contents = settingsDocument.createNode({});
   }
   if (!YAML.isMap(settingsDocument.contents)) {
-    throw new YamlTransformError('settings.yaml must contain a YAML mapping');
+    throw new YamlTransformError('settings.yaml must be a YAML mapping of Homepage settings');
   }
   let layoutPair = findTopLevelMapPair(settingsDocument, 'layout');
   if (!layoutPair) {
@@ -205,7 +237,7 @@ function getOrCreateLayoutMap(settingsDocument) {
     layoutPair = findTopLevelMapPair(settingsDocument, 'layout');
   }
   if (!YAML.isMap(layoutPair.value)) {
-    throw new YamlTransformError('settings.yaml layout must contain a mapping of groups');
+    throw new YamlTransformError('settings.yaml layout must be a YAML mapping of group names to layout options');
   }
   return layoutPair.value;
 }
@@ -274,7 +306,7 @@ function getLayoutTabs(layoutMap) {
 function addLayoutTab(settingsDocument, tabName, groupName) {
   const layoutMap = getOrCreateLayoutMap(settingsDocument);
   if (getLayoutTabs(layoutMap).includes(tabName)) {
-    throw new YamlTransformError(`Tab "${tabName}" already exists`);
+    throw new YamlTransformError(`Preview tab "${tabName}" already exists. Choose a different tab name`);
   }
   const layoutEntry = findLayoutPair(layoutMap, groupName);
   if (!layoutEntry) {
@@ -285,7 +317,7 @@ function addLayoutTab(settingsDocument, tabName, groupName) {
     layoutEntry.pair.value = settingsDocument.createNode({});
   }
   if (!YAML.isMap(layoutEntry.pair.value)) {
-    throw new YamlTransformError(`Layout group "${groupName}" has an unsupported structure`);
+    throw new YamlTransformError(`Layout group "${groupName}" must be a YAML mapping of layout options`);
   }
   layoutEntry.pair.value.set('tab', tabName);
 }
@@ -293,7 +325,7 @@ function addLayoutTab(settingsDocument, tabName, groupName) {
 function removeLayoutTab(settingsDocument, tabName) {
   const layoutMap = getLayoutMap(settingsDocument);
   if (!layoutMap) {
-    throw new YamlTransformError(`Tab "${tabName}" could not be found`);
+    throw new YamlTransformError(`Preview tab "${tabName}" was not found. Check its name and try again`);
   }
   let changed = false;
   for (const pair of layoutMap.items) {
@@ -303,21 +335,27 @@ function removeLayoutTab(settingsDocument, tabName) {
     }
   }
   if (!changed) {
-    throw new YamlTransformError(`Tab "${tabName}" could not be found`);
+    throw new YamlTransformError(`Preview tab "${tabName}" was not found. Check its name and try again`);
   }
 }
 
 function moveLayoutTab(settingsDocument, tabName, direction) {
   const layoutMap = getLayoutMap(settingsDocument);
   if (!layoutMap) {
-    throw new YamlTransformError(`Tab "${tabName}" could not be found`);
+    throw new YamlTransformError(`Preview tab "${tabName}" was not found. Check its name and try again`);
   }
   const tabs = getLayoutTabs(layoutMap);
   const tabIndex = tabs.indexOf(tabName);
   const offset = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
   const destination = tabIndex + offset;
-  if (tabIndex === -1 || !offset || destination < 0 || destination >= tabs.length) {
-    throw new YamlTransformError('The tab cannot be moved farther in that direction');
+  if (!['up', 'down'].includes(direction)) {
+    throw new YamlTransformError('Tab move direction must be "up" or "down"');
+  }
+  if (tabIndex === -1) {
+    throw new YamlTransformError(`Preview tab "${tabName}" was not found. Check its name and try again`);
+  }
+  if (destination < 0 || destination >= tabs.length) {
+    throw new YamlTransformError(`Preview tab "${tabName}" is already at the ${direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
   }
   const adjacentTab = tabs[destination];
   const currentPairIndex = layoutMap.items.findIndex((pair) => getLayoutPairTab(pair) === tabName);
@@ -340,7 +378,7 @@ function serializeDocument(document, originalText) {
 
 function transformPreviewYaml({ files, operation }) {
   if (!files || typeof files !== 'object' || !operation || typeof operation !== 'object') {
-    throw new YamlTransformError('Files and a preview edit operation are required');
+    throw new YamlTransformError('Preview edit request must include the current YAML files and an edit operation');
   }
 
   const servicesText = files.services;
@@ -402,8 +440,11 @@ function transformPreviewYaml({ files, operation }) {
       const { service, services } = getService(servicesDocument, target);
       const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
       const destination = service.index + offset;
-      if (!offset || destination < 0 || destination >= services.items.length) {
-        throw new YamlTransformError('The service cannot be moved farther in that direction');
+      if (!['up', 'down'].includes(operation.direction)) {
+        throw new YamlTransformError('Service move direction must be "up" or "down"');
+      }
+      if (destination < 0 || destination >= services.items.length) {
+        throw new YamlTransformError(`Service "${target.serviceName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group and cannot be moved farther`);
       }
       const [item] = services.items.splice(service.index, 1);
       services.items.splice(destination, 0, item);
@@ -412,6 +453,7 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'group.add': {
       const name = requireName(values.name, 'Group');
+      assertUniqueGroupName(servicesSequence, name);
       servicesSequence.items.push(servicesDocument.createNode({ [name]: [] }));
       servicesChanged = true;
       break;
@@ -421,6 +463,12 @@ function transformPreviewYaml({ files, operation }) {
       const group = getGroup(servicesDocument, target);
       const name = requireName(values.name, 'Group');
       const oldName = scalarValue(group.pair.key);
+      if (name !== oldName) {
+        assertUniqueGroupName(servicesSequence, name, group.index);
+        if (findLayoutPair(getLayoutMap(settingsDocument), name)) {
+          throw new YamlTransformError(`Group "${name}" already exists. Choose a different group name`);
+        }
+      }
       if (YAML.isScalar(group.pair.key)) group.pair.key.value = name;
       servicesChanged = true;
       settingsChanged = syncLayoutRename(settingsDocument, oldName, name);
@@ -461,8 +509,11 @@ function transformPreviewYaml({ files, operation }) {
       const group = getGroup(servicesDocument, target);
       const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
       const destination = group.index + offset;
-      if (!offset || destination < 0 || destination >= servicesSequence.items.length) {
-        throw new YamlTransformError('The group cannot be moved farther in that direction');
+      if (!['up', 'down'].includes(operation.direction)) {
+        throw new YamlTransformError('Group move direction must be "up" or "down"');
+      }
+      if (destination < 0 || destination >= servicesSequence.items.length) {
+        throw new YamlTransformError(`Group "${target.groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
       }
       const adjacentPair = getSinglePair(servicesSequence.items[destination], 'Service group');
       settingsChanged = syncLayoutMove(
@@ -484,12 +535,12 @@ function transformPreviewYaml({ files, operation }) {
       const hasLayoutGroup = Boolean(findLayoutPair(getLayoutMap(settingsDocument), groupName));
       if (values.createGroup === true) {
         if (hasServiceGroup || hasLayoutGroup) {
-          throw new YamlTransformError(`Group "${groupName}" already exists`);
+          throw new YamlTransformError(`Group "${groupName}" already exists. Choose a different group name`);
         }
         servicesSequence.items.push(servicesDocument.createNode({ [groupName]: [] }));
         servicesChanged = true;
       } else if (!hasServiceGroup && !hasLayoutGroup) {
-        throw new YamlTransformError(`Group "${groupName}" could not be found`);
+        throw new YamlTransformError(`Initial group "${groupName}" was not found. Choose an existing group or create a new one`);
       }
       addLayoutTab(settingsDocument, tabName, groupName);
       settingsChanged = true;
@@ -508,7 +559,7 @@ function transformPreviewYaml({ files, operation }) {
       break;
     }
     default:
-      throw new YamlTransformError('Unsupported preview edit operation');
+      throw new YamlTransformError(`Preview edit type "${operation.type || 'unknown'}" is not supported`);
   }
 
   const transformedFiles = {
@@ -521,6 +572,7 @@ function transformPreviewYaml({ files, operation }) {
 }
 
 module.exports = {
+  formatYamlParseError,
   YamlTransformError,
   transformPreviewYaml
 };

@@ -27,6 +27,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Clarified YAML parser, Preview editing, directory, file-save, and background-load errors with actionable context and next steps.
+- Prevented Preview service-group edits from creating duplicate group names and invalid `settings.yaml` mappings.
 - Added a confirmation warning before removing an Option Types definition.
 - Simplified the Option Types removal confirmation wording.
 - Fixed Option Types so all textarea options expose their row setting and saved type changes refresh an open Preview editor immediately.

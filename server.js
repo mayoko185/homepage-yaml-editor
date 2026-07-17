@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const YAML = require('yaml');
-const { transformPreviewYaml } = require('./yaml-transform');
+const { formatYamlParseError, transformPreviewYaml } = require('./yaml-transform');
 const defaultOptionDefinitions = require('./option-types.default.json');
 
 const app = express();
@@ -105,20 +105,20 @@ function createOptionTypeError(message) {
 }
 
 function normalizeOptionDefinitions(value) {
-  if (!Array.isArray(value)) throw createOptionTypeError('Option definitions must be a list');
+  if (!Array.isArray(value)) throw createOptionTypeError('Preview option types must be provided as a JSON list');
   const names = new Set();
   return value.map((definition) => {
     const name = String(definition && definition.name || '').trim();
     const type = String(definition && definition.type || '').trim();
-    if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each option definition needs a single-line name');
-    if (names.has(name)) throw createOptionTypeError(`Option "${name}" is listed more than once`);
+    if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each Preview option type needs a single-line name');
+    if (names.has(name)) throw createOptionTypeError(`Preview option type "${name}" is listed more than once. Remove the duplicate definition`);
     names.add(name);
-    if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Option "${name}" has an unsupported value type`);
+    if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Preview option type "${name}" has unsupported value type "${type}". Choose text, textarea, boolean, tab, mapping, or select`);
     const normalized = { name, type };
     if (type === 'select') {
       const values = Array.isArray(definition.values) ? definition.values : [];
       normalized.values = Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)));
-      if (normalized.values.length === 0) throw createOptionTypeError(`Select option "${name}" needs at least one choice`);
+      if (normalized.values.length === 0) throw createOptionTypeError(`Select option "${name}" needs at least one choice. Add a comma-separated choice`);
     }
     if (type === 'textarea' && Number.isFinite(Number(definition.rows))) {
       normalized.rows = Math.max(2, Math.min(12, Math.round(Number(definition.rows))));
@@ -225,12 +225,15 @@ app.use((req, res, next) => {
 });
 app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
-    return res.status(400).json({ error: 'Invalid JSON request body', details: error.message });
+    return res.status(400).json({
+      error: 'Request body is not valid JSON',
+      details: 'Check the request format and try again'
+    });
   }
   if (error && error.type === 'entity.too.large') {
     return res.status(413).json({
       error: 'Request body is too large',
-      details: 'Try saving first, then download from the loaded server-side directory'
+      details: 'Save the current YAML first, then download the configuration files instead'
     });
   }
   return next(error);
@@ -390,7 +393,8 @@ function isValidConfigFile(filename) {
 
 function resolveConfigFilePath(dirPath, filename) {
   if (!isValidConfigFile(filename)) {
-    const error = new Error(`Only ${CONFIG_BASE_NAMES.join(', ')} YAML files are supported`);
+    const supportedFiles = CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`));
+    const error = new Error(`Unsupported configuration filename. Choose one of: ${supportedFiles.join(', ')}`);
     error.statusCode = 400;
     throw error;
   }
@@ -398,7 +402,7 @@ function resolveConfigFilePath(dirPath, filename) {
   const resolvedDir = path.resolve(dirPath);
   const resolvedFile = path.resolve(resolvedDir, filename);
   if (path.dirname(resolvedFile) !== resolvedDir) {
-    const error = new Error('Invalid filename - path traversal is not allowed');
+    const error = new Error('Invalid filename. Path traversal is not allowed');
     error.statusCode = 400;
     throw error;
   }
@@ -415,14 +419,14 @@ function isSameOrChildPath(candidatePath, parentPath) {
 
 function resolveAllowedConfigDirectory(dirPath) {
   if (!dirPath || typeof dirPath !== 'string') {
-    const error = new Error('Directory path is required');
+    const error = new Error('Directory path is required. Choose the server directory containing your Homepage YAML files');
     error.statusCode = 400;
     throw error;
   }
 
   const resolvedDir = path.resolve(dirPath);
   if (!ALLOWED_CONFIG_DIRECTORIES.some((allowedDir) => isSameOrChildPath(resolvedDir, allowedDir))) {
-    const error = new Error('Directory is not allowed');
+    const error = new Error('Directory is not allowed. Choose a directory inside one of the configured allowed locations');
     error.statusCode = 400;
     throw error;
   }
@@ -435,7 +439,7 @@ async function resolveRealAllowedConfigDirectory(dirPath) {
   try {
     realDir = await fs.realpath(resolvedDir);
   } catch {
-    const error = new Error('Directory does not exist or is not accessible');
+    const error = new Error('Directory does not exist or cannot be accessed. Check the path and permissions');
     error.statusCode = 400;
     throw error;
   }
@@ -448,7 +452,7 @@ async function resolveRealAllowedConfigDirectory(dirPath) {
     }
   }))).filter(Boolean);
   if (!realAllowedDirectories.some((allowedDir) => isSameOrChildPath(realDir, allowedDir))) {
-    const error = new Error('Directory is not allowed');
+    const error = new Error('Directory is not allowed. Choose a directory inside one of the configured allowed locations');
     error.statusCode = 400;
     throw error;
   }
@@ -459,7 +463,7 @@ async function assertDirectory(dirPath) {
   try {
     const stats = await fs.stat(dirPath);
     if (!stats.isDirectory()) {
-      const error = new Error('Provided path is not a directory');
+      const error = new Error('The selected path is not a directory. Choose the folder containing your Homepage YAML files');
       error.statusCode = 400;
       throw error;
     }
@@ -467,7 +471,7 @@ async function assertDirectory(dirPath) {
     if (error.statusCode) {
       throw error;
     }
-    const wrappedError = new Error('Directory does not exist or is not accessible');
+    const wrappedError = new Error('Directory does not exist or cannot be accessed. Check the path and permissions');
     wrappedError.statusCode = 400;
     throw wrappedError;
   }
@@ -501,14 +505,14 @@ async function assertRegularConfigFile(filePath, { allowMissing = false } = {}) 
   try {
     const stats = await fs.lstat(filePath);
     if (!stats.isFile() || stats.isSymbolicLink()) {
-      const error = new Error('Configuration file must be a regular file');
+      const error = new Error('Configuration file must be a regular file. Symlinks and special files are not supported');
       error.statusCode = 400;
       throw error;
     }
   } catch (error) {
     if (error.code === 'ENOENT' && allowMissing) return;
     if (error.statusCode) throw error;
-    const wrappedError = new Error('Configuration file is not accessible');
+    const wrappedError = new Error('Configuration file does not exist or cannot be accessed. Check the path and permissions');
     wrappedError.statusCode = 400;
     throw wrappedError;
   }
@@ -574,7 +578,7 @@ app.get('/api/examples', async (req, res) => {
   } catch (error) {
     console.error('Example configuration load failed:', error);
     return res.status(500).json({
-      error: 'Failed to load example configurations',
+      error: 'Could not load example configurations',
       details: error.message
     });
   }
@@ -590,7 +594,7 @@ app.put('/api/app-settings', async (req, res) => {
     return res.json({ settings: await saveAppSettings(req.body && req.body.settings) });
   } catch (error) {
     console.error('Could not save persistent app settings:', error);
-    return res.status(500).json({ error: 'Failed to save app settings', details: error.message });
+    return res.status(500).json({ error: 'Could not save editor settings', details: error.message });
   }
 });
 
@@ -604,7 +608,7 @@ app.put('/api/option-types', async (req, res) => {
     return res.json({ options: await saveOptionDefinitions(req.body && req.body.options) });
   } catch (error) {
     console.error('Could not save option type definitions:', error);
-    return res.status(error.statusCode || 500).json({ error: 'Failed to save option types', details: error.message });
+    return res.status(error.statusCode || 500).json({ error: 'Could not save Preview option types', details: error.message });
   }
 });
 
@@ -639,7 +643,7 @@ app.get('/api/startup-directory', async (req, res) => {
   } catch (error) {
     console.error('Startup directory refresh failed:', error);
     return res.status(error.statusCode || 500).json({
-      error: 'Failed to refresh startup directory',
+      error: 'Could not refresh the startup directory',
       details: error.message
     });
   }
@@ -650,7 +654,7 @@ app.post('/api/yaml/transform', (req, res) => {
     return res.json(transformPreviewYaml(req.body));
   } catch (error) {
     return res.status(error.statusCode || 500).json({
-      error: error.statusCode ? 'Could not apply preview edit' : 'Preview edit failed',
+      error: error.statusCode ? 'Could not apply Preview edit' : 'Preview edit failed unexpectedly',
       details: error.message
     });
   }
@@ -669,7 +673,7 @@ app.post('/api/directory/load', async (req, res) => {
   } catch (error) {
     console.error('Directory load error:', error);
     return res.status(error.statusCode || 500).json({
-      error: 'Failed to load configs from directory',
+      error: 'Could not load configuration directory',
       details: error.statusCode ? error.message : 'The requested directory could not be loaded'
     });
   }
@@ -680,7 +684,7 @@ app.post('/api/directory/file/save', async (req, res) => {
     const { dirPath, filename, content } = req.body;
     if (!dirPath || !filename || content === undefined) {
       return res.status(400).json({
-        error: 'Directory path, filename and content are required'
+        error: 'Directory path, filename, and file content are required to save a configuration'
       });
     }
 
@@ -696,15 +700,15 @@ app.post('/api/directory/file/save', async (req, res) => {
     console.error('Directory file save error:', error);
     const isYamlError = error && (error.name === 'YAMLParseError' || error.code === 'BAD_INDENT');
     return res.status(error.statusCode || (isYamlError ? 400 : 500)).json({
-      error: isYamlError ? 'Invalid YAML' : 'Failed to save file',
-      details: isYamlError ? error.message : (error.statusCode ? error.message : 'The configuration file could not be saved')
+      error: isYamlError ? 'Invalid YAML in configuration file' : 'Could not save configuration file',
+      details: isYamlError ? formatYamlParseError(error) : (error.statusCode ? error.message : 'The configuration file could not be saved')
     });
   }
 });
 
 async function startServer() {
   if (LOGIN_PARTIALLY_CONFIGURED) {
-    throw new Error('REQUIRE_LOGIN_USER and REQUIRE_LOGIN_PASSWORD must both be set to enable login');
+    throw new Error('REQUIRE_LOGIN_USER and REQUIRE_LOGIN_PASSWORD must both be set together to enable login');
   }
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.mkdir(APP_DATA_DIR, { recursive: true });

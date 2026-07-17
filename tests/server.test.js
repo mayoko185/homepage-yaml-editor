@@ -206,6 +206,21 @@ test('serves optimized assets and supports the active configuration APIs', async
     });
     assert.equal((await unchangedResponse.json()).changed, false);
 
+    const invalidSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: tempRoot,
+        filename: 'settings.yaml',
+        content: 'layout:\n  First:\n    tab: Main\n  First:\n    tab: Other\n'
+      })
+    });
+    const invalidSave = await invalidSaveResponse.json();
+    assert.equal(invalidSaveResponse.status, 400);
+    assert.equal(invalidSave.error, 'Invalid YAML in configuration file');
+    assert.match(invalidSave.details, /Duplicate mapping key/);
+    assert.match(invalidSave.details, /line 4, column 3/);
+
     const proxmoxContent = 'pve:\n  url: https://proxmox.example:8006\n';
     const proxmoxSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
@@ -323,8 +338,8 @@ test('rejects allowed-root symlink escapes', async () => {
     });
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), {
-      error: 'Failed to load configs from directory',
-      details: 'Directory is not allowed'
+      error: 'Could not load configuration directory',
+      details: 'Directory is not allowed. Choose a directory inside one of the configured allowed locations'
     });
 
     const linkedConfigPath = path.join(tempRoot, 'services.yaml');
@@ -336,8 +351,8 @@ test('rejects allowed-root symlink escapes', async () => {
     });
     assert.equal(saveResponse.status, 400);
     assert.deepEqual(await saveResponse.json(), {
-      error: 'Failed to save file',
-      details: 'Configuration file must be a regular file'
+      error: 'Could not save configuration file',
+      details: 'Configuration file must be a regular file. Symlinks and special files are not supported'
     });
     assert.equal(await fs.readFile(path.join(outsideRoot, 'services.yaml'), 'utf8'), '- Outside: []\n');
   } finally {

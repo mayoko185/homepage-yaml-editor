@@ -154,6 +154,25 @@ test('group changes keep matching layout entries synchronized', () => {
   assert.deepEqual(parsedServices.map((group) => Object.keys(group)[0]), ['Second Group', 'Added Group']);
 });
 
+test('rejects duplicate service group names before creating invalid YAML', () => {
+  assert.throws(() => transform({
+    type: 'group.add',
+    values: { name: 'First Group' }
+  }), /Group "First Group" already exists/);
+
+  assert.throws(() => transform({
+    type: 'group.rename',
+    target: { groupName: 'First Group', groupIndex: 0 },
+    values: { name: 'Second Group' }
+  }), /Group "Second Group" already exists/);
+
+  assert.throws(() => transform({
+    type: 'group.edit',
+    target: { groupName: 'First Group', groupIndex: 0 },
+    values: { name: 'Second Group', fields: [] }
+  }), /Group "Second Group" already exists/);
+});
+
 test('manages Homepage layout tabs and can create an initial service group', () => {
   let files = transform({
     type: 'tab.add',
@@ -183,7 +202,7 @@ test('manages Homepage layout tabs and can create an initial service group', () 
   assert.throws(() => transform({
     type: 'tab.add',
     values: { name: 'Missing', groupName: 'Unknown Group' }
-  }), /could not be found/);
+  }), /Initial group "Unknown Group" was not found\. Choose an existing group or create a new one/);
 
   const filesWithoutLayout = transformPreviewYaml({
     files: { services, settings: 'title: Test\n' },
@@ -222,6 +241,21 @@ test('rejects invalid YAML and invalid movement', () => {
     files: { services: '- broken: [', settings },
     operation: { type: 'group.add', values: { name: 'New' } }
   }), /services\.yaml is invalid/);
+
+  const duplicateSettings = `layout:
+  First Group:
+    tab: Main
+  First Group:
+    tab: Other
+`;
+  assert.throws(() => transformPreviewYaml({
+    files: { services, settings: duplicateSettings },
+    operation: {
+      type: 'group.rename',
+      target: { groupName: 'First Group', groupIndex: 0 },
+      values: { name: 'Renamed Group' }
+    }
+  }), /settings\.yaml is invalid: Duplicate mapping key.*at line 4, column 3/);
 
   assert.throws(() => transform({
     type: 'group.move',
