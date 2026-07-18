@@ -1,6 +1,6 @@
 services:
   homepage-editor:
-    image: docker.io/mayoko185/homepage-yaml-editor:v1.2.0
+    image: docker.io/mayoko185/homepage-yaml-editor:latest
     ports:
       - 127.0.0.1:8081:8081
     environment:

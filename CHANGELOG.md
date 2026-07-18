@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-17
+
 ### Added
 
 - Added configurable Preview option types, including service and service-group applicability, ordering, and safer updates to existing local definitions.
