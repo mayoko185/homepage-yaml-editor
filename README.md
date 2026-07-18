@@ -24,7 +24,7 @@ Add, edit, reorder, and remove dashboard groups, services, and bookmarks from th
 - Preserves the original YAML text, comments, and formatting when files are loaded and saved.
 - Provides syntax highlighting, line numbers, auto-indent, comment toggling, validation, and preview-to-source navigation.
 - Renders groups, service cards, bookmarks, widgets, icons, layouts, and common Homepage options in the preview.
-- Includes an Interactive Editor for adding, editing, moving, reordering, and deleting supported dashboard items.
+- Includes an Interactive Editor for adding, editing, moving, drag-reordering, and deleting supported dashboard items; tabbed layouts include direct service-to-group and service-group-to-tab reassignment controls.
 - Keeps changes pending until Save, with undo support and a ZIP download for all loaded files.
 - Remembers theme, a custom page and browser-tab title, visible tabs, editor preferences, and custom option types.
 - Lets custom option types target any combination of services, service groups, bookmarks, and service widgets, with configurable defaults for new items.

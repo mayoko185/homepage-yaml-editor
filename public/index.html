@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-        <link rel="stylesheet" href="styles.css?v=159">
+        <link rel="stylesheet" href="styles.css?v=169">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -317,6 +317,16 @@
                 <div id="preview-edit-options" class="preview-edit-options"></div>
                 <button type="button" id="preview-edit-add-option" class="preview-add-option">+ Add option</button>
                 <p id="preview-edit-add-option-note" class="preview-edit-tab-warning preview-edit-option-guidance" hidden>Need another option? Add it in the Option Types panel, then return here to select it.</p>
+                <div id="preview-edit-service-location" class="preview-edit-service-location" hidden>
+                    <label for="preview-edit-service-group">Move to group</label>
+                    <select id="preview-edit-service-group" class="modal-input"></select>
+                    <p class="preview-edit-note">A service inherits its dashboard tab from its group.</p>
+                </div>
+                <div id="preview-edit-group-location" class="preview-edit-service-location" hidden>
+                    <label for="preview-edit-group-tab">Move group to tab</label>
+                    <select id="preview-edit-group-tab" class="modal-input"></select>
+                    <p class="preview-edit-note">Every service in this group moves with it to the selected tab.</p>
+                </div>
                 <p id="preview-edit-tab-warning" class="preview-edit-tab-warning" hidden>Changing the <code>tab</code> option moves this group to another dashboard tab.</p>
                 <p id="preview-edit-modal-status" class="modal-status" role="alert" hidden></p>
                 <div class="modal-actions">
@@ -397,7 +407,6 @@
                         </button>
                     </span>
                     <span>Additional settings</span>
-                    <span>Actions</span>
                 </div>
                 <div id="option-types-list" class="option-types-list"></div>
                 <button type="button" id="option-types-add" class="preview-add-option">+ Add option type</button>
@@ -419,6 +428,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=137"></script>
+    <script src="app.js?v=145"></script>
 </body>
 </html>

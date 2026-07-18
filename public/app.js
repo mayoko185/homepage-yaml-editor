@@ -56,6 +56,7 @@
         let previewEditPreviousFocusVisible = false;
         let previewTabPreviousFocus = null;
         let previewTabRenameName = null;
+        let activePreviewDrag = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
             mode: 'yaml',
             lineNumbers: true,
@@ -972,7 +973,7 @@
                     : needsRows
                         ? `<input type="number" class="modal-input" data-option-textarea-rows aria-label="Textarea rows" min="2" max="12" value="${definition.rows || 2}" placeholder="Rows">`
                         : '<span class="option-types-extra-placeholder" aria-hidden="true"></span>';
-                return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row>
+                return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row ${getDragItemAttributes('option-type', null, index)} data-preview-drop-kind="option-type" data-preview-drop-index="${index}">
                     <input type="text" class="modal-input" data-option-type-name aria-label="Option name" value="${escapeHtml(definition.name)}" placeholder="Option name">
                     <select class="modal-input" data-option-value-type aria-label="Value type">${typeOptions}</select>
                     <fieldset class="option-applies-to" aria-label="Applies to">${appliesToOptions}</fieldset>
@@ -1035,7 +1036,7 @@
                 const rows = orderedIndexes.map((definitionIndex, order) => {
                     const definition = optionTypesDraft[definitionIndex];
                     const name = definition.name.trim() || 'Unnamed option';
-                    return `<div class="option-default-row" data-option-default-row>
+                    return `<div class="option-default-row" data-option-default-row ${getDragItemAttributes('option-default', null, order, choice.value)} data-preview-drop-kind="option-default" data-preview-drop-index="${order}">
                         <span class="option-default-name">${escapeHtml(name)}</span>
                         <span class="preview-edit-actions option-default-actions">
                             <button type="button" class="preview-edit-action preview-edit-move-up" data-option-default-action="up" data-option-default-target="${choice.value}" data-option-default-index="${definitionIndex}" aria-label="Move ${escapeHtml(name)} up in ${escapeHtml(choice.tooltip)} defaults"${order === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move default up</span></button>
@@ -1276,7 +1277,7 @@
                 const keyControl = field.locked
                     ? `<span class="preview-edit-option-key" data-preview-option-key>${escapeHtml(field.key)}</span>`
                     : `<select class="modal-input" data-preview-option-key aria-label="Option name"><option value="" disabled${field.key ? '' : ' selected'}>Choose an option</option>${knownOptionChoices}</select>`;
-                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}">
+                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}" ${getDragItemAttributes('edit-option', null, index, parentPath)} data-preview-drop-kind="edit-option" data-preview-drop-index="${index}">
                 ${keyControl}
                 ${valueControl}
                 <span class="preview-edit-actions preview-edit-option-actions">
@@ -1289,6 +1290,65 @@
             }
             options.innerHTML = renderRows(state.fields) || '<p class="preview-edit-note">No options are currently configured.</p>';
             updatePreviewEditTabWarning();
+        }
+
+        function getServiceGroupMoveChoices(source) {
+            const settings = parseTabConfig('settings');
+            const services = parseTabConfig('services');
+            if (settings.error || services.error || !Array.isArray(services.data)) {
+                return { tabs: [], choices: [] };
+            }
+            const tabInfo = getHomepageTabInfo(settings.data);
+            if (tabInfo.tabs.length === 0) return { tabs: [], choices: [] };
+            const occurrences = new Map();
+            const choices = services.data.map((group) => {
+                const groupName = Object.keys(group || {})[0] || '';
+                const groupIndex = occurrences.get(groupName) || 0;
+                occurrences.set(groupName, groupIndex + 1);
+                const layout = tabInfo.groupLayout[groupName];
+                const tabName = layout && typeof layout === 'object' ? String(layout.tab || '').trim() : '';
+                return {
+                    groupName,
+                    groupIndex,
+                    tabName,
+                    current: groupName === source.groupName && groupIndex === (Number(source.groupIndex) || 0)
+                };
+            }).filter((choice) => choice.groupName);
+            return { tabs: tabInfo.tabs, choices };
+        }
+
+        function renderPreviewEditServiceLocation() {
+            const section = document.getElementById('preview-edit-service-location');
+            const select = document.getElementById('preview-edit-service-group');
+            const state = previewEditDialogState;
+            const choices = state?.serviceGroupChoices || [];
+            const visible = state?.action === 'service.edit' && (state.availableTabs || []).length > 0 && choices.length > 0;
+            section.hidden = !visible;
+            if (!visible) {
+                select.innerHTML = '';
+                return;
+            }
+            select.innerHTML = choices.map((choice, index) => {
+                const location = choice.tabName ? `${choice.tabName} tab` : 'All tabs';
+                return `<option value="${index}"${choice.current ? ' selected' : ''}>${escapeHtml(choice.groupName)} — ${escapeHtml(location)}</option>`;
+            }).join('');
+        }
+
+        function renderPreviewEditGroupLocation() {
+            const section = document.getElementById('preview-edit-group-location');
+            const select = document.getElementById('preview-edit-group-tab');
+            const state = previewEditDialogState;
+            const tabs = state?.availableTabs || [];
+            const visible = state?.action === 'group.edit' && tabs.length > 0;
+            section.hidden = !visible;
+            if (!visible) {
+                select.innerHTML = '';
+                return;
+            }
+            select.innerHTML = [
+                `<option value=""${state.originalTab ? '' : ' selected'}>All tabs</option>`,
+                ...tabs.map((tabName) => `<option value="${escapeHtml(tabName)}"${tabName === state.originalTab ? ' selected' : ''}>${escapeHtml(tabName)}</option>`)
+            ].join('');
         }
 
         function openPreviewEditDialog(action, source) {
@@ -1326,19 +1386,26 @@
                 title.textContent = 'Edit service group';
                 submit.textContent = 'Save';
                 nameInput.value = group.groupName;
-                previewEditDialogState.fields = getPreviewOptionFields(layout[group.groupName]);
                 previewEditDialogState.availableTabs = getPreviewTabManagerData().tabs;
                 previewEditDialogState.originalTab = String(layout[group.groupName]?.tab || '').trim();
+                const groupFields = getPreviewOptionFields(layout[group.groupName]);
+                previewEditDialogState.groupTabFieldIndex = groupFields.findIndex((field) => field.key === 'tab');
+                previewEditDialogState.fields = previewEditDialogState.availableTabs.length > 0
+                    ? groupFields.filter((field) => field.key !== 'tab')
+                    : groupFields;
             } else if (action === 'service.add') {
                 title.textContent = `Add service to ${source.groupName}`;
                 submit.textContent = 'Add service';
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('service');
             } else if (action === 'service.edit') {
                 const service = findPreviewService(source);
+                const groupMoveData = getServiceGroupMoveChoices(source);
                 title.textContent = 'Edit service';
                 submit.textContent = 'Save';
                 nameInput.value = service.serviceName;
                 previewEditDialogState.fields = getPreviewOptionFields(service.data);
+                previewEditDialogState.availableTabs = groupMoveData.tabs;
+                previewEditDialogState.serviceGroupChoices = groupMoveData.choices;
             } else if (action === 'bookmark-group.add') {
                 title.textContent = 'Add bookmark group';
                 submit.textContent = 'Add group';
@@ -1360,6 +1427,8 @@
             }
 
             renderPreviewEditOptions();
+            renderPreviewEditServiceLocation();
+            renderPreviewEditGroupLocation();
             modal.hidden = false;
             window.requestAnimationFrame(() => {
                 nameInput.focus();
@@ -1462,7 +1531,8 @@
                         const actionMarkup = isRenaming
                             ? `${getTabManagerActionButton('rename-save', tabName, `Save renamed ${tabName} tab`, '&#10003;')}${getTabManagerActionButton('rename-cancel', tabName, 'Cancel rename', '&times;')}`
                             : `${getTabManagerActionButton('rename', tabName, `Rename ${tabName}`, '&#9998;')}${getTabManagerActionButton('move-up', tabName, `Move ${tabName} up`, '&uarr;', { disabled: index === 0 })}${getTabManagerActionButton('move-down', tabName, `Move ${tabName} down`, '&darr;', { disabled: index === data.tabs.length - 1 })}${getTabManagerActionButton('remove', tabName, `Remove ${tabName}`, '&times;', { danger: true })}`;
-                        return `<div class="preview-tab-manager-row">
+                        const tabDragAttributes = isRenaming ? '' : getDragItemAttributes('tab', { name: tabName }, index);
+                        return `<div class="preview-tab-manager-row" ${tabDragAttributes} data-preview-drop-kind="tab" data-preview-drop-index="${index}">
                             ${nameMarkup}
                             <span class="preview-tab-manager-count">${groupCount} group${groupCount === 1 ? '' : 's'}</span>
                             <span class="preview-edit-actions">${actionMarkup}</span>
@@ -1704,6 +1774,23 @@
             }
             const { action, source } = previewEditDialogState;
             syncPreviewEditOptionState();
+            let selectedGroupTab = '';
+            let groupTabChanged = false;
+            if (action === 'group.edit' && previewEditDialogState.availableTabs?.length) {
+                selectedGroupTab = document.getElementById('preview-edit-group-tab').value.trim();
+                groupTabChanged = selectedGroupTab !== previewEditDialogState.originalTab;
+                previewEditDialogState.fields = previewEditDialogState.fields.filter((field) => field.key.trim() !== 'tab');
+                if (selectedGroupTab) {
+                    const insertionIndex = previewEditDialogState.groupTabFieldIndex >= 0
+                        ? Math.min(previewEditDialogState.groupTabFieldIndex, previewEditDialogState.fields.length)
+                        : previewEditDialogState.fields.length;
+                    previewEditDialogState.fields.splice(insertionIndex, 0, {
+                        key: 'tab',
+                        value: selectedGroupTab,
+                        locked: true
+                    });
+                }
+            }
             const normalizeFields = (currentFields) => currentFields.map((field) => ({
                 key: field.key.trim(),
                 ...(Array.isArray(field.fields)
@@ -1736,17 +1823,36 @@
                 return;
             }
             const values = { name, fields };
+            const operation = { type: action, target: source, values };
+            let destinationGroupName = '';
+            if (action === 'service.edit' && previewEditDialogState.serviceGroupChoices?.length) {
+                const selectedIndex = Number(document.getElementById('preview-edit-service-group').value);
+                const destination = previewEditDialogState.serviceGroupChoices[selectedIndex];
+                if (destination && !destination.current) {
+                    operation.destinationTarget = {
+                        groupName: destination.groupName,
+                        groupIndex: destination.groupIndex
+                    };
+                    destinationGroupName = destination.groupName;
+                }
+            }
             const submitButton = document.getElementById('preview-edit-submit');
             submitButton.disabled = true;
             setPreviewEditModalStatus();
             const message = action === 'group.add'
                 ? `Added group ${name}.`
                 : action === 'group.edit'
-                    ? `Updated group ${name}.`
+                    ? groupTabChanged
+                        ? selectedGroupTab
+                            ? `Updated group ${name} and moved it to the ${selectedGroupTab} tab.`
+                            : `Updated group ${name} and made it visible on all tabs.`
+                        : `Updated group ${name}.`
                     : action === 'service.add'
                         ? `Added service ${name}.`
                         : action === 'service.edit'
-                            ? `Updated service ${name}.`
+                            ? destinationGroupName
+                                ? `Updated service ${name} and moved it to ${destinationGroupName}.`
+                                : `Updated service ${name}.`
                             : action === 'bookmark-group.add'
                                 ? `Added bookmark group ${name}.`
                                 : action === 'bookmark-group.edit'
@@ -1754,7 +1860,7 @@
                                     : action === 'bookmark.add'
                                         ? `Added bookmark ${name}.`
                                         : `Updated bookmark ${name}.`;
-            const applied = await applyPreviewEdit({ type: action, target: source, values }, message);
+            const applied = await applyPreviewEdit(operation, message);
             submitButton.disabled = false;
             if (applied) closePreviewEditDialog();
             else setPreviewEditModalStatus('Could not apply the edit. See the application notification for the reason.');
@@ -2573,6 +2679,10 @@
             return `data-source="${escapeHtml(JSON.stringify(source))}"`;
         }
 
+        function getDragItemAttributes(kind, source, index, scope = '') {
+            return `draggable="true" data-preview-drag-item data-preview-drag-kind="${escapeHtml(kind)}" data-preview-drag-index="${index}" data-preview-drag-scope="${escapeHtml(scope)}" data-preview-drag-source="${escapeHtml(JSON.stringify(source || {}))}"`;
+        }
+
         function takeOccurrence(counter, name) {
             const occurrenceIndex = counter.get(name) || 0;
             counter.set(name, occurrenceIndex + 1);
@@ -2840,9 +2950,9 @@
             }
 
             function renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig, nested = false, parentSource = null } = {}) {
-                const servicesOnly = Array.isArray(entries) ? entries.filter((entry) => !isNestedServiceGroup(entry)) : [];
+                const servicesOnly = Array.isArray(entries) ? entries.map((entry, entryIndex) => ({ entry, entryIndex })).filter(({ entry }) => !isNestedServiceGroup(entry)) : [];
                 const serviceOccurrenceCounter = new Map();
-                return servicesOnly.map((service, servicePosition) => {
+                return servicesOnly.map(({ entry: service, entryIndex }, servicePosition) => {
                     const name = Object.keys(service || {})[0] || 'Service';
                     const serviceOccurrenceIndex = takeOccurrence(serviceOccurrenceCounter, name);
                     const data = service[name] || {};
@@ -2862,7 +2972,10 @@
                     const serviceEditControls = previewEditMode && !nested
                         ? getServiceEditControls(directSource.servicesSource, servicePosition, servicesOnly.length)
                         : '';
-                    return `<div class="dashboard-card preview-jump-target" ${getSourceAttributes(serviceSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                    const serviceDragAttributes = previewEditMode && !nested
+                        ? `${getDragItemAttributes('service', directSource.servicesSource, entryIndex)} data-preview-drop-kind="service" data-preview-drop-index="${entryIndex}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
+                        : '';
+                    return `<div class="dashboard-card preview-jump-target" ${serviceDragAttributes} ${getSourceAttributes(serviceSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
                 }).join('');
             }
 
@@ -2918,16 +3031,20 @@
                     ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(serviceGroupSource)}><span aria-hidden="true">+</span> Add service</button>`
                     : '';
                 const serviceCardsGrid = cards || addServiceButton
-                    ? `<div class="dashboard-cards">${cards}${addServiceButton}</div>`
+                    ? `<div class="dashboard-cards"${previewEditMode ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${cards}${addServiceButton}</div>`
                     : '';
                 const hasNestedGroups = Array.isArray(entries) && entries.some(isNestedServiceGroup);
+                const groupPosition = groupPositionByItem.get(group) || 0;
+                const groupDragAttributes = previewEditMode
+                    ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
+                    : '';
                 if (hasNestedGroups) {
-                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root"${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" style="--preview-nested-columns: ${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
+                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" style="--preview-nested-columns: ${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
                 } else {
                     if (!cards) {
                         addPreviewNotice(`No services configured in ${groupName || 'this group'}.`);
                     }
-                    groupsHtml += `<details class="dashboard-group"${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${serviceCardsGrid}</details>`;
+                    groupsHtml += `<details class="dashboard-group" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${serviceCardsGrid}</details>`;
                 }
             });
 
@@ -2981,7 +3098,10 @@
                         ...getPreviewDetailLines(bookmarkData, ['description', 'href', 'icon', 'abbr']),
                     ], { focusable: false });
                     bookmarkLinkCount += 1;
-                    return `<div class="bookmark-card">
+                    const bookmarkDragAttributes = previewEditMode
+                        ? `${getDragItemAttributes('bookmark', bookmarkSource, bookmarkPosition)} data-preview-drop-kind="bookmark" data-preview-drop-index="${bookmarkPosition}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
+                        : '';
+                    return `<div class="bookmark-card" ${bookmarkDragAttributes}>
                         <a class="bookmark-card-link preview-jump-target" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes(bookmarkSource)} ${bookmarkTooltip}>
                             <span class="bookmark-card-mark" aria-hidden="true">${abbr ? escapeHtml(abbr.slice(0, 4)) : '&#8599;'}</span>
                             <span class="bookmark-card-copy"><span class="bookmark-card-name">${escapeHtml(bookmarkName)}</span>${description ? `<span class="dashboard-card-desc">${escapeHtml(description)}</span>` : ''}</span>
@@ -2993,7 +3113,10 @@
                 const addBookmarkButton = previewEditMode
                     ? `<button type="button" class="preview-add-button preview-add-bookmark" data-preview-action="bookmark.add" ${getSourceAttributes(groupSource)}><span aria-hidden="true">+</span> Add bookmark</button>`
                     : '';
-                return `<section class="bookmark-group"><div class="bookmark-group-heading"><span class="bookmark-group-title preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName)}</span><span class="bookmark-group-count">${entries.length} ${entries.length === 1 ? 'link' : 'links'}</span>${groupEditControls}</div>${linksHtml ? `<div class="bookmark-links">${linksHtml}</div>` : '<p class="bookmark-empty">No links configured.</p>'}${addBookmarkButton}</section>`;
+                const bookmarkGroupDragAttributes = previewEditMode
+                    ? `${getDragItemAttributes('bookmark-group', groupSource, groupPosition)} data-preview-drop-kind="bookmark-group" data-preview-drop-index="${groupPosition}" data-preview-bookmark-drop data-preview-bookmark-drop-index="${entries.length}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
+                    : '';
+                return `<section class="bookmark-group" ${bookmarkGroupDragAttributes}><div class="bookmark-group-heading"><span class="bookmark-group-title preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName)}</span><span class="bookmark-group-count">${entries.length} ${entries.length === 1 ? 'link' : 'links'}</span>${groupEditControls}</div>${linksHtml ? `<div class="bookmark-links"${previewEditMode ? ` data-preview-bookmark-drop-zone data-preview-bookmark-drop-index="${entries.length}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${linksHtml}</div>` : '<p class="bookmark-empty">No links configured.</p>'}${addBookmarkButton}</section>`;
             }).join('');
             const addBookmarkGroupButton = previewEditMode
                 ? '<button type="button" class="preview-add-button preview-add-bookmark-group" data-preview-action="bookmark-group.add"><span aria-hidden="true">+</span> Add bookmark group</button>'
@@ -3419,6 +3542,292 @@
             event.preventDefault();
         });
         jumpSectionButton.addEventListener('click', jumpToMatchingConfigSection);
+
+        function clearPreviewDropIndicators() {
+            document.querySelectorAll('.preview-drag-over, .preview-drop-before, .preview-drop-after, .preview-drop-inside').forEach((element) => {
+                element.classList.remove('preview-drag-over', 'preview-drop-before', 'preview-drop-after', 'preview-drop-inside');
+            });
+            document.querySelectorAll('.preview-main-drop-indicator').forEach((element) => element.remove());
+        }
+
+        function clearPreviewDragState() {
+            document.querySelectorAll('.preview-dragging').forEach((element) => {
+                element.classList.remove('preview-dragging');
+            });
+            clearPreviewDropIndicators();
+            activePreviewDrag = null;
+        }
+
+        function isSamePreviewDropCollection(drag, destinationTarget) {
+            if (drag.kind === 'service' || drag.kind === 'bookmark') {
+                return drag.source.groupName === destinationTarget?.groupName
+                    && Number(drag.source.groupIndex) === Number(destinationTarget?.groupIndex);
+            }
+            return true;
+        }
+
+        async function applyPreviewDrop(drag, destinationIndex, destinationTarget = null) {
+            const sameCollection = isSamePreviewDropCollection(drag, destinationTarget);
+            const adjustedDestinationIndex = sameCollection && drag.index < destinationIndex
+                ? destinationIndex - 1
+                : destinationIndex;
+            if (drag.kind === 'option-type') {
+                if (drag.index === adjustedDestinationIndex) return;
+                readOptionTypesDraft();
+                const [item] = optionTypesDraft.splice(drag.index, 1);
+                optionTypesDraft.splice(adjustedDestinationIndex, 0, item);
+                renderOptionTypesDraft();
+                return;
+            }
+            if (drag.kind === 'option-default') {
+                if (drag.index === adjustedDestinationIndex) return;
+                readOptionTypesDraft();
+                const orderedIndexes = getOrderedOptionDefaultIndexes(drag.scope);
+                const [item] = orderedIndexes.splice(drag.index, 1);
+                orderedIndexes.splice(adjustedDestinationIndex, 0, item);
+                setOptionDefaultOrder(drag.scope, orderedIndexes);
+                renderOptionDefaultsDraft();
+                return;
+            }
+            if (drag.kind === 'edit-option') {
+                if (drag.index === adjustedDestinationIndex) return;
+                syncPreviewEditOptionState();
+                const fields = drag.scope
+                    ? drag.scope.split('.').reduce((collection, pathIndex) => collection[Number(pathIndex)].fields, previewEditDialogState.fields)
+                    : previewEditDialogState.fields;
+                const [item] = fields.splice(drag.index, 1);
+                fields.splice(adjustedDestinationIndex, 0, item);
+                renderPreviewEditOptions();
+                return;
+            }
+            if (drag.kind === 'tab') {
+                if (drag.index === adjustedDestinationIndex) return;
+                const applied = await applyPreviewEdit(
+                    { type: 'tab.move', target: drag.source, destinationIndex: adjustedDestinationIndex },
+                    `Moved tab ${drag.source.name}.`
+                );
+                if (applied) renderPreviewTabManager();
+                return;
+            }
+            if (drag.kind === 'service') {
+                if (sameCollection && drag.index === adjustedDestinationIndex) return;
+                await applyPreviewEdit(
+                    { type: 'service.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget },
+                    `Moved service ${drag.source.serviceName} to ${destinationTarget?.groupName || drag.source.groupName}.`
+                );
+                return;
+            }
+            if (drag.kind === 'bookmark') {
+                if (sameCollection && drag.index === adjustedDestinationIndex) return;
+                await applyPreviewEdit(
+                    { type: 'bookmark.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget },
+                    `Moved bookmark ${drag.source.bookmarkName} to ${destinationTarget?.groupName || drag.source.groupName}.`
+                );
+                return;
+            }
+            if (drag.index === adjustedDestinationIndex) return;
+            const typeByKind = {
+                group: 'group.move',
+                'bookmark-group': 'bookmark-group.move'
+            };
+            const operationType = typeByKind[drag.kind];
+            if (operationType) {
+                await applyPreviewEdit(
+                    { type: operationType, target: drag.source, destinationIndex: adjustedDestinationIndex },
+                    `Reordered ${drag.kind.replace('-', ' ')} ${drag.source.serviceName || drag.source.bookmarkName || drag.source.groupName || ''}.`
+                );
+            }
+        }
+
+        function getClosestPreviewDropItem(zone, kind, event) {
+            const items = Array.from(zone.querySelectorAll(`:scope > [data-preview-drop-kind="${kind}"]`));
+            if (items.length === 0) return null;
+            const measuredItems = items.map((item) => ({ item, rect: item.getBoundingClientRect() }));
+            if (kind === 'service') {
+                const rows = measuredItems.reduce((result, measured) => {
+                    const row = result[result.length - 1];
+                    if (!row || Math.abs(row.top - measured.rect.top) > 4) {
+                        result.push({
+                            top: measured.rect.top,
+                            bottom: measured.rect.bottom,
+                            items: [measured]
+                        });
+                    } else {
+                        row.bottom = Math.max(row.bottom, measured.rect.bottom);
+                        row.items.push(measured);
+                    }
+                    return result;
+                }, []);
+                if (event.clientY < rows[0].top) {
+                    return { element: rows[0].items[0].item, position: 'before' };
+                }
+                for (let rowIndex = 0; rowIndex < rows.length - 1; rowIndex += 1) {
+                    const row = rows[rowIndex];
+                    const nextRow = rows[rowIndex + 1];
+                    if (event.clientY > row.bottom && event.clientY < nextRow.top) {
+                        return event.clientY < row.bottom + ((nextRow.top - row.bottom) / 2)
+                            ? { element: row.items[row.items.length - 1].item, position: 'after' }
+                            : { element: nextRow.items[0].item, position: 'before' };
+                    }
+                }
+                const lastRow = rows[rows.length - 1];
+                if (event.clientY > lastRow.bottom) {
+                    return { element: lastRow.items[lastRow.items.length - 1].item, position: 'after' };
+                }
+            }
+            return measuredItems.reduce((closest, measured) => {
+                const { item, rect } = measured;
+                const distanceX = event.clientX < rect.left
+                    ? rect.left - event.clientX
+                    : event.clientX > rect.right
+                        ? event.clientX - rect.right
+                        : 0;
+                const distanceY = event.clientY < rect.top
+                    ? rect.top - event.clientY
+                    : event.clientY > rect.bottom
+                        ? event.clientY - rect.bottom
+                        : 0;
+                const distance = (distanceX * distanceX) + (distanceY * distanceY);
+                return !closest || distance < closest.distance ? { element: item, distance, position: null } : closest;
+            }, null) || null;
+        }
+
+        function getPreviewDropTarget(eventTarget, drag, event) {
+            if (drag.kind === 'service') {
+                const item = eventTarget.closest('[data-preview-drop-kind="service"]');
+                if (item) return { element: item, position: null };
+                const zone = eventTarget.closest('[data-preview-service-drop-zone]');
+                const closest = zone && getClosestPreviewDropItem(zone, drag.kind, event);
+                const fallback = zone || eventTarget.closest('[data-preview-service-drop]');
+                return closest || (fallback ? { element: fallback, position: null } : null);
+            }
+            if (drag.kind === 'bookmark') {
+                const item = eventTarget.closest('[data-preview-drop-kind="bookmark"]');
+                if (item) return { element: item, position: null };
+                const zone = eventTarget.closest('[data-preview-bookmark-drop-zone]');
+                const closest = zone && getClosestPreviewDropItem(zone, drag.kind, event);
+                const fallback = zone || eventTarget.closest('[data-preview-bookmark-drop]');
+                return closest || (fallback ? { element: fallback, position: null } : null);
+            }
+            const element = eventTarget.closest('[data-preview-drop-kind]');
+            return element ? { element, position: null } : null;
+        }
+
+        function getPreviewDropDetails(target, drag, event, forcedPosition = null) {
+            const isItemTarget = target.dataset.previewDropKind === drag.kind;
+            const destinationTarget = drag.kind === 'service'
+                ? JSON.parse(target.getAttribute('data-preview-service-drop-source') || '{}')
+                : drag.kind === 'bookmark'
+                    ? JSON.parse(target.getAttribute('data-preview-bookmark-drop-source') || '{}')
+                    : null;
+            if (!isItemTarget) {
+                return {
+                    destinationIndex: Number(drag.kind === 'service'
+                        ? target.dataset.previewServiceDropIndex
+                        : target.dataset.previewBookmarkDropIndex),
+                    destinationTarget,
+                    position: 'inside'
+                };
+            }
+
+            const rect = target.getBoundingClientRect();
+            const verticalLine = drag.kind === 'service' && target.classList.contains('dashboard-card');
+            const after = forcedPosition
+                ? forcedPosition === 'after'
+                : verticalLine
+                    ? event.clientX >= rect.left + (rect.width / 2)
+                    : event.clientY >= rect.top + (rect.height / 2);
+            return {
+                destinationIndex: Number(target.dataset.previewDropIndex) + (after ? 1 : 0),
+                destinationTarget,
+                position: after ? 'after' : 'before',
+                verticalLine
+            };
+        }
+
+        function showPreviewDropIndicator(target, details, drag) {
+            clearPreviewDropIndicators();
+            target.classList.add('preview-drag-over');
+            if (['service', 'bookmark', 'group', 'bookmark-group'].includes(drag.kind)) {
+                const rect = target.getBoundingClientRect();
+                const line = document.createElement('span');
+                if (details.verticalLine) {
+                    line.className = 'preview-main-drop-indicator preview-main-drop-indicator-vertical';
+                    line.setAttribute('aria-hidden', 'true');
+                    line.style.left = `${details.position === 'before' ? rect.left - 2 : rect.right - 2}px`;
+                    line.style.top = `${rect.top + 4}px`;
+                    line.style.height = `${Math.max(0, rect.height - 8)}px`;
+                    document.body.append(line);
+                    return;
+                }
+                const inset = details.position === 'inside' ? 12 : 4;
+                const top = details.position === 'before'
+                    ? rect.top - 2
+                    : details.position === 'after'
+                        ? rect.bottom - 2
+                        : rect.bottom - 10;
+                line.className = 'preview-main-drop-indicator';
+                line.setAttribute('aria-hidden', 'true');
+                line.style.left = `${rect.left + inset}px`;
+                line.style.top = `${top}px`;
+                line.style.width = `${Math.max(0, rect.width - (inset * 2))}px`;
+                document.body.append(line);
+                return;
+            }
+            target.classList.add(`preview-drop-${details.position}`);
+        }
+
+        document.addEventListener('dragstart', function(event) {
+            const item = event.target.closest('[data-preview-drag-item]');
+            if (!item) return;
+            if (item && event.target.closest('.preview-edit-actions, button, input, select, textarea')) {
+                event.preventDefault();
+                return;
+            }
+            activePreviewDrag = {
+                kind: item.dataset.previewDragKind,
+                index: Number(item.dataset.previewDragIndex),
+                scope: item.dataset.previewDragScope || '',
+                source: JSON.parse(item.getAttribute('data-preview-drag-source') || '{}')
+            };
+            item.classList.add('preview-dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', activePreviewDrag.kind);
+        });
+        document.addEventListener('dragover', function(event) {
+            if (!activePreviewDrag) return;
+            const dropTarget = getPreviewDropTarget(event.target, activePreviewDrag, event);
+            const target = dropTarget?.element;
+            const canCrossGroups = ['service', 'bookmark'].includes(activePreviewDrag.kind);
+            const matchesKind = canCrossGroups
+                ? Boolean(target)
+                : target?.dataset.previewDropKind === activePreviewDrag.kind;
+            if (!matchesKind || (!canCrossGroups && (target.dataset.previewDragScope || '') !== activePreviewDrag.scope)) {
+                clearPreviewDropIndicators();
+                return;
+            }
+            event.preventDefault();
+            showPreviewDropIndicator(target, getPreviewDropDetails(target, activePreviewDrag, event, dropTarget.position), activePreviewDrag);
+            event.dataTransfer.dropEffect = 'move';
+        });
+        document.addEventListener('drop', function(event) {
+            if (!activePreviewDrag) return;
+            const dropTarget = getPreviewDropTarget(event.target, activePreviewDrag, event);
+            const target = dropTarget?.element;
+            const canCrossGroups = ['service', 'bookmark'].includes(activePreviewDrag.kind);
+            const matchesKind = canCrossGroups
+                ? Boolean(target)
+                : target?.dataset.previewDropKind === activePreviewDrag.kind;
+            if (!matchesKind || (!canCrossGroups && (target.dataset.previewDragScope || '') !== activePreviewDrag.scope)) return;
+            event.preventDefault();
+            const drag = activePreviewDrag;
+            const { destinationIndex, destinationTarget } = getPreviewDropDetails(target, drag, event, dropTarget.position);
+            clearPreviewDragState();
+            applyPreviewDrop(drag, destinationIndex, destinationTarget).catch((error) => {
+                setSaveStatus(`Could not reorder the item: ${addErrorGuidance(error, 'Try the move again')}`, 'error');
+            });
+        });
+        document.addEventListener('dragend', clearPreviewDragState);
 
         yamlCodeEditor.on('change', function(editor, change) {
             if (!applyingPreviewFiles && previewUndoState && change.origin !== 'setValue') {

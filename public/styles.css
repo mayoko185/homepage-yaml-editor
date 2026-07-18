@@ -1648,6 +1648,67 @@
             opacity: 0.35;
             transform: none;
         }
+        [data-preview-drag-item] {
+            cursor: grab;
+        }
+        [data-preview-drag-item]:active {
+            cursor: grabbing;
+        }
+        [data-preview-drag-item] .preview-edit-actions {
+            cursor: default;
+        }
+        [data-preview-drop-kind] {
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+        }
+        [data-preview-drop-kind].preview-dragging {
+            opacity: 0.48;
+        }
+        [data-preview-drop-kind].preview-drag-over {
+            border-color: var(--button-bg) !important;
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--button-bg) 18%, transparent) !important;
+        }
+        .preview-drop-before,
+        .preview-drop-after,
+        .preview-drop-inside {
+            position: relative;
+        }
+        .preview-drop-before::before,
+        .preview-drop-after::after,
+        .preview-drop-inside::after {
+            content: '';
+            position: absolute;
+            z-index: 20;
+            left: 5px;
+            right: 5px;
+            height: 3px;
+            border-radius: 999px;
+            background: var(--button-bg);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--button-bg) 25%, transparent);
+            pointer-events: none;
+        }
+        .preview-drop-before::before {
+            top: -3px;
+        }
+        .preview-drop-after::after {
+            bottom: -3px;
+        }
+        .preview-drop-inside::after {
+            right: 12px;
+            bottom: 7px;
+            left: 12px;
+        }
+        .preview-main-drop-indicator {
+            position: fixed;
+            z-index: 100;
+            height: 4px;
+            border-radius: 999px;
+            background: var(--button-bg);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--button-bg) 30%, transparent), 0 2px 8px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+        }
+        .preview-main-drop-indicator-vertical {
+            width: 4px !important;
+        }
         .dashboard-card > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions,
         .bookmark-group > .bookmark-group-heading > .preview-edit-actions,
@@ -2062,7 +2123,7 @@
             font-size: 22px;
         }
         #preview-edit-modal .preview-edit-nested-options {
-            gap: 5px;
+            gap: 4px;
             padding: 6px;
         }
         #preview-edit-modal .preview-edit-nested-options .preview-edit-option-row {
@@ -2073,6 +2134,25 @@
         }
         #preview-edit-modal .preview-add-option {
             margin-top: 8px;
+        }
+        .preview-edit-service-location {
+            margin-top: 10px;
+            padding: 9px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 9px;
+            background: color-mix(in srgb, var(--button-bg) 7%, var(--config-item-bg));
+        }
+        .preview-edit-service-location label {
+            display: block;
+            font-size: 0.88rem;
+            font-weight: 650;
+        }
+        .preview-edit-service-location .modal-input {
+            width: 100%;
+            margin-top: 6px;
+        }
+        .preview-edit-service-location .preview-edit-note {
+            margin-top: 6px;
         }
         #preview-edit-modal .preview-edit-tab-warning {
             margin-top: 8px;
@@ -2173,11 +2253,12 @@
             margin-top: 16px;
         }
         .preview-edit-option-row {
+            position: relative;
             display: grid;
             grid-template-columns: minmax(112px, 0.65fr) minmax(0, 1.35fr) auto;
             align-items: center;
             gap: 8px;
-            padding: 8px;
+            padding: 8px 8px 24px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: var(--config-item-bg);
@@ -2306,7 +2387,26 @@
             margin-top: 0;
         }
         .preview-edit-option-actions {
+            position: absolute;
+            right: -5px;
+            bottom: -10px;
+            z-index: 3;
             margin-left: 0;
+            padding: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--preview-bg);
+            box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .preview-edit-option-row:hover > .preview-edit-option-actions,
+        .preview-edit-option-row > .preview-edit-option-actions:has(.preview-edit-action:focus-visible) {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
         }
         .preview-add-option {
             margin-top: 10px;
@@ -2341,27 +2441,29 @@
         }
         .preview-tab-modal-content {
             width: min(100%, 650px);
+            padding: 16px;
+        }
+        .preview-tab-modal-content .modal-body-text {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            line-height: 1.4;
         }
         .option-types-modal-content {
             width: min(100%, 1100px);
         }
         .option-types-list {
             display: grid;
-            gap: 8px;
-            margin-top: 16px;
+            gap: 5px;
+            margin-top: 7px;
         }
         .option-types-heading {
             display: grid;
-            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr) 104px;
-            gap: 8px;
-            margin: 16px 8px -8px;
+            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr);
+            gap: 6px;
+            margin: 8px 6px 0;
             color: var(--text-color);
             font-size: 0.76rem;
             font-weight: 600;
-        }
-        .option-types-heading > span:last-child {
-            justify-self: end;
-            text-align: right;
         }
         .option-heading-with-help,
         .option-defaults-heading {
@@ -2438,11 +2540,12 @@
             margin-top: 5px;
         }
         .option-types-row {
+            position: relative;
             display: grid;
-            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr) 104px;
+            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr);
             align-items: center;
-            gap: 8px;
-            padding: 8px;
+            gap: 6px;
+            padding: 5px 6px;
             border: 1px solid var(--border-color);
             border-radius: 9px;
             background: var(--config-item-bg);
@@ -2450,7 +2553,7 @@
         .option-types-row .modal-input {
             min-width: 0;
             margin: 0;
-            padding: 8px 9px;
+            padding: 6px 7px;
             font-size: 0.88rem;
         }
         .option-applies-to {
@@ -2504,30 +2607,46 @@
         }
         .option-types-extra-placeholder {
             min-width: 0;
-            min-height: 34px;
+            min-height: 30px;
             visibility: hidden;
         }
         .option-types-actions {
+            position: absolute;
+            top: 50%;
+            right: 4px;
+            z-index: 3;
             display: inline-flex;
             align-items: center;
             justify-content: flex-end;
             gap: 4px;
             justify-self: end;
+            padding: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--preview-bg);
+            box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(calc(-50% + 4px));
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .option-types-row:hover > .option-types-actions,
+        .option-types-row > .option-types-actions:has(.preview-edit-action:focus-visible) {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(-50%);
         }
         @media (max-width: 720px) {
             .option-types-row,
             .option-types-row.has-select-values,
             .option-types-row.has-textarea-rows {
-                grid-template-columns: minmax(0, 1fr);
+                grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
             }
             .option-types-row [data-option-type-name],
-            .option-types-row [data-option-value-type],
-            .option-types-row .option-applies-to,
             .option-types-row [data-option-select-values],
             .option-types-row [data-option-textarea-rows],
-            .option-types-row .option-types-extra-placeholder,
-            .option-types-row .option-types-actions {
-                grid-column: 1;
+            .option-types-row .option-types-extra-placeholder {
+                grid-column: 1 / -1;
             }
             .option-types-row .option-types-extra-placeholder {
                 display: none;
@@ -2668,8 +2787,8 @@
         }
         .preview-tab-manager-list {
             display: grid;
-            gap: 8px;
-            margin-top: 18px;
+            gap: 5px;
+            margin-top: 8px;
         }
         .preview-tab-manager-empty {
             padding: 12px;
@@ -2680,11 +2799,13 @@
             opacity: 0.78;
         }
         .preview-tab-manager-row {
+            position: relative;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             min-height: 42px;
-            padding: 7px 9px 7px 12px;
+            box-sizing: border-box;
+            padding: 5px 9px 5px 11px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: var(--config-item-bg);
@@ -2717,11 +2838,32 @@
             opacity: 0.68;
         }
         .preview-tab-manager-row .preview-edit-actions {
+            position: absolute;
+            top: 50%;
+            right: -5px;
+            bottom: auto;
+            z-index: 3;
             margin-left: auto;
+            padding: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--preview-bg);
+            box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(calc(-50% + 4px));
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .preview-tab-manager-row:hover > .preview-edit-actions,
+        .preview-tab-manager-row > .preview-edit-actions:has(.preview-edit-action:focus-visible),
+        .preview-tab-manager-row:has([data-tab-manager-name-input]) > .preview-edit-actions {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(-50%);
         }
         .preview-tab-add-form {
-            margin-top: 20px;
-            padding-top: 16px;
+            margin-top: 12px;
+            padding-top: 10px;
             border-top: 1px solid var(--border-color);
         }
         .preview-tab-add-form h4 {
@@ -2731,7 +2873,16 @@
         .preview-tab-add-fields {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 12px;
+            gap: 8px;
+        }
+        .preview-tab-add-form .preview-edit-field {
+            margin-top: 8px;
+        }
+        .preview-tab-add-form .preview-edit-note {
+            margin-top: 8px;
+        }
+        .preview-tab-add-form .modal-actions {
+            margin-top: 12px;
         }
         .preview-tab-new-group-field {
             grid-column: 1 / -1;

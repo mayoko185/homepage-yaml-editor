@@ -77,11 +77,54 @@ test('edits, adds, moves and removes services without losing advanced fields or 
   assert.equal(Object.keys(parsed[0]['First Group'][1])[0], 'Added Service');
 
   files = transform({
+    type: 'service.move',
+    target: { groupName: 'First Group', groupIndex: 0, serviceName: 'Added Service', serviceIndex: 0 },
+    destinationIndex: 0
+  }, files);
+  parsed = YAML.parse(files.services);
+  assert.equal(Object.keys(parsed[0]['First Group'][0])[0], 'Added Service');
+
+  files = transform({
+    type: 'service.move',
+    target: { groupName: 'First Group', groupIndex: 0, serviceName: 'Added Service', serviceIndex: 0 },
+    destinationIndex: 1
+  }, files);
+
+  files = transform({
     type: 'service.remove',
     target: { groupName: 'First Group', groupIndex: 0, serviceName: 'Second Service', serviceIndex: 0 }
   }, files);
   parsed = YAML.parse(files.services);
   assert.deepEqual(parsed[0]['First Group'].map((item) => Object.keys(item)[0]), ['Renamed Service', 'Added Service']);
+
+  files = transform({
+    type: 'service.move',
+    target: { groupName: 'First Group', groupIndex: 0, serviceName: 'Added Service', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Second Group', groupIndex: 0 },
+    destinationIndex: 0
+  }, files);
+  parsed = YAML.parse(files.services);
+  assert.deepEqual(parsed[0]['First Group'].map((item) => Object.keys(item)[0]), ['Renamed Service']);
+  assert.deepEqual(parsed[1]['Second Group'].map((item) => Object.keys(item)[0]), ['Added Service', 'Third Service']);
+  assert.match(files.services, /keep this services comment/);
+
+  files = transform({
+    type: 'service.edit',
+    target: { groupName: 'Second Group', groupIndex: 0, serviceName: 'Added Service', serviceIndex: 0 },
+    destinationTarget: { groupName: 'First Group', groupIndex: 0 },
+    values: {
+      name: 'Moved Service',
+      fields: [
+        { key: 'href', value: 'https://moved.example' },
+        { key: 'description', value: 'Moved from the edit panel' }
+      ]
+    }
+  }, files);
+  parsed = YAML.parse(files.services);
+  assert.deepEqual(parsed[0]['First Group'].map((item) => Object.keys(item)[0]), ['Renamed Service', 'Moved Service']);
+  assert.deepEqual(parsed[1]['Second Group'].map((item) => Object.keys(item)[0]), ['Third Service']);
+  assert.equal(parsed[0]['First Group'][1]['Moved Service'].href, 'https://moved.example');
+  assert.match(files.services, /keep this services comment/);
 });
 
 test('edits, adds, moves and removes bookmark groups and links without losing comments', () => {
@@ -138,6 +181,17 @@ test('edits, adds, moves and removes bookmark groups and links without losing co
   }, files);
   parsed = YAML.parse(files.bookmarks);
   assert.deepEqual(parsed[0].Engineering.map((item) => Object.keys(item)[0]), ['GitHub', 'Example']);
+
+  files = transform({
+    type: 'bookmark.move',
+    target: { groupName: 'Engineering', groupIndex: 0, bookmarkName: 'GitHub', bookmarkIndex: 0 },
+    destinationTarget: { groupName: 'Social', groupIndex: 0 },
+    destinationIndex: 0
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.deepEqual(parsed[0].Engineering.map((item) => Object.keys(item)[0]), ['Example']);
+  assert.deepEqual(parsed[1].Social.map((item) => Object.keys(item)[0]), ['GitHub', 'Reddit']);
+  assert.match(files.bookmarks, /keep this bookmarks comment/);
 
   files = transform({
     type: 'bookmark-group.add',
@@ -266,14 +320,25 @@ test('removes deleted option types from every applicable YAML target', () => {
 
 test('group changes keep matching layout entries synchronized', () => {
   let files = transform({
-    type: 'group.rename',
+    type: 'group.edit',
     target: { groupName: 'First Group', groupIndex: 0 },
-    values: { name: 'Renamed Group' }
+    values: { name: 'First Group', fields: [{ key: 'tab', value: 'Other' }] }
   });
   let parsedServices = YAML.parse(files.services);
   let parsedSettings = YAML.parse(files.settings);
+  assert.equal(parsedSettings.layout['First Group'].tab, 'Other');
+  assert.deepEqual(parsedServices[0]['First Group'], YAML.parse(services)[0]['First Group']);
+  assert.match(files.services, /keep this services comment/);
+
+  files = transform({
+    type: 'group.rename',
+    target: { groupName: 'First Group', groupIndex: 0 },
+    values: { name: 'Renamed Group' }
+  }, files);
+  parsedServices = YAML.parse(files.services);
+  parsedSettings = YAML.parse(files.settings);
   assert.equal(Object.keys(parsedServices[0])[0], 'Renamed Group');
-  assert.equal(parsedSettings.layout['Renamed Group'].tab, 'Main');
+  assert.equal(parsedSettings.layout['Renamed Group'].tab, 'Other');
   assert.equal(parsedSettings.layout['First Group'], undefined);
   assert.match(files.settings, /keep this settings comment/);
 

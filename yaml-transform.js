@@ -51,6 +51,19 @@ function scalarValue(node) {
   return ['string', 'number', 'boolean'].includes(typeof node) ? String(node) : '';
 }
 
+function getMoveDestination(currentIndex, itemCount, operation, label) {
+  if (Number.isInteger(operation.destinationIndex)) {
+    if (operation.destinationIndex < 0 || operation.destinationIndex >= itemCount) {
+      throw new YamlTransformError(`${label} move destination is outside the available list`);
+    }
+    return operation.destinationIndex;
+  }
+  if (!['up', 'down'].includes(operation.direction)) {
+    throw new YamlTransformError(`${label} move direction must be "up" or "down"`);
+  }
+  return currentIndex + (operation.direction === 'up' ? -1 : 1);
+}
+
 function getSinglePair(mapNode, label) {
   if (!YAML.isMap(mapNode) || mapNode.items.length === 0) {
     throw new YamlTransformError(`${label} must be a YAML mapping with one name and its value`);
@@ -447,30 +460,27 @@ function renameLayoutTab(settingsDocument, oldTabName, newTabName) {
   }
 }
 
-function moveLayoutTab(settingsDocument, tabName, direction) {
+function moveLayoutTab(settingsDocument, tabName, operation) {
   const layoutMap = getLayoutMap(settingsDocument);
   if (!layoutMap) {
     throw new YamlTransformError(`Preview tab "${tabName}" was not found. Check its name and try again`);
   }
   const tabs = getLayoutTabs(layoutMap);
   const tabIndex = tabs.indexOf(tabName);
-  const offset = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
-  const destination = tabIndex + offset;
-  if (!['up', 'down'].includes(direction)) {
-    throw new YamlTransformError('Tab move direction must be "up" or "down"');
-  }
   if (tabIndex === -1) {
     throw new YamlTransformError(`Preview tab "${tabName}" was not found. Check its name and try again`);
   }
+  const destination = getMoveDestination(tabIndex, tabs.length, operation, 'Tab');
   if (destination < 0 || destination >= tabs.length) {
-    throw new YamlTransformError(`Preview tab "${tabName}" is already at the ${direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
+    throw new YamlTransformError(`Preview tab "${tabName}" cannot be moved farther`);
   }
-  const adjacentTab = tabs[destination];
-  const currentPairIndex = layoutMap.items.findIndex((pair) => getLayoutPairTab(pair) === tabName);
-  const adjacentPairIndex = layoutMap.items.findIndex((pair) => getLayoutPairTab(pair) === adjacentTab);
-  const temporary = layoutMap.items[currentPairIndex];
-  layoutMap.items[currentPairIndex] = layoutMap.items[adjacentPairIndex];
-  layoutMap.items[adjacentPairIndex] = temporary;
+  const movingPairs = layoutMap.items.filter((pair) => getLayoutPairTab(pair) === tabName);
+  layoutMap.items = layoutMap.items.filter((pair) => getLayoutPairTab(pair) !== tabName);
+  const destinationTab = tabs.filter((name) => name !== tabName)[destination];
+  const insertionIndex = destinationTab
+    ? layoutMap.items.findIndex((pair) => getLayoutPairTab(pair) === destinationTab)
+    : layoutMap.items.length;
+  layoutMap.items.splice(insertionIndex < 0 ? layoutMap.items.length : insertionIndex, 0, ...movingPairs);
 }
 
 function serializeDocument(document, originalText) {
@@ -621,7 +631,7 @@ function transformPreviewYaml({ files, operation }) {
       break;
     }
     case 'service.edit': {
-      const { service } = getService(servicesDocument, target);
+      const { service, services: sourceServices } = getService(servicesDocument, target);
       const name = requireName(values.name, 'Service');
       if (YAML.isScalar(service.pair.key)) service.pair.key.value = name;
       if (Array.isArray(values.fields)) {
@@ -629,6 +639,14 @@ function transformPreviewYaml({ files, operation }) {
         setMapFields(servicesDocument, service.pair.value, normalizeEditableFields(values.fields));
       } else {
         setServiceFields(servicesDocument, service.pair, values);
+      }
+      if (operation.destinationTarget) {
+        const destinationGroup = getGroup(servicesDocument, operation.destinationTarget);
+        if (!YAML.isSeq(destinationGroup.pair.value)) {
+          throw new YamlTransformError(`Service group "${operation.destinationTarget.groupName}" must be a YAML list of services`);
+        }
+        const [item] = sourceServices.items.splice(service.index, 1);
+        destinationGroup.pair.value.items.push(item);
       }
       servicesChanged = true;
       break;
@@ -640,17 +658,28 @@ function transformPreviewYaml({ files, operation }) {
       break;
     }
     case 'service.move': {
-      const { service, services } = getService(servicesDocument, target);
-      const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
-      const destination = service.index + offset;
-      if (!['up', 'down'].includes(operation.direction)) {
-        throw new YamlTransformError('Service move direction must be "up" or "down"');
+      const { service, services: sourceServices } = getService(servicesDocument, target);
+      const destinationTarget = operation.destinationTarget;
+      if (destinationTarget) {
+        const destinationGroup = getGroup(servicesDocument, destinationTarget);
+        if (!YAML.isSeq(destinationGroup.pair.value)) {
+          throw new YamlTransformError(`Service group "${destinationTarget.groupName}" must be a YAML list of services`);
+        }
+        const destinationServices = destinationGroup.pair.value;
+        const destination = Number(operation.destinationIndex);
+        if (!Number.isInteger(destination) || destination < 0 || destination > destinationServices.items.length) {
+          throw new YamlTransformError('Service move destination is outside the target group');
+        }
+        const [item] = sourceServices.items.splice(service.index, 1);
+        destinationServices.items.splice(destination, 0, item);
+      } else {
+        const destination = getMoveDestination(service.index, sourceServices.items.length, operation, 'Service');
+        if (destination < 0 || destination >= sourceServices.items.length) {
+          throw new YamlTransformError(`Service "${target.serviceName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group and cannot be moved farther`);
+        }
+        const [item] = sourceServices.items.splice(service.index, 1);
+        sourceServices.items.splice(destination, 0, item);
       }
-      if (destination < 0 || destination >= services.items.length) {
-        throw new YamlTransformError(`Service "${target.serviceName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group and cannot be moved farther`);
-      }
-      const [item] = services.items.splice(service.index, 1);
-      services.items.splice(destination, 0, item);
       servicesChanged = true;
       break;
     }
@@ -722,20 +751,15 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'group.move': {
       const group = getGroup(servicesDocument, target);
-      const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
-      const destination = group.index + offset;
-      if (!['up', 'down'].includes(operation.direction)) {
-        throw new YamlTransformError('Group move direction must be "up" or "down"');
-      }
+      const destination = getMoveDestination(group.index, servicesSequence.items.length, operation, 'Group');
       if (destination < 0 || destination >= servicesSequence.items.length) {
         throw new YamlTransformError(`Group "${target.groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
       }
-      const adjacentPair = getSinglePair(servicesSequence.items[destination], 'Service group');
-      settingsChanged = syncLayoutMove(
-        settingsDocument,
-        scalarValue(group.pair.key),
-        scalarValue(adjacentPair.key)
-      );
+      const step = destination > group.index ? 1 : -1;
+      for (let index = group.index + step; index !== destination + step; index += step) {
+        const adjacentPair = getSinglePair(servicesSequence.items[index], 'Service group');
+        settingsChanged = syncLayoutMove(settingsDocument, scalarValue(group.pair.key), scalarValue(adjacentPair.key)) || settingsChanged;
+      }
       const [item] = servicesSequence.items.splice(group.index, 1);
       servicesSequence.items.splice(destination, 0, item);
       servicesChanged = true;
@@ -767,11 +791,7 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'bookmark-group.move': {
       const group = getBookmarkGroup(bookmarksDocument, target);
-      const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
-      const destination = group.index + offset;
-      if (!['up', 'down'].includes(operation.direction)) {
-        throw new YamlTransformError('Bookmark group move direction must be "up" or "down"');
-      }
+      const destination = getMoveDestination(group.index, bookmarksSequence.items.length, operation, 'Bookmark group');
       if (destination < 0 || destination >= bookmarksSequence.items.length) {
         throw new YamlTransformError(`Bookmark group "${target.groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
       }
@@ -811,17 +831,25 @@ function transformPreviewYaml({ files, operation }) {
       break;
     }
     case 'bookmark.move': {
-      const { bookmark, bookmarks } = getBookmark(bookmarksDocument, target);
-      const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
-      const destination = bookmark.index + offset;
-      if (!['up', 'down'].includes(operation.direction)) {
-        throw new YamlTransformError('Bookmark move direction must be "up" or "down"');
+      const { bookmark, bookmarks: sourceBookmarks } = getBookmark(bookmarksDocument, target);
+      const destinationTarget = operation.destinationTarget;
+      if (destinationTarget) {
+        const destinationGroup = getBookmarkGroup(bookmarksDocument, destinationTarget);
+        const destinationBookmarks = getBookmarkEntries(destinationGroup);
+        const destination = Number(operation.destinationIndex);
+        if (!Number.isInteger(destination) || destination < 0 || destination > destinationBookmarks.items.length) {
+          throw new YamlTransformError('Bookmark move destination is outside the target group');
+        }
+        const [item] = sourceBookmarks.items.splice(bookmark.index, 1);
+        destinationBookmarks.items.splice(destination, 0, item);
+      } else {
+        const destination = getMoveDestination(bookmark.index, sourceBookmarks.items.length, operation, 'Bookmark');
+        if (destination < 0 || destination >= sourceBookmarks.items.length) {
+          throw new YamlTransformError(`Bookmark "${target.bookmarkName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of its group and cannot be moved farther`);
+        }
+        const [item] = sourceBookmarks.items.splice(bookmark.index, 1);
+        sourceBookmarks.items.splice(destination, 0, item);
       }
-      if (destination < 0 || destination >= bookmarks.items.length) {
-        throw new YamlTransformError(`Bookmark "${target.bookmarkName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of its group and cannot be moved farther`);
-      }
-      const [item] = bookmarks.items.splice(bookmark.index, 1);
-      bookmarks.items.splice(destination, 0, item);
       bookmarksChanged = true;
       break;
     }
@@ -860,7 +888,7 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'tab.move': {
       const tabName = requireName(target.name, 'Tab');
-      moveLayoutTab(settingsDocument, tabName, operation.direction);
+      moveLayoutTab(settingsDocument, tabName, operation);
       settingsChanged = true;
       break;
     }
