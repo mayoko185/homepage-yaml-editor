@@ -1034,7 +1034,14 @@
             display: flex;
             flex-wrap: wrap;
             align-items: flex-end;
+            flex: 1 1 auto;
+            min-width: 0;
             gap: 3px;
+        }
+        .preview-tab-manage-button {
+            position: relative;
+            flex: 0 0 auto;
+            margin: 0 0 7px auto;
         }
         .preview-tab-btn {
             border: 1px solid var(--border-color);
@@ -1172,11 +1179,21 @@
                 font-size: 0.95em;
             }
             .preview-tab-navigation {
-                display: block;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: end;
             }
             .preview-tab-label {
+                grid-column: 1 / -1;
                 display: block;
                 padding-bottom: 7px;
+            }
+            .preview-tab-strip {
+                grid-column: 1;
+            }
+            .preview-tab-manage-button {
+                grid-column: 2;
+                grid-row: 2;
             }
         }
         .dashboard-widgets {
@@ -1651,14 +1668,41 @@
             transform: translateY(4px);
             transition: opacity 0.15s ease, transform 0.15s ease;
         }
+        .dashboard-card > .preview-edit-actions,
+        .bookmark-card > .preview-edit-actions {
+            top: auto;
+            bottom: -10px;
+        }
+        .dashboard-card > .preview-edit-actions .preview-edit-action-label,
+        .bookmark-card > .preview-edit-actions .preview-edit-action-label {
+            top: auto;
+            bottom: calc(100% + 8px);
+            transform: translate(-50%, 4px);
+        }
+        .dashboard-card > .preview-edit-actions .preview-edit-action:hover > .preview-edit-action-label,
+        .dashboard-card > .preview-edit-actions .preview-edit-action:focus-visible > .preview-edit-action-label,
+        .bookmark-card > .preview-edit-actions .preview-edit-action:hover > .preview-edit-action-label,
+        .bookmark-card > .preview-edit-actions .preview-edit-action:focus-visible > .preview-edit-action-label {
+            transform: translate(-50%, 0);
+        }
+        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child > .preview-edit-action-label,
+        .bookmark-card > .preview-edit-actions .preview-edit-action:last-child > .preview-edit-action-label {
+            transform: translateY(4px);
+        }
+        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child:hover > .preview-edit-action-label,
+        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child:focus-visible > .preview-edit-action-label,
+        .bookmark-card > .preview-edit-actions .preview-edit-action:last-child:hover > .preview-edit-action-label,
+        .bookmark-card > .preview-edit-actions .preview-edit-action:last-child:focus-visible > .preview-edit-action-label {
+            transform: translateY(0);
+        }
         .dashboard-card:hover > .preview-edit-actions,
-        .dashboard-card > .preview-edit-actions:focus-within,
+        .dashboard-card > .preview-edit-actions:has(.preview-edit-action:focus-visible),
         .bookmark-card:hover > .preview-edit-actions,
-        .bookmark-card > .preview-edit-actions:focus-within,
+        .bookmark-card > .preview-edit-actions:has(.preview-edit-action:focus-visible),
         .bookmark-group:hover > .bookmark-group-heading > .preview-edit-actions,
-        .bookmark-group > .bookmark-group-heading > .preview-edit-actions:focus-within,
+        .bookmark-group > .bookmark-group-heading > .preview-edit-actions:has(.preview-edit-action:focus-visible),
         .dashboard-group:hover > .dashboard-group-title > .preview-edit-actions,
-        .dashboard-group > .dashboard-group-title > .preview-edit-actions:focus-within {
+        .dashboard-group > .dashboard-group-title > .preview-edit-actions:has(.preview-edit-action:focus-visible) {
             opacity: 1;
             pointer-events: auto;
             transform: translateY(0);
@@ -2024,6 +2068,9 @@
         #preview-edit-modal .preview-edit-nested-options .preview-edit-option-row {
             padding: 5px;
         }
+        #preview-edit-modal .preview-edit-nested-options .preview-edit-option-actions {
+            transform: none;
+        }
         #preview-edit-modal .preview-add-option {
             margin-top: 8px;
         }
@@ -2235,7 +2282,9 @@
         }
         .preview-edit-nested-options {
             display: grid;
-            grid-column: 2 / -1;
+            grid-column: 1 / -1;
+            grid-row: 2;
+            min-width: 0;
             gap: 7px;
             padding: 8px;
             border-left: 2px solid color-mix(in srgb, var(--button-bg) 55%, var(--border-color));
@@ -2244,6 +2293,14 @@
         .preview-edit-nested-options .preview-edit-option-row {
             grid-template-columns: minmax(105px, 0.6fr) minmax(0, 1.4fr) auto;
             padding: 6px;
+        }
+        .preview-edit-option-row.has-nested-options > [data-preview-option-key] {
+            grid-column: 1 / 3;
+            grid-row: 1;
+        }
+        .preview-edit-option-row.has-nested-options > .preview-edit-option-actions {
+            grid-column: 3;
+            grid-row: 1;
         }
         .preview-edit-nested-options .preview-add-option {
             margin-top: 0;
@@ -2286,7 +2343,7 @@
             width: min(100%, 650px);
         }
         .option-types-modal-content {
-            width: min(100%, 900px);
+            width: min(100%, 1100px);
         }
         .option-types-list {
             display: grid;
@@ -2295,17 +2352,94 @@
         }
         .option-types-heading {
             display: grid;
-            grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.85fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
+            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr) 104px;
             gap: 8px;
             margin: 16px 8px -8px;
             color: var(--text-color);
             font-size: 0.76rem;
             font-weight: 600;
-            opacity: 0.68;
+        }
+        .option-types-heading > span:last-child {
+            justify-self: end;
+            text-align: right;
+        }
+        .option-heading-with-help,
+        .option-defaults-heading {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .option-defaults-heading {
+            position: relative;
+        }
+        .option-help-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 19px;
+            height: 19px;
+            flex: 0 0 19px;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            cursor: help;
+            font: inherit;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .option-help-button:hover,
+        .option-help-button:focus-visible {
+            border-color: var(--button-bg);
+            color: var(--button-bg);
+            outline: none;
+        }
+        .option-help-tooltip {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 50%;
+            z-index: 50;
+            width: min(330px, 72vw);
+            padding: 9px 11px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            clip-path: inset(50%);
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--container-bg);
+            color: var(--text-color);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+            font-size: 0.8rem;
+            font-weight: 400;
+            line-height: 1.55;
+            text-align: left;
+            white-space: normal;
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, -4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .option-help-button:hover > .option-help-tooltip,
+        .option-help-button:focus-visible > .option-help-tooltip {
+            overflow: visible;
+            clip: auto;
+            clip-path: none;
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+        .option-help-tooltip ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .option-help-tooltip li + li {
+            margin-top: 5px;
         }
         .option-types-row {
             display: grid;
-            grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.85fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
+            grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr) 104px;
             align-items: center;
             gap: 8px;
             padding: 8px;
@@ -2360,6 +2494,10 @@
             background: var(--button-bg);
             color: var(--tab-active-text);
         }
+        .option-applies-to-choice input:disabled + span {
+            cursor: not-allowed;
+            opacity: 0.35;
+        }
         .option-applies-to-choice input:focus-visible + span {
             outline: 2px solid var(--button-bg);
             outline-offset: 2px;
@@ -2396,6 +2534,136 @@
             }
             .option-types-row .option-types-actions {
                 justify-self: end;
+            }
+        }
+        .option-defaults-section {
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border-color);
+        }
+        .option-defaults-section h4 {
+            margin: 0;
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+        .option-defaults-list {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .option-default-group {
+            min-width: 0;
+            padding: 9px;
+            border: 1px solid var(--border-color);
+            border-radius: 9px;
+            background: color-mix(in srgb, var(--config-item-bg) 78%, var(--container-bg));
+        }
+        .option-default-group h5 {
+            margin: 0 0 8px;
+            color: var(--text-color);
+            font-size: 0.86rem;
+        }
+        .option-default-rows {
+            display: grid;
+            gap: 9px;
+        }
+        .option-default-row {
+            position: relative;
+            display: block;
+            align-items: center;
+            min-height: 34px;
+            padding: 7px 9px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--config-item-bg);
+        }
+        .option-default-name {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            color: var(--text-color);
+            font-size: 0.86rem;
+            font-weight: 600;
+        }
+        .option-default-actions {
+            position: absolute;
+            right: -5px;
+            bottom: -9px;
+            z-index: 3;
+            display: inline-flex;
+            padding: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--preview-bg);
+            box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+            gap: 4px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .option-default-row:hover > .option-default-actions,
+        .option-default-row > .option-default-actions:has(.preview-edit-action:focus-visible) {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+        .option-default-actions .preview-edit-action-label {
+            top: auto;
+            bottom: calc(100% + 8px);
+            transform: translate(-50%, 4px);
+        }
+        .option-default-actions .preview-edit-action:hover > .preview-edit-action-label,
+        .option-default-actions .preview-edit-action:focus-visible > .preview-edit-action-label {
+            transform: translate(-50%, 0);
+        }
+        .option-default-actions .preview-edit-action:last-child > .preview-edit-action-label {
+            transform: translateY(4px);
+        }
+        .option-default-actions .preview-edit-action:last-child:hover > .preview-edit-action-label,
+        .option-default-actions .preview-edit-action:last-child:focus-visible > .preview-edit-action-label {
+            transform: translateY(0);
+        }
+        .option-default-empty {
+            padding: 9px;
+            border: 1px dashed var(--border-color);
+            border-radius: 7px;
+            color: var(--text-color);
+            font-size: 0.82rem;
+            opacity: 0.65;
+        }
+        .option-default-add {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 7px;
+            margin-top: 8px;
+        }
+        .option-default-add .modal-input,
+        .option-default-add .option-default-add-button {
+            min-width: 0;
+            margin: 0;
+        }
+        .option-default-add .modal-input {
+            padding: 7px 8px;
+            font-size: 0.84rem;
+        }
+        .option-default-add .option-default-add-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+        @media (max-width: 900px) {
+            .option-defaults-list {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 720px) {
+            .option-defaults-list {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .option-default-add {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
         .preview-tab-manager-list {

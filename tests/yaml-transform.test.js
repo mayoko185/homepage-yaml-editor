@@ -213,6 +213,57 @@ test('edits ordered service and group options from the Preview editor', () => {
   assert.equal(parsedSettings.layout['First Group'], undefined);
 });
 
+test('writes select choices as text and explicit blank choices without quoted markers', () => {
+  const files = transform({
+    type: 'service.add',
+    target: { groupName: 'First Group', groupIndex: 0 },
+    values: {
+      name: 'Select Service',
+      fields: [
+        { key: 'mode', value: 'true', textValue: true },
+        { key: 'label', value: 'another thing', textValue: true },
+        { key: 'optional', value: '', blankValue: true }
+      ]
+    }
+  });
+  const service = YAML.parse(files.services)[0]['First Group'][2]['Select Service'];
+  assert.equal(service.mode, 'true');
+  assert.equal(service.label, 'another thing');
+  assert.equal(service.optional, null);
+  assert.match(files.services, /mode: "true"/);
+  assert.match(files.services, /label: another thing/);
+  assert.match(files.services, /optional:\n/);
+  assert.doesNotMatch(files.services, /optional: ["']{2}/);
+});
+
+test('removes deleted option types from every applicable YAML target', () => {
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'description', appliesTo: ['service'] },
+      { name: 'key', appliesTo: ['widget'] },
+      { name: 'tab', appliesTo: ['group'] },
+      { name: 'abbr', appliesTo: ['bookmark'] }
+    ]
+  }, { services, settings, bookmarks });
+  const parsedServices = YAML.parse(files.services);
+  const parsedSettings = YAML.parse(files.settings);
+  const parsedBookmarks = YAML.parse(files.bookmarks);
+  const firstService = parsedServices[0]['First Group'][0]['First Service'];
+  const github = parsedBookmarks[0].Developer[0].Github[0];
+  assert.equal(firstService.description, undefined);
+  assert.equal(firstService.widget.key, undefined);
+  assert.equal(firstService.widget.type, 'customapi');
+  assert.equal(firstService.href, 'https://one.example');
+  assert.equal(parsedSettings.layout['First Group'].tab, undefined);
+  assert.equal(parsedSettings.title, 'Test');
+  assert.equal(github.abbr, undefined);
+  assert.equal(github.href, 'https://github.com');
+  assert.match(files.services, /keep this services comment/);
+  assert.match(files.settings, /keep this settings comment/);
+  assert.match(files.bookmarks, /keep this bookmarks comment/);
+});
+
 test('group changes keep matching layout entries synchronized', () => {
   let files = transform({
     type: 'group.rename',
@@ -245,9 +296,25 @@ test('group changes keep matching layout entries synchronized', () => {
   assert.deepEqual(parsedServices.map((group) => Object.keys(group)[0]), ['Second Group']);
   assert.equal(parsedSettings.layout['Renamed Group'], undefined);
 
-  files = transform({ type: 'group.add', values: { name: 'Added Group' } }, files);
+  files = transform({
+    type: 'group.add',
+    values: {
+      name: 'Added Group',
+      fields: [
+        { key: 'tab', value: 'Other' },
+        { key: 'style', value: 'row' },
+        { key: 'columns', value: '3' },
+        { key: 'header', value: 'true' },
+        { key: 'icon', value: 'mdi-server' }
+      ]
+    }
+  }, files);
   parsedServices = YAML.parse(files.services);
+  parsedSettings = YAML.parse(files.settings);
   assert.deepEqual(parsedServices.map((group) => Object.keys(group)[0]), ['Second Group', 'Added Group']);
+  assert.deepEqual(parsedSettings.layout['Added Group'], {
+    tab: 'Other', style: 'row', columns: 3, header: true, icon: 'mdi-server'
+  });
 });
 
 test('rejects duplicate service group names before creating invalid YAML', () => {

@@ -1,123 +1,254 @@
 [
   {
+    "name": "icon",
+    "type": "text",
+    "appliesTo": [
+      "service",
+      "group",
+      "bookmark"
+    ],
+    "defaultForAdd": [
+      "service"
+    ],
+    "defaultOrder": {
+      "service": 0
+    }
+  },
+  {
     "name": "description",
     "type": "textarea",
-    "appliesTo": ["service"],
-    "defaultForAdd": ["service"],
+    "appliesTo": [
+      "service"
+    ],
+    "defaultForAdd": [
+      "service"
+    ],
+    "defaultOrder": {
+      "service": 1
+    },
     "rows": 4
   },
   {
     "name": "widget",
     "type": "mapping",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "tab",
-    "type": "tab",
-    "appliesTo": ["group"]
-  },
-  {
-    "name": "target",
-    "type": "select",
-    "appliesTo": ["service", "bookmark"],
-    "values": ["_blank", "_self", "_top"]
-  },
-  {
-    "name": "header",
-    "type": "boolean",
-    "appliesTo": ["group"]
-  },
-  {
-    "name": "showStats",
-    "type": "boolean",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "showLabel",
-    "type": "boolean",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "showStatus",
-    "type": "boolean",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "showTime",
-    "type": "boolean",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "showName",
-    "type": "boolean",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "hideVersion",
-    "type": "boolean",
-    "appliesTo": ["service"]
-  },
-  {
-    "name": "useEqualHeights",
-    "type": "boolean",
-    "appliesTo": ["group"]
-  },
-  {
-    "name": "icon",
-    "type": "text",
-    "appliesTo": ["service", "group", "bookmark"],
-    "defaultForAdd": ["service"]
+    "appliesTo": [
+      "service"
+    ]
   },
   {
     "name": "href",
     "type": "text",
-    "appliesTo": ["service", "bookmark"],
-    "defaultForAdd": ["service", "bookmark"]
+    "appliesTo": [
+      "service",
+      "bookmark"
+    ],
+    "defaultForAdd": [
+      "service",
+      "bookmark"
+    ],
+    "defaultOrder": {
+      "service": 2,
+      "bookmark": 0
+    }
   },
   {
-    "name": "abbr",
-    "type": "text",
-    "appliesTo": ["bookmark"],
-    "defaultForAdd": ["bookmark"]
+    "name": "target",
+    "type": "select",
+    "appliesTo": [
+      "service",
+      "bookmark"
+    ],
+    "values": [
+      "_blank",
+      "_self",
+      "_top"
+    ]
+  },
+  {
+    "name": "showStats",
+    "type": "boolean",
+    "appliesTo": [
+      "service"
+    ]
+  },
+  {
+    "name": "showLabel",
+    "type": "boolean",
+    "appliesTo": [
+      "service"
+    ]
+  },
+  {
+    "name": "showStatus",
+    "type": "boolean",
+    "appliesTo": [
+      "service"
+    ]
+  },
+  {
+    "name": "showTime",
+    "type": "boolean",
+    "appliesTo": [
+      "service"
+    ]
+  },
+  {
+    "name": "showName",
+    "type": "boolean",
+    "appliesTo": [
+      "service"
+    ]
+  },
+  {
+    "name": "hideVersion",
+    "type": "boolean",
+    "appliesTo": [
+      "service"
+    ]
   },
   {
     "name": "siteMonitor",
     "type": "text",
-    "appliesTo": ["service"]
+    "appliesTo": [
+      "service"
+    ]
   },
   {
     "name": "statusStyle",
-    "type": "text",
-    "appliesTo": ["service"]
+    "type": "select",
+    "appliesTo": [
+      "service"
+    ],
+    "values": [
+      "",
+      "dot",
+      "basic"
+    ]
+  },
+  {
+    "name": "header",
+    "type": "boolean",
+    "appliesTo": [
+      "group"
+    ],
+    "defaultForAdd": [
+      "group"
+    ],
+    "defaultOrder": {
+      "group": 0
+    }
+  },
+  {
+    "name": "useEqualHeights",
+    "type": "boolean",
+    "appliesTo": [
+      "group"
+    ]
   },
   {
     "name": "style",
     "type": "text",
-    "appliesTo": ["group"]
+    "appliesTo": [
+      "group"
+    ],
+    "defaultForAdd": [
+      "group"
+    ],
+    "defaultOrder": {
+      "group": 1
+    }
   },
   {
     "name": "columns",
     "type": "text",
-    "appliesTo": ["group"]
+    "appliesTo": [
+      "group"
+    ],
+    "defaultForAdd": [
+      "group"
+    ],
+    "defaultOrder": {
+      "group": 2
+    }
+  },
+  {
+    "name": "tab",
+    "type": "tab",
+    "appliesTo": [
+      "group"
+    ],
+    "defaultForAdd": [
+      "group"
+    ],
+    "defaultOrder": {
+      "group": 3
+    }
   },
   {
     "name": "type",
     "type": "text",
-    "appliesTo": ["service"]
+    "appliesTo": [
+      "widget"
+    ],
+    "defaultForAdd": [
+      "widget"
+    ],
+    "defaultOrder": {
+      "widget": 0
+    }
   },
   {
     "name": "fields",
     "type": "text",
-    "appliesTo": ["service"]
+    "appliesTo": [
+      "widget"
+    ]
+  },
+  {
+    "name": "key",
+    "type": "textarea",
+    "appliesTo": [
+      "widget"
+    ],
+    "defaultForAdd": [
+      "widget"
+    ],
+    "defaultOrder": {
+      "widget": 1
+    },
+    "rows": 2
   },
   {
     "name": "url",
     "type": "text",
-    "appliesTo": ["service"]
+    "appliesTo": [
+      "widget"
+    ],
+    "defaultForAdd": [
+      "widget"
+    ],
+    "defaultOrder": {
+      "widget": 2
+    }
   },
   {
-    "name": "key",
+    "name": "enableBlocks",
+    "type": "boolean",
+    "appliesTo": [
+      "widget"
+    ]
+  },
+  {
+    "name": "abbr",
     "type": "text",
-    "appliesTo": ["service"]
+    "appliesTo": [
+      "bookmark"
+    ],
+    "defaultForAdd": [
+      "bookmark"
+    ],
+    "defaultOrder": {
+      "bookmark": 1
+    }
   }
 ]

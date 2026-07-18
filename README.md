@@ -27,7 +27,7 @@ Add, edit, reorder, and remove dashboard groups, services, and bookmarks from th
 - Includes an Interactive Editor for adding, editing, moving, reordering, and deleting supported dashboard items.
 - Keeps changes pending until Save, with undo support and a ZIP download for all loaded files.
 - Remembers theme, a custom page and browser-tab title, visible tabs, editor preferences, and custom option types.
-- Lets custom option types target any combination of services, service groups, and bookmarks.
+- Lets custom option types target any combination of services, service groups, bookmarks, and service widgets, with configurable defaults for new items.
 - Can be protected with an optional username and password.
 
 ## Installation

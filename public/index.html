@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-        <link rel="stylesheet" href="styles.css?v=144">
+        <link rel="stylesheet" href="styles.css?v=159">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -152,14 +152,6 @@
                     <span id="preview-title-label">Dashboard</span>
                 </div>
                 <div class="preview-refresh-controls">
-                    <button type="button" id="preview-manage-tabs-button" class="toolbar-button toolbar-icon-control" aria-label="Manage tabs" hidden>
-                        <span class="toolbar-button-icon" aria-hidden="true">
-                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
-                                <path d="M7 4h13v13H7zM4 7v13h13"></path>
-                            </svg>
-                        </span>
-                        <span class="preview-control-label" aria-hidden="true">Manage tabs</span>
-                    </button>
                     <button type="button" id="preview-option-types-button" class="toolbar-button toolbar-icon-control" aria-label="Manage option types" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">
                             <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
@@ -375,20 +367,46 @@
                 <h3 id="option-types-modal-title" class="modal-title">Option types</h3>
                 <button type="button" class="modal-close" id="option-types-modal-close" aria-label="Close option types">&times;</button>
             </div>
-            <p class="modal-body-text">These definitions control how matching YAML options are edited in the Interactive Editor.</p>
-            <ul class="modal-body-list">
-                <li><strong>Text:</strong> uses a short single-line input.</li>
-                <li><strong>Textarea:</strong> uses a multi-line input; its row count controls the height.</li>
-                <li><strong>Boolean:</strong> uses true/false buttons.</li>
-                <li><strong>Tab:</strong> automatically lists the available tabs.</li>
-                <li><strong>Mapping:</strong> opens nested YAML options.</li>
-                <li><strong>Select:</strong> uses a dropdown populated by the comma-separated choices entered for the option.</li>
-                <li><strong>Applies to:</strong> choose any combination of services (S), service groups (G), and bookmarks (B). Hover each checkbox for its full label. Use the arrows to change the option order.</li>
-            </ul>
             <form id="option-types-form">
-                <div class="option-types-heading" aria-hidden="true"><span>Option</span><span>Value type</span><span>Applies to</span><span>Additional settings</span><span>Actions</span></div>
+                <div class="option-types-heading">
+                    <span>Option</span>
+                    <span class="option-heading-with-help">Value type
+                        <button type="button" class="option-help-button" aria-label="About value types">?
+                            <span class="option-help-tooltip" role="tooltip">
+                                <ul>
+                                    <li><strong>Text:</strong> short single-line input.</li>
+                                    <li><strong>Textarea:</strong> multi-line input; row count controls its height.</li>
+                                    <li><strong>Boolean:</strong> true/false buttons.</li>
+                                    <li><strong>Tab:</strong> available dashboard tabs.</li>
+                                    <li><strong>Mapping:</strong> nested YAML options.</li>
+                                    <li><strong>Select:</strong> dropdown from comma-separated choices. Start with a comma to include a <em>(blank)</em> choice.</li>
+                                </ul>
+                            </span>
+                        </button>
+                    </span>
+                    <span class="option-heading-with-help">Applies to
+                        <button type="button" class="option-help-button" aria-label="About option applicability">?
+                            <span class="option-help-tooltip" role="tooltip">
+                                <ul>
+                                    <li><strong>S:</strong> services</li>
+                                    <li><strong>G:</strong> service groups</li>
+                                    <li><strong>B:</strong> bookmarks</li>
+                                    <li><strong>W:</strong> service widget sub-options</li>
+                                </ul>
+                            </span>
+                        </button>
+                    </span>
+                    <span>Additional settings</span>
+                    <span>Actions</span>
+                </div>
                 <div id="option-types-list" class="option-types-list"></div>
                 <button type="button" id="option-types-add" class="preview-add-option">+ Add option type</button>
+                <section class="option-defaults-section" aria-labelledby="option-defaults-title">
+                    <div class="option-defaults-heading">
+                        <h4 id="option-defaults-title">Defaults for add</h4>
+                    </div>
+                    <div id="option-defaults-list" class="option-defaults-list"></div>
+                </section>
                 <p id="option-types-status" class="modal-status" role="alert" hidden></p>
                 <div class="modal-actions">
                     <button type="button" id="option-types-cancel" class="modal-button modal-button-secondary">Cancel</button>
@@ -401,6 +419,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=122"></script>
+    <script src="app.js?v=137"></script>
 </body>
 </html>

@@ -53,6 +53,7 @@
         let applyingPreviewFiles = false;
         let previewEditDialogState = null;
         let previewEditPreviousFocus = null;
+        let previewEditPreviousFocusVisible = false;
         let previewTabPreviousFocus = null;
         let previewTabRenameName = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
@@ -894,9 +895,16 @@
             return Array.from(optionDefinitions.values()).filter((definition) => optionDefinitionMatchesTarget(definition, target));
         }
 
-        function getDefaultPreviewOptionFields(target) {
+        function getDefaultPreviewOptionFields(target, { availableTabs = [] } = {}) {
             return getOptionDefinitionsForTarget(target)
                 .filter((definition) => Array.isArray(definition.defaultForAdd) && definition.defaultForAdd.includes(target))
+                .sort((first, second) => {
+                    const firstOrder = Number(first.defaultOrder?.[target]);
+                    const secondOrder = Number(second.defaultOrder?.[target]);
+                    return (Number.isFinite(firstOrder) ? firstOrder : Number.MAX_SAFE_INTEGER)
+                        - (Number.isFinite(secondOrder) ? secondOrder : Number.MAX_SAFE_INTEGER);
+                })
+                .filter((definition) => definition.type !== 'tab' || availableTabs.length > 0)
                 .map((definition) => ({ key: definition.name, value: '' }));
         }
 
@@ -911,12 +919,15 @@
         }
 
         const optionValueTypeChoices = ['text', 'textarea', 'boolean', 'tab', 'mapping', 'select'];
+        const blankSelectControlValue = '__homepage_yaml_editor_blank_select__';
         const optionAppliesToChoices = [
             { value: 'service', label: 'S', tooltip: 'Services' },
             { value: 'group', label: 'G', tooltip: 'Service groups' },
-            { value: 'bookmark', label: 'B', tooltip: 'Bookmarks' }
+            { value: 'bookmark', label: 'B', tooltip: 'Bookmarks' },
+            { value: 'widget', label: 'W', tooltip: 'Service widgets' }
         ];
         let optionTypesDraft = [];
+        let optionTypesRemovedDefinitions = new Map();
         let optionTypesPreviousFocus = null;
 
         function setOptionTypesStatus(message = '') {
@@ -926,18 +937,26 @@
         }
 
         function readOptionTypesDraft() {
-            optionTypesDraft = Array.from(document.querySelectorAll('#option-types-list > [data-option-type-row]')).map((row) => {
+            optionTypesDraft = Array.from(document.querySelectorAll('#option-types-list > [data-option-type-row]')).map((row, index) => {
                 const appliesTo = Array.from(row.querySelectorAll('[data-option-applies-to]:checked')).map((input) => input.value);
-                const defaultForAdd = String(row.dataset.optionDefaultForAdd || '').split(',').filter((target) => appliesTo.includes(target));
+                const previousDefinition = optionTypesDraft[index] || {};
+                const defaultForAdd = (previousDefinition.defaultForAdd || []).filter((target) => appliesTo.includes(target));
+                const defaultOrder = Object.fromEntries(Object.entries(previousDefinition.defaultOrder || {})
+                    .filter(([target]) => defaultForAdd.includes(target)));
+                const selectValues = row.querySelector('[data-option-select-values]');
                 return {
                     name: row.querySelector('[data-option-type-name]').value,
                     type: row.querySelector('[data-option-value-type]').value,
                     appliesTo,
+                    _originalName: previousDefinition._originalName || '',
+                    _originalAppliesTo: [...(previousDefinition._originalAppliesTo || [])],
                     ...(defaultForAdd.length > 0 ? { defaultForAdd } : {}),
-                    values: (row.querySelector('[data-option-select-values]')?.value || '').split(',').map((value) => value.trim()).filter(Boolean),
+                    ...(Object.keys(defaultOrder).length > 0 ? { defaultOrder } : {}),
+                    values: selectValues ? selectValues.value.split(',').map((value) => value.trim()) : [],
                     rows: Number(row.querySelector('[data-option-textarea-rows]')?.value) || 2
                 };
             });
+            normalizeOptionDefaultOrders();
         }
 
         function renderOptionTypesDraft() {
@@ -953,23 +972,103 @@
                     : needsRows
                         ? `<input type="number" class="modal-input" data-option-textarea-rows aria-label="Textarea rows" min="2" max="12" value="${definition.rows || 2}" placeholder="Rows">`
                         : '<span class="option-types-extra-placeholder" aria-hidden="true"></span>';
-                return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row data-option-default-for-add="${escapeHtml((definition.defaultForAdd || []).join(','))}">
+                return `<div class="option-types-row${needsSelectValues ? ' has-select-values' : ''}${needsRows ? ' has-textarea-rows' : ''}" data-option-type-row>
                     <input type="text" class="modal-input" data-option-type-name aria-label="Option name" value="${escapeHtml(definition.name)}" placeholder="Option name">
                     <select class="modal-input" data-option-value-type aria-label="Value type">${typeOptions}</select>
                     <fieldset class="option-applies-to" aria-label="Applies to">${appliesToOptions}</fieldset>
                     ${extraControl}
                     <span class="preview-edit-actions option-types-actions">
-                        <button type="button" class="preview-edit-action preview-edit-move-up" data-option-type-move="up" data-option-type-index="${index}" aria-label="Move ${escapeHtml(definition.name || 'option')} up" title="Move option type up"${index === 0 ? ' disabled' : ''}>&uarr;</button>
-                        <button type="button" class="preview-edit-action preview-edit-move-down" data-option-type-move="down" data-option-type-index="${index}" aria-label="Move ${escapeHtml(definition.name || 'option')} down" title="Move option type down"${index === optionTypesDraft.length - 1 ? ' disabled' : ''}>&darr;</button>
-                        <button type="button" class="preview-edit-action preview-edit-delete" data-option-type-remove="${index}" aria-label="Remove ${escapeHtml(definition.name || 'option')}" title="Remove option type">&times;</button>
+                        <button type="button" class="preview-edit-action preview-edit-move-up" data-option-type-move="up" data-option-type-index="${index}" aria-label="Move ${escapeHtml(definition.name || 'option')} up"${index === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option type up</span></button>
+                        <button type="button" class="preview-edit-action preview-edit-move-down" data-option-type-move="down" data-option-type-index="${index}" aria-label="Move ${escapeHtml(definition.name || 'option')} down"${index === optionTypesDraft.length - 1 ? ' disabled' : ''}>&darr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option type down</span></button>
+                        <button type="button" class="preview-edit-action preview-edit-delete" data-option-type-remove="${index}" aria-label="Remove ${escapeHtml(definition.name || 'option')}">&times;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Remove option type</span></button>
                     </span>
                 </div>`;
             }).join('') || '<div class="preview-tab-manager-empty">No option types are configured.</div>';
+            renderOptionDefaultsDraft();
+        }
+
+        function getOrderedOptionDefaultIndexes(target) {
+            return optionTypesDraft.map((definition, index) => ({ definition, index }))
+                .filter(({ definition }) => definition.appliesTo?.includes(target) && definition.defaultForAdd?.includes(target))
+                .sort((first, second) => {
+                    const firstOrder = Number(first.definition.defaultOrder?.[target]);
+                    const secondOrder = Number(second.definition.defaultOrder?.[target]);
+                    return (Number.isFinite(firstOrder) ? firstOrder : Number.MAX_SAFE_INTEGER)
+                        - (Number.isFinite(secondOrder) ? secondOrder : Number.MAX_SAFE_INTEGER)
+                        || first.index - second.index;
+                })
+                .map(({ index }) => index);
+        }
+
+        function setOptionDefaultOrder(target, orderedIndexes) {
+            optionTypesDraft.forEach((definition) => {
+                if (!definition.defaultOrder) return;
+                delete definition.defaultOrder[target];
+                if (Object.keys(definition.defaultOrder).length === 0) delete definition.defaultOrder;
+            });
+            orderedIndexes.forEach((definitionIndex, order) => {
+                optionTypesDraft[definitionIndex].defaultOrder = {
+                    ...(optionTypesDraft[definitionIndex].defaultOrder || {}),
+                    [target]: order
+                };
+            });
+        }
+
+        function normalizeOptionDefaultOrders() {
+            optionTypesDraft.forEach((definition) => {
+                const appliesTo = Array.isArray(definition.appliesTo) ? definition.appliesTo : [];
+                const defaultForAdd = (definition.defaultForAdd || []).filter((target) => appliesTo.includes(target));
+                if (defaultForAdd.length > 0) definition.defaultForAdd = [...new Set(defaultForAdd)];
+                else delete definition.defaultForAdd;
+            });
+            optionAppliesToChoices.forEach((choice) => setOptionDefaultOrder(choice.value, getOrderedOptionDefaultIndexes(choice.value)));
+        }
+
+        function renderOptionDefaultsDraft() {
+            const defaultsList = document.getElementById('option-defaults-list');
+            if (!defaultsList) return;
+            normalizeOptionDefaultOrders();
+            defaultsList.innerHTML = optionAppliesToChoices.map((choice) => {
+                const orderedIndexes = getOrderedOptionDefaultIndexes(choice.value);
+                const availableIndexes = optionTypesDraft.map((definition, index) => ({ definition, index }))
+                    .filter(({ definition, index }) => definition.appliesTo?.includes(choice.value) && !orderedIndexes.includes(index) && definition.name.trim());
+                const rows = orderedIndexes.map((definitionIndex, order) => {
+                    const definition = optionTypesDraft[definitionIndex];
+                    const name = definition.name.trim() || 'Unnamed option';
+                    return `<div class="option-default-row" data-option-default-row>
+                        <span class="option-default-name">${escapeHtml(name)}</span>
+                        <span class="preview-edit-actions option-default-actions">
+                            <button type="button" class="preview-edit-action preview-edit-move-up" data-option-default-action="up" data-option-default-target="${choice.value}" data-option-default-index="${definitionIndex}" aria-label="Move ${escapeHtml(name)} up in ${escapeHtml(choice.tooltip)} defaults"${order === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move default up</span></button>
+                            <button type="button" class="preview-edit-action preview-edit-move-down" data-option-default-action="down" data-option-default-target="${choice.value}" data-option-default-index="${definitionIndex}" aria-label="Move ${escapeHtml(name)} down in ${escapeHtml(choice.tooltip)} defaults"${order === orderedIndexes.length - 1 ? ' disabled' : ''}>&darr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move default down</span></button>
+                            <button type="button" class="preview-edit-action preview-edit-delete" data-option-default-action="remove" data-option-default-target="${choice.value}" data-option-default-index="${definitionIndex}" aria-label="Remove ${escapeHtml(name)} from ${escapeHtml(choice.tooltip)} defaults">&times;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Remove default</span></button>
+                        </span>
+                    </div>`;
+                }).join('') || '<div class="option-default-empty">No defaults selected.</div>';
+                const availableOptions = availableIndexes.map(({ definition, index }) => `<option value="${index}">${escapeHtml(definition.name.trim())}</option>`).join('');
+                return `<section class="option-default-group" data-option-default-group="${choice.value}">
+                    <h5>${escapeHtml(choice.tooltip)}</h5>
+                    <div class="option-default-rows">${rows}</div>
+                    <div class="option-default-add">
+                        <select class="modal-input" data-option-default-select aria-label="Add a ${escapeHtml(choice.tooltip.toLowerCase())} default"${availableOptions ? '' : ' disabled'}>
+                            <option value="">${availableOptions ? 'Choose an option' : 'All applicable options added'}</option>${availableOptions}
+                        </select>
+                        <button type="button" class="modal-button option-default-add-button" data-option-default-action="add" data-option-default-target="${choice.value}" aria-label="Add ${escapeHtml(choice.tooltip.toLowerCase())} default"${availableOptions ? '' : ' disabled'}>Add</button>
+                    </div>
+                </section>`;
+            }).join('');
         }
 
         function openOptionTypesModal() {
             optionTypesPreviousFocus = document.activeElement;
-            optionTypesDraft = Array.from(optionDefinitions.values()).map((definition) => ({ ...definition, values: [...(definition.values || [])] }));
+            optionTypesDraft = Array.from(optionDefinitions.values()).map((definition) => ({
+                ...definition,
+                _originalName: definition.name,
+                _originalAppliesTo: [...(definition.appliesTo || [])],
+                values: [...(definition.values || [])],
+                ...(definition.defaultForAdd ? { defaultForAdd: [...definition.defaultForAdd] } : {}),
+                ...(definition.defaultOrder ? { defaultOrder: { ...definition.defaultOrder } } : {})
+            }));
+            optionTypesRemovedDefinitions = new Map();
             renderOptionTypesDraft();
             setOptionTypesStatus();
             const modal = document.getElementById('option-types-modal');
@@ -989,22 +1088,36 @@
         async function saveOptionTypes(event) {
             event.preventDefault();
             readOptionTypesDraft();
+            const optionTypesToSave = optionTypesDraft.map(({ _originalName, _originalAppliesTo, ...definition }) => definition);
+            const remainingNames = new Set(optionTypesToSave.map((definition) => definition.name.trim()));
+            const removedDefinitions = Array.from(optionTypesRemovedDefinitions.values())
+                .filter((definition) => !remainingNames.has(definition.name));
             const saveButton = document.getElementById('option-types-save');
             saveButton.disabled = true;
             setOptionTypesStatus();
             try {
+                if (removedDefinitions.length > 0) {
+                    const removedFromYaml = await applyPreviewEdit(
+                        { type: 'option-types.remove', options: removedDefinitions },
+                        `Removed deleted option type${removedDefinitions.length === 1 ? '' : 's'} from the loaded YAML.`
+                    );
+                    if (!removedFromYaml) throw new Error('Could not remove deleted option types from the loaded YAML');
+                }
                 const response = await fetch('/api/option-types', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ options: optionTypesDraft })
+                    body: JSON.stringify({ options: optionTypesToSave })
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || data.error) {
                     throw new Error(getApiErrorMessage(data, response, 'Could not save option types'));
                 }
                 setOptionDefinitions(data.options);
+                optionTypesRemovedDefinitions = new Map();
                 if (previewEditDialogState) renderPreviewEditOptions();
-                setSaveStatus('Option types saved.', 'success');
+                setSaveStatus(removedDefinitions.length > 0
+                    ? `Option types saved. Removed matching YAML options; Save to write the pending YAML changes.`
+                    : 'Option types saved.', removedDefinitions.length > 0 ? 'info' : 'success');
                 closeOptionTypesModal();
             } catch (error) {
                 setOptionTypesStatus(addErrorGuidance(error, 'Review the option type values and try again'));
@@ -1015,11 +1128,19 @@
 
         function getPreviewOptionFields(value) {
             if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-            return Object.entries(value).map(([key, optionValue]) => (
-                optionValue && typeof optionValue === 'object' && !Array.isArray(optionValue)
-                    ? { key, fields: getPreviewOptionFields(optionValue), locked: true }
-                    : { key, value: Array.isArray(optionValue) ? JSON.stringify(optionValue) : optionValue === null ? 'null' : String(optionValue ?? ''), locked: true }
-            ));
+            return Object.entries(value).map(([key, optionValue]) => {
+                if (optionValue && typeof optionValue === 'object' && !Array.isArray(optionValue)) {
+                    return { key, fields: getPreviewOptionFields(optionValue), locked: true };
+                }
+                if (getOptionDefinition(key)?.type === 'select' && (optionValue === null || optionValue === '')) {
+                    return { key, value: '', blankValue: true, locked: true };
+                }
+                return {
+                    key,
+                    value: Array.isArray(optionValue) ? JSON.stringify(optionValue) : optionValue === null ? 'null' : String(optionValue ?? ''),
+                    locked: true
+                };
+            });
         }
 
         function normalizePreviewOptionStyles(fields) {
@@ -1049,9 +1170,15 @@
                     const locked = row.dataset.previewOptionLocked === 'true';
                     const nested = row.querySelector(':scope > [data-preview-nested-options]');
                     const booleanValue = row.querySelector(':scope > [data-preview-option-value] input:checked');
+                    const valueControl = row.querySelector(':scope > [data-preview-option-value]');
+                    const selectedChoice = valueControl instanceof HTMLSelectElement ? valueControl.selectedOptions[0] : null;
                     return nested
                         ? { key, fields: readPreviewOptionRows(nested), locked }
-                        : { key, value: booleanValue ? booleanValue.value : row.querySelector(':scope > [data-preview-option-value]').value || '', locked };
+                        : selectedChoice?.dataset.previewBlankChoice === 'true'
+                            ? { key, value: '', blankValue: true, locked }
+                            : getOptionDefinition(key)?.type === 'select' && valueControl instanceof HTMLSelectElement
+                                ? { key, value: valueControl.value || '', ...(valueControl.value ? { textValue: true } : {}), locked }
+                                : { key, value: booleanValue ? booleanValue.value : valueControl.value || '', locked };
                 });
         }
 
@@ -1059,6 +1186,18 @@
             if (!previewEditDialogState) return;
             previewEditDialogState.fields = readPreviewOptionRows(document.getElementById('preview-edit-options'));
             normalizePreviewOptionStyles(previewEditDialogState.fields);
+        }
+
+        function getPreviewEditFieldAtPath(path) {
+            if (!previewEditDialogState || path === null || path === undefined || path === '') return null;
+            let fields = previewEditDialogState.fields;
+            let field = null;
+            for (const pathIndex of String(path).split('.')) {
+                field = Array.isArray(fields) ? fields[Number(pathIndex)] : null;
+                if (!field) return null;
+                fields = field.fields;
+            }
+            return field;
         }
 
         function updatePreviewEditTabWarning() {
@@ -1074,7 +1213,7 @@
             const addButton = document.getElementById('preview-edit-add-option');
             const addOptionNote = document.getElementById('preview-edit-add-option-note');
             const state = previewEditDialogState;
-            const supportsOptions = state && ['service.add', 'service.edit', 'group.edit', 'bookmark.add', 'bookmark.edit'].includes(state.action);
+            const supportsOptions = state && ['service.add', 'service.edit', 'group.add', 'group.edit', 'bookmark.add', 'bookmark.edit'].includes(state.action);
             options.hidden = !supportsOptions;
             addButton.hidden = !supportsOptions;
             addOptionNote.hidden = !supportsOptions || !state.hasAddedOption;
@@ -1084,12 +1223,12 @@
                 return;
             }
             const optionTarget = getPreviewOptionTarget(state.action);
-            const availableOptionNames = getOptionDefinitionsForTarget(optionTarget).map((definition) => definition.name);
             function getFieldCollection(path = '') {
                 if (!path) return state.fields;
                 return path.split('.').reduce((fields, index) => fields[Number(index)].fields, state.fields);
             }
-            function renderRows(fields, parentPath = '') {
+            function renderRows(fields, parentPath = '', currentTarget = optionTarget) {
+                const availableOptionNames = getOptionDefinitionsForTarget(currentTarget).map((definition) => definition.name);
                 return fields.map((field, index) => {
                 const path = parentPath ? `${parentPath}.${index}` : String(index);
                 const definition = getOptionDefinition(field.key);
@@ -1105,9 +1244,17 @@
                     .map((tabName) => `<option value="${escapeHtml(tabName)}"${tabName === field.value ? ' selected' : ''}>${escapeHtml(tabName)}</option>`)
                     .join('');
                 const selectValues = definition?.values || [];
-                const selectOptions = [...new Set(field.value && !selectValues.includes(field.value)
-                    ? [field.value, ...selectValues] : selectValues)]
-                    .map((value) => `<option value="${escapeHtml(value)}"${value === field.value ? ' selected' : ''}>${escapeHtml(value)}</option>`)
+                const selectChoices = selectValues.map((value) => ({
+                    value: value === '' ? blankSelectControlValue : value,
+                    label: value === '' ? '(blank)' : value,
+                    blank: value === ''
+                }));
+                if (field.value && !selectChoices.some((choice) => !choice.blank && choice.value === field.value)) {
+                    selectChoices.unshift({ value: field.value, label: field.value, blank: false });
+                }
+                const selectOptions = selectChoices
+                    .filter((choice, choiceIndex) => selectChoices.findIndex((candidate) => candidate.value === choice.value && candidate.blank === choice.blank) === choiceIndex)
+                    .map((choice) => `<option value="${escapeHtml(choice.value)}"${choice.blank ? ' data-preview-blank-choice="true"' : ''}${choice.blank ? field.blankValue ? ' selected' : '' : choice.value === field.value && !field.blankValue ? ' selected' : ''}>${escapeHtml(choice.label)}</option>`)
                     .join('');
                 const knownOptionChoices = [...new Set([
                     ...availableOptionNames,
@@ -1116,11 +1263,11 @@
                     .map((optionName) => `<option value="${escapeHtml(optionName)}"${optionName === field.key ? ' selected' : ''}>${escapeHtml(optionName)}</option>`)
                     .join('');
                 const valueControl = field.fields
-                    ? `<div class="preview-edit-nested-options" data-preview-nested-options>${renderRows(field.fields, path)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
+                    ? `<div class="preview-edit-nested-options" data-preview-nested-options>${renderRows(field.fields, path, field.key === 'widget' ? 'widget' : currentTarget)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
                     : isTabOption
                     ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Dashboard tab"><option value="" disabled${field.value ? '' : ' selected'}>Select a tab</option>${tabOptions}</select>`
                     : isSelectOption
-                    ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}"><option value="" disabled${field.value ? '' : ' selected'}>Select a value</option>${selectOptions}</select>`
+                    ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}"><option value="" disabled${field.value || field.blankValue ? '' : ' selected'}>Select a value</option>${selectOptions}</select>`
                     : isBooleanOption
                         ? `<fieldset class="preview-edit-boolean-options" data-preview-option-value aria-label="Boolean value for ${escapeHtml(field.key || 'option')}"><legend>${escapeHtml(field.key || 'Option')}</legend><label title="true"><input type="radio" name="preview-option-${path}" value="true"${field.value === 'true' ? ' checked' : ''}><span class="preview-boolean-icon" aria-hidden="true">&#10003;</span><span class="sr-only">true</span></label><label title="false"><input type="radio" name="preview-option-${path}" value="false"${field.value === 'false' ? ' checked' : ''}><span class="preview-boolean-icon" aria-hidden="true">&times;</span><span class="sr-only">false</span></label></fieldset>`
                     : isSingleLineOption
@@ -1129,13 +1276,13 @@
                 const keyControl = field.locked
                     ? `<span class="preview-edit-option-key" data-preview-option-key>${escapeHtml(field.key)}</span>`
                     : `<select class="modal-input" data-preview-option-key aria-label="Option name"><option value="" disabled${field.key ? '' : ' selected'}>Choose an option</option>${knownOptionChoices}</select>`;
-                return `<div class="preview-edit-option-row" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}">
+                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}">
                 ${keyControl}
                 ${valueControl}
                 <span class="preview-edit-actions preview-edit-option-actions">
-                    <button type="button" class="preview-edit-action preview-edit-move-up" data-preview-option-action="up" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} up" title="Move option up"${index === 0 ? ' disabled' : ''}>&uarr;</button>
-                    <button type="button" class="preview-edit-action preview-edit-move-down" data-preview-option-action="down" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} down" title="Move option down"${index === fields.length - 1 ? ' disabled' : ''}>&darr;</button>
-                    <button type="button" class="preview-edit-action preview-edit-delete" data-preview-option-action="remove" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Remove ${escapeHtml(field.key || 'option')}" title="Remove option">&times;</button>
+                    <button type="button" class="preview-edit-action preview-edit-move-up" data-preview-option-action="up" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} up"${index === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option up</span></button>
+                    <button type="button" class="preview-edit-action preview-edit-move-down" data-preview-option-action="down" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} down"${index === fields.length - 1 ? ' disabled' : ''}>&darr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option down</span></button>
+                    <button type="button" class="preview-edit-action preview-edit-delete" data-preview-option-action="remove" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Remove ${escapeHtml(field.key || 'option')}">&times;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Remove option</span></button>
                 </span>
             </div>`;
                 }).join('');
@@ -1156,7 +1303,8 @@
 
             previewEditDialogState = { action, source, fields: [], availableTabs: [] };
             previewEditPreviousFocus = document.activeElement;
-            modal.querySelector('.modal-content').classList.toggle('preview-edit-modal-wide', action === 'group.edit' || action.startsWith('service.') || action.startsWith('bookmark.'));
+            previewEditPreviousFocusVisible = Boolean(previewEditPreviousFocus?.matches?.(':focus-visible'));
+            modal.querySelector('.modal-content').classList.toggle('preview-edit-modal-wide', ['group.add', 'group.edit'].includes(action) || action.startsWith('service.') || action.startsWith('bookmark.'));
             nameInput.value = '';
             setPreviewEditModalStatus();
 
@@ -1168,6 +1316,7 @@
             if (action === 'group.add') {
                 title.textContent = 'Add service group';
                 submit.textContent = 'Add group';
+                previewEditDialogState.fields = getDefaultPreviewOptionFields('group', { availableTabs: previewEditDialogState.availableTabs });
             } else if (action === 'group.edit') {
                 const group = findPreviewGroup(source);
                 const settings = parseTabConfig('settings');
@@ -1224,10 +1373,13 @@
             modal.hidden = true;
             previewEditDialogState = null;
             setPreviewEditModalStatus();
-            if (previewEditPreviousFocus && typeof previewEditPreviousFocus.focus === 'function') {
+            if (previewEditPreviousFocusVisible && previewEditPreviousFocus && typeof previewEditPreviousFocus.focus === 'function') {
                 previewEditPreviousFocus.focus();
+            } else if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                document.activeElement.blur();
             }
             previewEditPreviousFocus = null;
+            previewEditPreviousFocusVisible = false;
         }
 
         function setPreviewTabModalStatus(message = '') {
@@ -1556,7 +1708,11 @@
                 key: field.key.trim(),
                 ...(Array.isArray(field.fields)
                     ? { fields: normalizeFields(field.fields) }
-                    : { value: field.value })
+                    : {
+                        value: field.value,
+                        ...(field.textValue ? { textValue: true } : {}),
+                        ...(field.blankValue ? { blankValue: true } : {})
+                    })
             }));
             const fields = normalizeFields(previewEditDialogState.fields);
             const findInvalidField = (currentFields) => currentFields.find((field, index) => (
@@ -1570,7 +1726,7 @@
                     : `The option "${duplicateKey.key}" is listed more than once.`);
                 return;
             }
-            if (action === 'group.edit' && fields.some((field) => field.key === 'tab' && !field.value.trim())) {
+            if (['group.add', 'group.edit'].includes(action) && fields.some((field) => field.key === 'tab' && !field.value.trim())) {
                 setPreviewEditModalStatus('Choose a dashboard tab or remove the tab option.');
                 return;
             }
@@ -1823,6 +1979,12 @@
             syncPreviewEditOptionState();
             updatePreviewEditTabWarning();
             if (event.target.matches('[data-preview-option-key]') || ['true', 'false'].includes(event.target.value.trim())) {
+                if (event.target.matches('[data-preview-option-key]') && optionPath !== null) {
+                    const selectedField = getPreviewEditFieldAtPath(optionPath);
+                    if (selectedField?.key === 'widget' && Array.isArray(selectedField.fields) && selectedField.fields.length === 0) {
+                        selectedField.fields = getDefaultPreviewOptionFields('widget');
+                    }
+                }
                 renderPreviewEditOptions();
                 if (event.target.matches('[data-preview-option-key]') && optionPath !== null) {
                     const replacementRow = Array.from(document.querySelectorAll('[data-preview-option-row]'))
@@ -1840,7 +2002,8 @@
             if (addChildButton && this.contains(addChildButton)) {
                 syncPreviewEditOptionState();
                 const path = addChildButton.getAttribute('data-preview-option-path');
-                const field = path.split('.').reduce((fields, index) => fields[Number(index)], previewEditDialogState.fields);
+                const field = getPreviewEditFieldAtPath(path);
+                if (!field || !Array.isArray(field.fields)) return;
                 previewEditDialogState.hasAddedOption = true;
                 field.fields.push({ key: '', value: '', locked: false });
                 renderPreviewEditOptions();
@@ -1872,7 +2035,6 @@
         document.getElementById('preview-tab-modal-done').addEventListener('click', closePreviewTabManager);
         document.getElementById('preview-tab-add-form').addEventListener('submit', submitPreviewTabAdd);
         document.getElementById('preview-tab-group').addEventListener('change', updatePreviewTabGroupMode);
-        document.getElementById('preview-manage-tabs-button').addEventListener('click', openPreviewTabManager);
         document.getElementById('preview-option-types-button').addEventListener('click', openOptionTypesModal);
         document.getElementById('option-types-modal-close').addEventListener('click', closeOptionTypesModal);
         document.getElementById('option-types-cancel').addEventListener('click', closeOptionTypesModal);
@@ -1882,18 +2044,20 @@
         });
         document.getElementById('option-types-add').addEventListener('click', function() {
             readOptionTypesDraft();
-            optionTypesDraft.push({ name: '', type: 'text', appliesTo: ['service', 'group', 'bookmark'], values: [], rows: 2 });
+            optionTypesDraft.push({ name: '', type: 'text', appliesTo: ['service', 'group', 'bookmark', 'widget'], _originalName: '', _originalAppliesTo: [], values: [], rows: 2 });
             renderOptionTypesDraft();
             document.querySelector('#option-types-list > [data-option-type-row]:last-child [data-option-type-name]')?.focus();
         });
         document.getElementById('option-types-list').addEventListener('input', function(event) {
             if (!event.target.matches('[data-option-type-name], [data-option-select-values], [data-option-textarea-rows]')) return;
             readOptionTypesDraft();
+            if (event.target.matches('[data-option-type-name]')) renderOptionDefaultsDraft();
         });
         document.getElementById('option-types-list').addEventListener('change', function(event) {
             if (!event.target.matches('[data-option-value-type], [data-option-applies-to]')) return;
             readOptionTypesDraft();
             if (event.target.matches('[data-option-value-type]')) renderOptionTypesDraft();
+            else renderOptionDefaultsDraft();
         });
         document.getElementById('option-types-list').addEventListener('click', async function(event) {
             const moveButton = event.target.closest('[data-option-type-move]');
@@ -1917,13 +2081,55 @@
             const removeIndex = Number(removeButton.getAttribute('data-option-type-remove'));
             const confirmed = await showConfirmationDialog({
                 title: 'Remove option type?',
-                message: `Remove "${optionName}" from the Option Types list?`,
+                message: `Remove "${optionName}" from Option Types and remove every matching occurrence from the loaded YAML? YAML changes will remain pending until you use Save.`,
                 confirmText: 'Remove option type'
             });
             if (!confirmed) return;
             readOptionTypesDraft();
+            const removedDefinition = optionTypesDraft[removeIndex];
+            if (removedDefinition?._originalName) {
+                optionTypesRemovedDefinitions.set(removedDefinition._originalName, {
+                    name: removedDefinition._originalName,
+                    appliesTo: [...removedDefinition._originalAppliesTo]
+                });
+            }
             optionTypesDraft.splice(removeIndex, 1);
             renderOptionTypesDraft();
+        });
+        document.getElementById('option-defaults-list').addEventListener('click', function(event) {
+            const actionButton = event.target.closest('[data-option-default-action]');
+            if (!actionButton || !this.contains(actionButton)) return;
+            readOptionTypesDraft();
+            const action = actionButton.getAttribute('data-option-default-action');
+            const target = actionButton.getAttribute('data-option-default-target');
+            if (action === 'add') {
+                const group = actionButton.closest('[data-option-default-group]');
+                const selectedIndex = group?.querySelector('[data-option-default-select]')?.value || '';
+                const definitionIndex = Number(selectedIndex);
+                if (!selectedIndex) return;
+                if (!Number.isInteger(definitionIndex) || !optionTypesDraft[definitionIndex]) return;
+                const definition = optionTypesDraft[definitionIndex];
+                definition.defaultForAdd = [...new Set([...(definition.defaultForAdd || []), target])];
+                setOptionDefaultOrder(target, [...getOrderedOptionDefaultIndexes(target), definitionIndex]);
+            } else {
+                const definitionIndex = Number(actionButton.getAttribute('data-option-default-index'));
+                const orderedIndexes = getOrderedOptionDefaultIndexes(target);
+                const currentOrder = orderedIndexes.indexOf(definitionIndex);
+                if (currentOrder < 0) return;
+                if (action === 'remove') {
+                    const definition = optionTypesDraft[definitionIndex];
+                    definition.defaultForAdd = (definition.defaultForAdd || []).filter((value) => value !== target);
+                    if (definition.defaultForAdd.length === 0) delete definition.defaultForAdd;
+                    orderedIndexes.splice(currentOrder, 1);
+                    setOptionDefaultOrder(target, orderedIndexes);
+                } else {
+                    const destination = currentOrder + (action === 'up' ? -1 : 1);
+                    if (destination < 0 || destination >= orderedIndexes.length) return;
+                    [orderedIndexes[currentOrder], orderedIndexes[destination]] = [orderedIndexes[destination], orderedIndexes[currentOrder]];
+                    setOptionDefaultOrder(target, orderedIndexes);
+                }
+            }
+            renderOptionDefaultsDraft();
         });
         document.getElementById('preview-tab-manager-list').addEventListener('click', function(event) {
             const actionButton = event.target.closest('[data-tab-manager-action]');
@@ -2817,13 +3023,22 @@
                 return `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData) })} ${widgetTooltip}>${escapeHtml(name)}</span>`;
             }).join('');
 
-            const previewTabsHtml = homepageTabs.length > 0
+            const manageTabsButton = previewEditMode
+                ? `<button type="button" id="preview-manage-tabs-button" class="preview-tab-manage-button toolbar-button toolbar-icon-control" aria-label="Manage tabs">
+                    <span class="toolbar-button-icon" aria-hidden="true">
+                        <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false"><path d="M7 4h13v13H7zM4 7v13h13"></path></svg>
+                    </span>
+                    <span class="preview-control-label" aria-hidden="true">Manage tabs</span>
+                </button>`
+                : '';
+            const previewTabsHtml = homepageTabs.length > 0 || manageTabsButton
                 ? `<div class="preview-tab-navigation">
                     <span class="preview-tab-label">Tabs</span>
                     <div class="preview-tab-strip" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name) => {
                         const isActive = name === previewHomepageTab;
                         return `<button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`;
                     }).join('')}</div>
+                    ${manageTabsButton}
                 </div>`
                 : '';
 
@@ -3140,7 +3355,6 @@
                 ? '<path d="M4 20l4.2-1L18.8 8.4a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>'
                 : '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11M15 9v11"></path>';
             previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
-            document.getElementById('preview-manage-tabs-button').hidden = !isEnabled;
             document.getElementById('preview-option-types-button').hidden = !isEnabled;
         }
         function updatePreviewEditMode() {
@@ -3217,6 +3431,13 @@
         });
 
         document.getElementById('visual-preview').addEventListener('click', function(event) {
+            const manageTabsTarget = event.target.closest('#preview-manage-tabs-button');
+            if (manageTabsTarget && this.contains(manageTabsTarget)) {
+                event.preventDefault();
+                event.stopPropagation();
+                openPreviewTabManager();
+                return;
+            }
             const actionTarget = event.target.closest('[data-preview-action]');
             if (actionTarget && this.contains(actionTarget)) {
                 event.preventDefault();

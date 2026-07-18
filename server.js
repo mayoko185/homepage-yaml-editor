@@ -46,7 +46,7 @@ const ALLOWED_CONFIG_FILES = new Set(
   CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`))
 );
 const OPTION_VALUE_TYPES = new Set(['text', 'textarea', 'boolean', 'tab', 'mapping', 'select']);
-const OPTION_TARGETS = Object.freeze(['service', 'group', 'bookmark']);
+const OPTION_TARGETS = Object.freeze(['service', 'group', 'bookmark', 'widget']);
 const OPTION_TARGET_SET = new Set(OPTION_TARGETS);
 const EXTRA_ALLOWED_CONFIG_DIRS = (process.env.ALLOWED_CONFIG_DIRS || '')
   .split(',')
@@ -124,7 +124,7 @@ function normalizeOptionDefinitions(value) {
     names.add(name);
     if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Option type "${name}" has unsupported value type "${type}". Choose text, textarea, boolean, tab, mapping, or select`);
     if (appliesTo.length === 0 || appliesTo.some((target) => !OPTION_TARGET_SET.has(target))) {
-      throw createOptionTypeError(`Option type "${name}" must apply to at least one supported target: service, group, or bookmark`);
+      throw createOptionTypeError(`Option type "${name}" must apply to at least one supported target: service, group, bookmark, or widget`);
     }
     const normalizedAppliesTo = OPTION_TARGETS.filter((target) => appliesTo.includes(target));
     const normalized = { name, type, appliesTo: normalizedAppliesTo };
@@ -136,11 +136,22 @@ function normalizeOptionDefinitions(value) {
         throw createOptionTypeError(`Option type "${name}" can only be added by default where it applies`);
       }
       normalized.defaultForAdd = OPTION_TARGETS.filter((target) => defaultForAdd.includes(target));
+      const rawDefaultOrder = definition.defaultOrder && typeof definition.defaultOrder === 'object' && !Array.isArray(definition.defaultOrder)
+        ? definition.defaultOrder : {};
+      if (Object.keys(rawDefaultOrder).some((target) => !normalized.defaultForAdd.includes(target))) {
+        throw createOptionTypeError(`Option type "${name}" can only have a default order where it is added by default`);
+      }
+      const defaultOrder = {};
+      normalized.defaultForAdd.forEach((target) => {
+        const order = Number(rawDefaultOrder[target]);
+        if (Number.isFinite(order) && order >= 0) defaultOrder[target] = Math.round(order);
+      });
+      if (Object.keys(defaultOrder).length > 0) normalized.defaultOrder = defaultOrder;
     }
     if (type === 'select') {
       const values = Array.isArray(definition.values) ? definition.values : [];
-      normalized.values = Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)));
-      if (normalized.values.length === 0) throw createOptionTypeError(`Select option "${name}" needs at least one choice. Add a comma-separated choice`);
+      normalized.values = Array.from(new Set(values.map((item) => String(item).trim())));
+      if (!normalized.values.some(Boolean)) throw createOptionTypeError(`Select option "${name}" needs at least one choice. Add a comma-separated choice`);
     }
     if (type === 'textarea' && Number.isFinite(Number(definition.rows))) {
       normalized.rows = Math.max(2, Math.min(12, Math.round(Number(definition.rows))));
@@ -193,7 +204,17 @@ async function ensureOptionDefinitions() {
       const oldDefaultApplicability = {
         href: 'service',
         icon: 'both',
-        target: 'service'
+        target: 'service',
+        fields: 'service',
+        hideVersion: 'service',
+        key: 'service',
+        showLabel: 'service',
+        showName: 'service',
+        showStats: 'service',
+        showStatus: 'service',
+        showTime: 'service',
+        type: 'service',
+        url: 'service'
       }[definition.name];
       if (oldDefaultApplicability && storedAppliesTo === oldDefaultApplicability) {
         merged.appliesTo = [...defaults.appliesTo];

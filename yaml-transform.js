@@ -238,7 +238,12 @@ function normalizeEditableFields(fields) {
     if (Array.isArray(field && field.fields)) {
       return { key, fields: normalizeEditableFields(field.fields) };
     }
-    return { key, value: String((field && field.value) ?? '') };
+    return {
+      key,
+      value: String((field && field.value) ?? ''),
+      ...(field && field.textValue ? { textValue: true } : {}),
+      ...(field && field.blankValue ? { blankValue: true } : {})
+    };
   });
 }
 
@@ -260,7 +265,7 @@ function setMapFields(document, map, fields) {
     const key = scalarValue(pair.key);
     if (!existingPairs.has(key)) existingPairs.set(key, pair);
   });
-  map.items = fields.map(({ key, value, fields: nestedFields }) => {
+  map.items = fields.map(({ key, value, fields: nestedFields, textValue, blankValue }) => {
     const existingPair = existingPairs.get(key);
     if (nestedFields) {
       const nestedMap = existingPair && YAML.isMap(existingPair.value)
@@ -272,12 +277,19 @@ function setMapFields(document, map, fields) {
       }
       return document.createPair(key, nestedMap);
     }
-    const parsedValue = parseEditableValue(value, key);
+    let valueNode;
+    if (blankValue) {
+      valueNode = document.createNode(null);
+      valueNode.source = '';
+      valueNode.type = YAML.Scalar.PLAIN;
+    } else {
+      valueNode = document.createNode(textValue ? value : parseEditableValue(value, key));
+    }
     if (existingPair) {
-      existingPair.value = document.createNode(parsedValue);
+      existingPair.value = valueNode;
       return existingPair;
     }
-    return document.createPair(key, parsedValue);
+    return document.createPair(key, valueNode);
   });
 }
 
@@ -472,6 +484,72 @@ function serializeDocument(document, originalText) {
   return output;
 }
 
+function removeMapOptions(map, optionNames) {
+  if (!YAML.isMap(map) || optionNames.size === 0) return false;
+  const originalLength = map.items.length;
+  map.items = map.items.filter((pair) => !optionNames.has(scalarValue(pair.key)));
+  return map.items.length !== originalLength;
+}
+
+function removeServiceOptionDefinitions(servicesSequence, definitions) {
+  const serviceOptions = new Set(definitions.filter((definition) => definition.appliesTo.includes('service')).map((definition) => definition.name));
+  const widgetOptions = new Set(definitions.filter((definition) => definition.appliesTo.includes('widget')).map((definition) => definition.name));
+  let changed = false;
+  function visitEntries(entries) {
+    if (!YAML.isSeq(entries)) return;
+    entries.items.forEach((item) => {
+      if (!YAML.isMap(item)) return;
+      item.items.forEach((pair) => {
+        if (YAML.isSeq(pair.value)) {
+          visitEntries(pair.value);
+          return;
+        }
+        if (!YAML.isMap(pair.value)) return;
+        const serviceMap = pair.value;
+        if (removeMapOptions(serviceMap, serviceOptions)) changed = true;
+        const widgetPair = serviceMap.items.find((fieldPair) => scalarValue(fieldPair.key) === 'widget');
+        if (widgetPair && removeMapOptions(widgetPair.value, widgetOptions)) changed = true;
+      });
+    });
+  }
+  visitEntries(servicesSequence);
+  return changed;
+}
+
+function removeGroupOptionDefinitions(settingsDocument, definitions) {
+  const groupOptions = new Set(definitions.filter((definition) => definition.appliesTo.includes('group')).map((definition) => definition.name));
+  const layoutMap = getLayoutMap(settingsDocument);
+  if (!layoutMap || groupOptions.size === 0) return false;
+  let changed = false;
+  layoutMap.items.forEach((pair) => {
+    if (removeMapOptions(pair.value, groupOptions)) changed = true;
+  });
+  return changed;
+}
+
+function removeBookmarkOptionDefinitions(bookmarksSequence, definitions) {
+  const bookmarkOptions = new Set(definitions.filter((definition) => definition.appliesTo.includes('bookmark')).map((definition) => definition.name));
+  if (bookmarkOptions.size === 0) return false;
+  let changed = false;
+  bookmarksSequence.items.forEach((groupItem) => {
+    if (!YAML.isMap(groupItem)) return;
+    groupItem.items.forEach((groupPair) => {
+      if (!YAML.isSeq(groupPair.value)) return;
+      groupPair.value.items.forEach((bookmarkItem) => {
+        if (!YAML.isMap(bookmarkItem)) return;
+        bookmarkItem.items.forEach((bookmarkPair) => {
+          const bookmarkMap = YAML.isMap(bookmarkPair.value)
+            ? bookmarkPair.value
+            : YAML.isSeq(bookmarkPair.value) && YAML.isMap(bookmarkPair.value.items[0])
+              ? bookmarkPair.value.items[0] : null;
+          if (removeMapOptions(bookmarkMap, bookmarkOptions)) changed = true;
+        });
+      });
+    });
+  });
+  return changed;
+}
+
 function transformPreviewYaml({ files, operation }) {
   if (!files || typeof files !== 'object' || !operation || typeof operation !== 'object') {
     throw new YamlTransformError('Preview edit request must include the current YAML files and an edit operation');
@@ -481,7 +559,7 @@ function transformPreviewYaml({ files, operation }) {
   const settingsText = typeof files.settings === 'string' ? files.settings : '';
   const bookmarksText = typeof files.bookmarks === 'string' ? files.bookmarks : '';
   const servicesDocument = parseDocument(servicesText, 'services.yaml');
-  const operationUsesLayout = ['group.edit', 'group.rename', 'group.remove', 'group.move', 'tab.add', 'tab.remove', 'tab.rename', 'tab.move'].includes(operation.type);
+  const operationUsesLayout = ['group.add', 'group.edit', 'group.rename', 'group.remove', 'group.move', 'tab.add', 'tab.remove', 'tab.rename', 'tab.move', 'option-types.remove'].includes(operation.type);
   const settingsDocument = operationUsesLayout ? parseDocument(settingsText, 'settings.yaml') : null;
   const operationUsesBookmarks = [
     'bookmark-group.add',
@@ -491,7 +569,8 @@ function transformPreviewYaml({ files, operation }) {
     'bookmark.add',
     'bookmark.edit',
     'bookmark.remove',
-    'bookmark.move'
+    'bookmark.move',
+    'option-types.remove'
   ].includes(operation.type);
   const bookmarksDocument = operationUsesBookmarks ? parseDocument(bookmarksText, 'bookmarks.yaml') : null;
   const servicesSequence = getServicesSequence(servicesDocument);
@@ -503,6 +582,20 @@ function transformPreviewYaml({ files, operation }) {
   let bookmarksChanged = false;
 
   switch (operation.type) {
+    case 'option-types.remove': {
+      if (!Array.isArray(operation.options)) {
+        throw new YamlTransformError('Removed option types must be provided as a list');
+      }
+      const definitions = operation.options.map((definition) => ({
+        name: requireName(definition && definition.name, 'Removed option'),
+        appliesTo: Array.isArray(definition && definition.appliesTo)
+          ? definition.appliesTo.map((targetName) => String(targetName)) : []
+      }));
+      servicesChanged = removeServiceOptionDefinitions(servicesSequence, definitions);
+      settingsChanged = removeGroupOptionDefinitions(settingsDocument, definitions);
+      bookmarksChanged = removeBookmarkOptionDefinitions(bookmarksSequence, definitions);
+      break;
+    }
     case 'service.add': {
       const group = getGroup(servicesDocument, target);
       if (!YAML.isSeq(group.pair.value)) {
@@ -510,7 +603,7 @@ function transformPreviewYaml({ files, operation }) {
       }
       const name = requireName(values.name, 'Service');
       if (Array.isArray(values.fields)) {
-        const fields = normalizeEditableFields(values.fields).filter((field) => field.value !== '');
+        const fields = normalizeEditableFields(values.fields).filter((field) => field.blankValue || field.value !== '');
         const serviceValue = servicesDocument.createNode({});
         setMapFields(servicesDocument, serviceValue, fields);
         const serviceItem = servicesDocument.createNode({});
@@ -566,6 +659,18 @@ function transformPreviewYaml({ files, operation }) {
       assertUniqueGroupName(servicesSequence, name);
       servicesSequence.items.push(servicesDocument.createNode({ [name]: [] }));
       servicesChanged = true;
+      if (Array.isArray(values.fields)) {
+        const fields = normalizeEditableFields(values.fields).filter((field) => (
+          Array.isArray(field.fields) ? field.fields.length > 0 : field.blankValue || field.value !== ''
+        ));
+        if (fields.length > 0) {
+          const layoutMap = getOrCreateLayoutMap(settingsDocument);
+          layoutMap.set(name, settingsDocument.createNode({}));
+          const layoutEntry = findLayoutPair(layoutMap, name);
+          setMapFields(settingsDocument, layoutEntry.pair.value, fields);
+          settingsChanged = true;
+        }
+      }
       break;
     }
     case 'group.edit':
