@@ -1,15 +1,22 @@
 # Changelog
 
-This file records notable user-facing, security, deployment, and behavior changes. Minor visual polish, wording changes, routine fixes, and internal refactors are intentionally omitted.
+This file records notable user-facing, security, deployment, and behavior changes. Meaningful UI, layout, and workflow changes are summarized by their final outcome; intermediate design iterations, minor visual polish, wording changes, routine fixes, and internal refactors are intentionally omitted.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added a persistent custom page title setting that updates both the application heading and browser tab.
+- Added inline renaming for dashboard layout tabs in the tab manager.
+
 ### Changed
 
 - Expanded configurable Preview option applicability to any combination of services, service groups, and bookmarks, with bookmark fields and add-dialog defaults sourced from option-definition JSON.
+- Refined the Interactive Editor with compact contextual action controls for dashboard groups, services, bookmark groups, and bookmarks, plus clearer hover and keyboard-focus labels.
+- Updated the page layout and footer so application branding remains consistently positioned across short and long pages.
 
 ## [1.3.0] - 2026-07-17
 

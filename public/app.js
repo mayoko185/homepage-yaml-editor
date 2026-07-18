@@ -314,10 +314,7 @@
                 : 'Save all edited YAML files';
             const editToggle = document.getElementById('preview-edit-toggle');
             editToggle.disabled = isSampleMode;
-            if (isSampleMode && editToggle.checked) {
-                editToggle.checked = false;
-                updatePreviewEditMode();
-            }
+            syncPreviewEditModePresentation(editToggle.checked && !editToggle.disabled);
         }
 
         function setReloadDirectoryVisible(isVisible) {
@@ -2541,16 +2538,8 @@
             );
             const previewEditToggleElement = document.getElementById('preview-edit-toggle');
             previewEditToggleElement.disabled = sampleModeEnabled || Boolean(parsed.services.error);
-            if (parsed.services.error && previewEditToggleElement.checked) {
-                previewEditToggleElement.checked = false;
-                document.getElementById('preview-edit-label').textContent = 'Interactive editor off';
-                document.getElementById('preview-title-label').textContent = 'Dashboard';
-                document.getElementById('preview-title-icon').innerHTML = '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11M15 9v11"></path>';
-                previewEditToggleElement.setAttribute('aria-label', 'Enable Interactive editor');
-                document.getElementById('preview-manage-tabs-button').hidden = true;
-                document.getElementById('preview-option-types-button').hidden = true;
-            }
             const previewEditMode = previewEditToggleElement.checked && !previewEditToggleElement.disabled;
+            syncPreviewEditModePresentation(previewEditMode);
             const previewNotices = [];
             const addPreviewNotice = (message) => previewNotices.push(message);
             if (previewEditMode) {
@@ -3144,8 +3133,7 @@
                 window.requestAnimationFrame(() => yamlCodeEditor.refresh());
             }
         }
-        function updatePreviewEditMode() {
-            const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
+        function syncPreviewEditModePresentation(isEnabled) {
             previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
             document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive Editor' : 'Dashboard';
             document.getElementById('preview-title-icon').innerHTML = isEnabled
@@ -3154,6 +3142,10 @@
             previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
             document.getElementById('preview-manage-tabs-button').hidden = !isEnabled;
             document.getElementById('preview-option-types-button').hidden = !isEnabled;
+        }
+        function updatePreviewEditMode() {
+            const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
+            syncPreviewEditModePresentation(isEnabled);
             updatePreview({ force: true });
         }
         autoIndentToggle.addEventListener('change', function() {

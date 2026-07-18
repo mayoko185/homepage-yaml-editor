@@ -1231,6 +1231,7 @@
             gap: 10px;
         }
         .bookmark-group {
+            position: relative;
             min-width: 0;
             border: 1px solid var(--border-color);
             border-radius: 8px;
@@ -1632,6 +1633,7 @@
         }
         .dashboard-card > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions,
+        .bookmark-group > .bookmark-group-heading > .preview-edit-actions,
         .dashboard-group > .dashboard-group-title > .preview-edit-actions {
             position: absolute;
             top: -10px;
@@ -1653,6 +1655,8 @@
         .dashboard-card > .preview-edit-actions:focus-within,
         .bookmark-card:hover > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions:focus-within,
+        .bookmark-group:hover > .bookmark-group-heading > .preview-edit-actions,
+        .bookmark-group > .bookmark-group-heading > .preview-edit-actions:focus-within,
         .dashboard-group:hover > .dashboard-group-title > .preview-edit-actions,
         .dashboard-group > .dashboard-group-title > .preview-edit-actions:focus-within {
             opacity: 1;
