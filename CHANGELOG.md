@@ -14,6 +14,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- Updated the Docker Compose example and installation guide to run the official Homepage container alongside the editor using a shared configuration directory.
 - Expanded configurable Preview option applicability to any combination of services, service groups, and bookmarks, with bookmark fields and add-dialog defaults sourced from option-definition JSON.
 - Refined the Interactive Editor with draggable dashboard and option-row surfaces, cross-group service and bookmark moves, service-to-group and group-to-tab reassignment from tabbed edit dialogs, compact contextual controls, and keyboard-accessible move buttons.
 - Updated the page layout and footer so application branding remains consistently positioned across short and long pages.

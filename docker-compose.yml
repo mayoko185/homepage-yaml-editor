@@ -1,4 +1,20 @@
 services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    ports:
+      - 127.0.0.1:3000:3000
+    environment:
+      - PUID=1000
+      - PGID=1000
+      # Add the hostname or IP address used to access Homepage when it is not localhost.
+      - HOMEPAGE_ALLOWED_HOSTS=localhost:3000
+    volumes:
+      # Homepage and the editor share this host configuration directory.
+      - /opt/stacks/homepage/config:/app/config
+      # Optional: configure permissions before enabling direct Docker integrations.
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
   homepage-editor:
     image: docker.io/mayoko185/homepage-yaml-editor:latest
     ports:
@@ -12,6 +28,7 @@ services:
       # - REQUIRE_LOGIN_PASSWORD=change-this-password
       - AUTOLOAD_DIR=/hp_config
     volumes:
+      # This must use the same host directory mounted by the Homepage service above.
       - /opt/stacks/homepage/config:/hp_config
       - ./data:/app/data
     restart: unless-stopped

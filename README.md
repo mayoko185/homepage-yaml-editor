@@ -34,16 +34,35 @@ Add, edit, reorder, and remove dashboard groups, services, and bookmarks from th
 
 ### Docker Compose
 
-The recommended setup uses the current [docker-compose.yml](https://github.com/mayoko185/homepage-yaml-editor/blob/main/docker-compose.yml):
+The recommended setup uses the current [docker-compose.yml](https://github.com/mayoko185/homepage-yaml-editor/blob/main/docker-compose.yml). It runs the official Homepage image and Homepage YAML Editor together:
 
 ```sh
 git clone https://github.com/mayoko185/homepage-yaml-editor.git
 cd homepage-yaml-editor
-# Edit the Homepage config volume path in docker-compose.yml if needed
+# Edit the config volume path and HOMEPAGE_ALLOWED_HOSTS in docker-compose.yml if needed
 docker compose up -d
 ```
 
-Open <http://localhost:8081>. The example Compose file mounts the Homepage config at `/hp_config` and persists editor settings in `./data`.
+Open Homepage at <http://localhost:3000> and the editor at <http://localhost:8081>.
+
+Both containers mount the same `/opt/stacks/homepage/config` host directory. Homepage sees it at `/app/config`, while the editor sees it at `/hp_config`. Change both volume entries if your Homepage configuration is stored elsewhere, keeping the host-side path identical:
+
+```yaml
+services:
+  homepage:
+    volumes:
+      - /path/to/homepage/config:/app/config
+
+  homepage-editor:
+    environment:
+      - AUTOLOAD_DIR=/hp_config
+    volumes:
+      - /path/to/homepage/config:/hp_config
+```
+
+Use matching `PUID` and `PGID` values so both containers can access the configuration files. Set `HOMEPAGE_ALLOWED_HOSTS` to the hostname or IP address used to open Homepage when accessing it through anything other than localhost. The commented Docker socket mount is optional; configure the required socket permissions before enabling it, or use a Docker socket proxy. Editor-specific settings remain separate in `./data`.
+
+After saving in the editor, Homepage reads the updated files from the shared directory. Some `settings.yaml` changes require using Homepage's refresh control before they appear.
 
 ### Docker image
 
