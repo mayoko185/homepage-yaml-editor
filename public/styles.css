@@ -476,6 +476,7 @@
             border-top: 1px solid var(--border-color);
         }
         .directory-status,
+        .security-status,
         .save-status,
         .unsaved-status {
             margin: 0;
@@ -507,6 +508,23 @@
             border-left: 3px solid transparent;
             border-radius: 4px;
             text-align: left;
+        }
+        .security-status {
+            grid-column: 1 / -1;
+            margin: 0;
+            padding: 6px 8px;
+            border-left: 3px solid var(--warning-color);
+            border-radius: 4px;
+            background: color-mix(in srgb, var(--warning-color) 12%, transparent);
+            color: var(--warning-color);
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+        .security-status::before {
+            content: "!";
+            margin-right: 8px;
+            font-weight: 800;
         }
         .unsaved-status {
             justify-self: end;
@@ -1411,6 +1429,18 @@
         .dashboard-nested-group[data-preview-layout-style="row"] > .dashboard-cards {
             grid-template-columns: repeat(var(--preview-card-columns), minmax(0, 1fr));
         }
+        [data-preview-card-columns="1"] { --preview-card-columns: 1; }
+        [data-preview-card-columns="2"] { --preview-card-columns: 2; }
+        [data-preview-card-columns="3"] { --preview-card-columns: 3; }
+        [data-preview-card-columns="4"] { --preview-card-columns: 4; }
+        [data-preview-card-columns="5"] { --preview-card-columns: 5; }
+        [data-preview-card-columns="6"] { --preview-card-columns: 6; }
+        [data-preview-card-columns="7"] { --preview-card-columns: 7; }
+        [data-preview-card-columns="8"] { --preview-card-columns: 8; }
+        [data-preview-card-columns="9"] { --preview-card-columns: 9; }
+        [data-preview-card-columns="10"] { --preview-card-columns: 10; }
+        [data-preview-card-columns="11"] { --preview-card-columns: 11; }
+        [data-preview-card-columns="12"] { --preview-card-columns: 12; }
         @media (max-width: 760px) {
             .dashboard-nested-groups {
                 grid-template-columns: minmax(0, 1fr);
@@ -1439,6 +1469,14 @@
             grid-template-columns: repeat(var(--preview-nested-columns), minmax(0, 1fr));
             gap: 16px;
         }
+        [data-preview-nested-columns="1"] { --preview-nested-columns: 1; }
+        [data-preview-nested-columns="2"] { --preview-nested-columns: 2; }
+        [data-preview-nested-columns="3"] { --preview-nested-columns: 3; }
+        [data-preview-nested-columns="4"] { --preview-nested-columns: 4; }
+        [data-preview-nested-columns="5"] { --preview-nested-columns: 5; }
+        [data-preview-nested-columns="6"] { --preview-nested-columns: 6; }
+        [data-preview-nested-columns="7"] { --preview-nested-columns: 7; }
+        [data-preview-nested-columns="8"] { --preview-nested-columns: 8; }
         .dashboard-nested-group-title {
             display: flex;
             align-items: center;
@@ -1669,7 +1707,9 @@
         }
         .preview-drop-before,
         .preview-drop-after,
-        .preview-drop-inside {
+        .preview-drop-inside,
+        .preview-drop-left,
+        .preview-drop-right {
             position: relative;
         }
         .preview-drop-before::before,
@@ -1697,17 +1737,24 @@
             bottom: 7px;
             left: 12px;
         }
-        .preview-main-drop-indicator {
-            position: fixed;
-            z-index: 100;
-            height: 4px;
+        .preview-drop-left::before,
+        .preview-drop-right::after {
+            content: '';
+            position: absolute;
+            z-index: 20;
+            top: 4px;
+            bottom: 4px;
+            width: 3px;
             border-radius: 999px;
             background: var(--button-bg);
-            box-shadow: 0 0 0 2px color-mix(in srgb, var(--button-bg) 30%, transparent), 0 2px 8px rgba(0, 0, 0, 0.35);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--button-bg) 25%, transparent);
             pointer-events: none;
         }
-        .preview-main-drop-indicator-vertical {
-            width: 4px !important;
+        .preview-drop-left::before {
+            left: -3px;
+        }
+        .preview-drop-right::after {
+            right: -3px;
         }
         .dashboard-card > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions,

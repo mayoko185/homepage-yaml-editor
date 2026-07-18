@@ -2,8 +2,8 @@
 
 set -e
 
-PUID="${PUID:-1001}"
-PGID="${PGID:-1001}"
+PUID="${PUID:-1000}"
+PGID="${PGID:-1000}"
 APP_USER="homepage"
 APP_GROUP="homepage"
 

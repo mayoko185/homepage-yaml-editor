@@ -11,13 +11,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Added a persistent custom page title setting that updates both the application heading and browser tab.
 - Added inline renaming for dashboard layout tabs in the tab manager.
+- Added a persistent security warning when editor authentication is disabled and optional Playwright browser coverage.
 
 ### Changed
 
 - Updated the Docker Compose example and installation guide to run the official Homepage container alongside the editor using a shared configuration directory.
 - Expanded configurable Preview option applicability to any combination of services, service groups, and bookmarks, with bookmark fields and add-dialog defaults sourced from option-definition JSON.
 - Refined the Interactive Editor with draggable dashboard and option-row surfaces, cross-group service and bookmark moves, service-to-group and group-to-tab reassignment from tabbed edit dialogs, compact contextual controls, and keyboard-accessible move buttons.
-- Updated the page layout and footer so application branding remains consistently positioned across short and long pages.
+- Hardened configuration persistence with atomic replacement, disk-change conflict detection, bounded authentication state, self-hosted browser dependencies, and a stricter content security policy.
+- Aligned container user defaults and deployment guidance on UID/GID `1000` while preserving network-accessible Compose ports.
 
 ## [1.3.0] - 2026-07-17
 

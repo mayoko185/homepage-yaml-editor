@@ -11,6 +11,7 @@ RUN npm install --global pnpm@11.7.0 && \
     pnpm install --prod --frozen-lockfile
 
 COPY server.js ./
+COPY auth-state.js ./
 COPY yaml-transform.js ./
 COPY option-types.default.json ./
 COPY public ./public

@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const net = require('node:net');
 const os = require('node:os');
@@ -6,6 +7,10 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const test = require('node:test');
 const YAML = require('yaml');
+
+function revisionFor(content) {
+  return crypto.createHash('sha256').update(Buffer.from(content, 'utf8')).digest('hex');
+}
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -31,6 +36,7 @@ function createServerEnv(overrides) {
 test('Docker image copies every runtime server module', async () => {
   const dockerfile = await fs.readFile(path.resolve(__dirname, '..', 'Dockerfile'), 'utf8');
   assert.match(dockerfile, /^COPY server\.js \.\/$/m);
+  assert.match(dockerfile, /^COPY auth-state\.js \.\/$/m);
   assert.match(dockerfile, /^COPY yaml-transform\.js \.\/$/m);
   assert.match(dockerfile, /^COPY option-types\.default\.json \.\/$/m);
 });
@@ -83,9 +89,10 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(startup.hasStartupDirectory, true);
     assert.equal(startup.directory, tempRoot);
     assert.equal(startup.files['services.yaml'], yamlContent);
+    assert.equal(startup.revisions['services.yaml'], revisionFor(yamlContent));
     const mergedOptionTypesOnDisk = JSON.parse(await fs.readFile(path.join(appDataDir, 'option-types.json'), 'utf8'));
     assert.deepEqual(mergedOptionTypesOnDisk.slice(0, 2), [
-      { name: 'description', type: 'text', appliesTo: ['service'], defaultForAdd: ['service'], defaultOrder: { service: 2 } },
+      { name: 'description', type: 'text', appliesTo: ['service'], defaultForAdd: ['service'], defaultOrder: { service: 1 } },
       { name: 'localOnly', type: 'boolean', appliesTo: ['service', 'group'] }
     ]);
 
@@ -146,7 +153,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     const optionTypes = await optionTypesResponse.json();
     assert.equal(optionTypesResponse.status, 200);
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'description'), {
-      name: 'description', type: 'text', appliesTo: ['service'], defaultForAdd: ['service'], defaultOrder: { service: 2 }
+      name: 'description', type: 'text', appliesTo: ['service'], defaultForAdd: ['service'], defaultOrder: { service: 1 }
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'localOnly'), {
       name: 'localOnly', type: 'boolean', appliesTo: ['service', 'group']
@@ -155,19 +162,19 @@ test('serves optimized assets and supports the active configuration APIs', async
       name: 'target', type: 'select', appliesTo: ['service', 'bookmark'], values: ['_blank', '_self', '_top']
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'href'), {
-      name: 'href', type: 'text', appliesTo: ['service', 'bookmark'], defaultForAdd: ['service', 'bookmark'], defaultOrder: { service: 1, bookmark: 0 }
+      name: 'href', type: 'text', appliesTo: ['service', 'bookmark'], defaultForAdd: ['service', 'bookmark'], defaultOrder: { service: 2, bookmark: 0 }
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'abbr'), {
       name: 'abbr', type: 'text', appliesTo: ['bookmark'], defaultForAdd: ['bookmark'], defaultOrder: { bookmark: 1 }
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'icon'), {
-      name: 'icon', type: 'text', appliesTo: ['service', 'group', 'bookmark'], defaultForAdd: ['service', 'group'], defaultOrder: { service: 0, group: 4 }
+      name: 'icon', type: 'text', appliesTo: ['service', 'group', 'bookmark'], defaultForAdd: ['service'], defaultOrder: { service: 0 }
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'type'), {
       name: 'type', type: 'text', appliesTo: ['widget'], defaultForAdd: ['widget'], defaultOrder: { widget: 0 }
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'tab'), {
-      name: 'tab', type: 'tab', appliesTo: ['group'], defaultForAdd: ['group'], defaultOrder: { group: 0 }
+      name: 'tab', type: 'tab', appliesTo: ['group'], defaultForAdd: ['group'], defaultOrder: { group: 3 }
     });
     const optionTypesSaveResponse = await fetch(`${baseUrl}/api/option-types`, {
       method: 'PUT',
@@ -248,9 +255,23 @@ test('serves optimized assets and supports the active configuration APIs', async
     const unchangedResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: tempRoot,
+        filename: 'services.yaml',
+        content: yamlContent,
+        expectedRevision: startup.revisions['services.yaml']
+      })
+    });
+    const unchanged = await unchangedResponse.json();
+    assert.equal(unchanged.changed, false);
+    assert.equal(unchanged.revision, revisionFor(yamlContent));
+
+    const missingRevisionResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: yamlContent })
     });
-    assert.equal((await unchangedResponse.json()).changed, false);
+    assert.equal(missingRevisionResponse.status, 428);
 
     const invalidSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
@@ -258,7 +279,8 @@ test('serves optimized assets and supports the active configuration APIs', async
       body: JSON.stringify({
         dirPath: tempRoot,
         filename: 'settings.yaml',
-        content: 'layout:\n  First:\n    tab: Main\n  First:\n    tab: Other\n'
+        content: 'layout:\n  First:\n    tab: Main\n  First:\n    tab: Other\n',
+        expectedRevision: null
       })
     });
     const invalidSave = await invalidSaveResponse.json();
@@ -271,40 +293,91 @@ test('serves optimized assets and supports the active configuration APIs', async
     const proxmoxSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ dirPath: tempRoot, filename: 'proxmox.yaml', content: proxmoxContent })
+      body: JSON.stringify({ dirPath: tempRoot, filename: 'proxmox.yaml', content: proxmoxContent, expectedRevision: null })
     });
     assert.equal(proxmoxSaveResponse.status, 200);
     assert.equal(await fs.readFile(path.join(tempRoot, 'proxmox.yaml'), 'utf8'), proxmoxContent);
 
     const updatedYamlContent = `${yamlContent}\n        description: Updated after startup`;
+    if (process.platform !== 'win32') await fs.chmod(path.join(tempRoot, 'services.yaml'), 0o640);
     const updatedSaveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: updatedYamlContent })
+      body: JSON.stringify({
+        dirPath: tempRoot,
+        filename: 'services.yaml',
+        content: updatedYamlContent,
+        expectedRevision: startup.revisions['services.yaml']
+      })
     });
     assert.equal(updatedSaveResponse.status, 200);
-    assert.equal((await updatedSaveResponse.json()).changed, true);
+    const updatedSave = await updatedSaveResponse.json();
+    assert.equal(updatedSave.changed, true);
+    assert.equal(updatedSave.revision, revisionFor(updatedYamlContent));
+    if (process.platform !== 'win32') {
+      assert.equal((await fs.stat(path.join(tempRoot, 'services.yaml'))).mode & 0o777, 0o640);
+    }
+    assert.deepEqual(
+      (await fs.readdir(tempRoot)).filter((filename) => filename.endsWith('.tmp')),
+      []
+    );
 
     const startupAfterDirectorySave = await (await fetch(`${baseUrl}/api/startup-directory`)).json();
     assert.equal(startupAfterDirectorySave.files['services.yaml'], updatedYamlContent);
+
+    const externalYamlContent = '- External change: []\n';
+    await fs.writeFile(path.join(tempRoot, 'services.yaml'), externalYamlContent, 'utf8');
+    const conflictResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: tempRoot,
+        filename: 'services.yaml',
+        content: '- Browser change: []\n',
+        expectedRevision: updatedSave.revision
+      })
+    });
+    assert.equal(conflictResponse.status, 409);
+    const conflict = await conflictResponse.json();
+    assert.equal(conflict.currentRevision, revisionFor(externalYamlContent));
+    assert.equal(await fs.readFile(path.join(tempRoot, 'services.yaml'), 'utf8'), externalYamlContent);
+
+    const equivalentNoOpResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: tempRoot,
+        filename: 'services.yaml',
+        content: externalYamlContent,
+        expectedRevision: updatedSave.revision
+      })
+    });
+    assert.equal(equivalentNoOpResponse.status, 200);
+    assert.equal((await equivalentNoOpResponse.json()).changed, false);
 
     const documentResponse = await fetch(`${baseUrl}/`);
     assert.equal(documentResponse.headers.get('cache-control'), 'no-cache');
     assert.match(documentResponse.headers.get('content-security-policy'), /frame-ancestors 'none'/);
     assert.equal(documentResponse.headers.get('x-frame-options'), 'DENY');
     assert.equal(documentResponse.headers.get('x-content-type-options'), 'nosniff');
+    assert.doesNotMatch(documentResponse.headers.get('content-security-policy'), /unsafe-inline|cdn\.jsdelivr/);
+    assert.match(await documentResponse.text(), /id="security-status"/);
 
     const runtimeConfigResponse = await fetch(`${baseUrl}/runtime-config.js`);
     assert.equal(runtimeConfigResponse.status, 200);
     assert.equal(runtimeConfigResponse.headers.get('cache-control'), 'no-store');
     assert.match(await runtimeConfigResponse.text(), /"defaultTheme":"light"/);
 
-    const assetResponse = await fetch(`${baseUrl}/app.js?v=8`, {
+    const assetResponse = await fetch(`${baseUrl}/app.js?v=146`, {
       headers: { 'accept-encoding': 'gzip' }
     });
     assert.equal(assetResponse.status, 200);
     assert.match(assetResponse.headers.get('cache-control'), /max-age=86400/);
     assert.equal(assetResponse.headers.get('content-encoding'), 'gzip');
+
+    const vendorAssetResponse = await fetch(`${baseUrl}/vendor/js-yaml/js-yaml.min.js?v=4.3.0`);
+    assert.equal(vendorAssetResponse.status, 200);
+    assert.match(vendorAssetResponse.headers.get('cache-control'), /max-age=86400/);
 
     assert.equal((await fetch(`${baseUrl}/api/files`)).status, 404);
   } finally {
@@ -340,6 +413,7 @@ test('keeps an empty startup directory in read-only sample mode', async () => {
     assert.deepEqual(startup, {
       directory: null,
       files: {},
+      revisions: {},
       hasStartupDirectory: false
     });
     assert.equal((await fetch(`${baseUrl}/api/config/save`, { method: 'POST' })).status, 404);
@@ -393,7 +467,7 @@ test('rejects allowed-root symlink escapes', async () => {
     const saveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: '- Safe: []\n' })
+      body: JSON.stringify({ dirPath: tempRoot, filename: 'services.yaml', content: '- Safe: []\n', expectedRevision: null })
     });
     assert.equal(saveResponse.status, 400);
     assert.deepEqual(await saveResponse.json(), {
@@ -495,6 +569,25 @@ test('optional login protects the editor and APIs with a form-based session', as
       redirect: 'manual'
     });
     assert.match(secureLoginResponse.headers.get('set-cookie'), /; Secure/);
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const failedResponse = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ username: 'test-user', password: 'wrong-password' }),
+        redirect: 'manual'
+      });
+      assert.equal(failedResponse.status, 303);
+    }
+    const lockedResponse = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: 'test-user', password: 'test-password' }),
+      redirect: 'manual'
+    });
+    assert.equal(lockedResponse.status, 303);
+    assert.equal(lockedResponse.headers.get('location'), '/login?error=locked');
+    assert.ok(Number(lockedResponse.headers.get('retry-after')) > 0);
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => child.once('exit', resolve));

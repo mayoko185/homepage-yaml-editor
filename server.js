@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const YAML = require('yaml');
 const { formatYamlParseError, transformPreviewYaml } = require('./yaml-transform');
+const { pruneExpiredAuthState, setBoundedMapEntry } = require('./auth-state');
 const defaultOptionDefinitions = require('./option-types.default.json');
 
 const app = express();
@@ -29,6 +30,8 @@ const SESSION_COOKIE_NAME = 'homepage_editor_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 10;
+const MAX_AUTH_STATE_ENTRIES = 10_000;
+const AUTH_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const sessions = new Map();
 const loginAttempts = new Map();
 const CONFIG_BASE_NAMES = Object.freeze([
@@ -64,6 +67,13 @@ const ALLOWED_CONFIG_DIRECTORIES = Object.freeze(
 app.set('trust proxy', TRUST_PROXY);
 app.locals.startupDirectory = null;
 app.locals.startupFiles = {};
+
+function pruneAuthenticationState() {
+  pruneExpiredAuthState({ sessions, loginAttempts, loginAttemptWindowMs: LOGIN_ATTEMPT_WINDOW_MS });
+}
+
+const authCleanupTimer = setInterval(pruneAuthenticationState, AUTH_CLEANUP_INTERVAL_MS);
+authCleanupTimer.unref();
 
 function getDefaultAppSettings() {
   return {
@@ -279,8 +289,8 @@ app.use(express.urlencoded({ extended: false, limit: '16kb' }));
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "script-src 'self'",
+    "style-src 'self'",
     "img-src 'self' https: data:",
     "connect-src 'self'",
     "font-src 'self' data:",
@@ -360,7 +370,7 @@ function getLoginAttemptState(req) {
   const existing = loginAttempts.get(key);
   if (!existing || now - existing.startedAt >= LOGIN_ATTEMPT_WINDOW_MS) {
     const state = { key, count: 0, startedAt: now };
-    loginAttempts.set(key, state);
+    setBoundedMapEntry(loginAttempts, key, state, MAX_AUTH_STATE_ENTRIES);
     return state;
   }
   return { key, ...existing };
@@ -401,22 +411,26 @@ app.post('/login', (req, res) => {
 
   const attempt = getLoginAttemptState(req);
   if (attempt.count >= MAX_LOGIN_ATTEMPTS) {
+    const retryAfterSeconds = Math.max(1, Math.ceil(
+      (attempt.startedAt + LOGIN_ATTEMPT_WINDOW_MS - Date.now()) / 1000
+    ));
+    res.setHeader('Retry-After', String(retryAfterSeconds));
     return res.redirect(303, '/login?error=locked');
   }
 
   const validUser = credentialsMatch(req.body.username, LOGIN_USER);
   const validPassword = credentialsMatch(req.body.password, LOGIN_PASSWORD);
   if (!validUser || !validPassword) {
-    loginAttempts.set(attempt.key, {
+    setBoundedMapEntry(loginAttempts, attempt.key, {
       count: attempt.count + 1,
       startedAt: attempt.startedAt
-    });
+    }, MAX_AUTH_STATE_ENTRIES);
     return res.redirect(303, '/login?error=invalid');
   }
 
   loginAttempts.delete(attempt.key);
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, Date.now() + SESSION_TTL_MS);
+  setBoundedMapEntry(sessions, token, Date.now() + SESSION_TTL_MS, MAX_AUTH_STATE_ENTRIES);
   setSessionCookie(req, res, token);
   return res.redirect(303, '/');
 });
@@ -435,7 +449,12 @@ app.use((req, res, next) => {
     return next();
   }
 
-  if (req.method === 'GET' && (req.path === '/styles.css' || req.path === '/favicon.ico')) {
+  if (req.method === 'GET' && [
+    '/styles.css',
+    '/favicon.ico',
+    '/theme-bootstrap.js',
+    '/login.js'
+  ].includes(req.path)) {
     return next();
   }
   if (req.path.startsWith('/api/')) {
@@ -445,6 +464,20 @@ app.use((req, res, next) => {
     return res.redirect(302, '/login');
   }
   return res.status(401).send('Authentication required');
+});
+
+const VENDOR_ASSETS = Object.freeze({
+  '/vendor/codemirror/codemirror.min.css': require.resolve('codemirror/lib/codemirror.css'),
+  '/vendor/codemirror/codemirror.min.js': require.resolve('codemirror/lib/codemirror.js'),
+  '/vendor/codemirror/yaml.min.js': require.resolve('codemirror/mode/yaml/yaml.js'),
+  '/vendor/js-yaml/js-yaml.min.js': path.join(path.dirname(require.resolve('js-yaml')), 'dist', 'js-yaml.min.js')
+});
+
+Object.entries(VENDOR_ASSETS).forEach(([routePath, assetPath]) => {
+  app.get(routePath, (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
+    return res.sendFile(assetPath);
+  });
 });
 
 app.use(express.static(PUBLIC_DIR, {
@@ -561,13 +594,14 @@ async function loadDirectoryContents(dirPath) {
       .map((extension) => availableFiles.get(`${baseName}${extension}`))
       .find(Boolean))
     .filter(Boolean);
-  const loadedFiles = await Promise.all(selectedFiles.map(async (filename) => [
-    filename,
-    await fs.readFile(path.join(dirPath, filename), 'utf8')
-  ]));
+  const loadedFiles = await Promise.all(selectedFiles.map(async (filename) => {
+    const content = await fs.readFile(path.join(dirPath, filename), 'utf8');
+    return [filename, content, createContentRevision(content)];
+  }));
 
   return {
-    fileContents: Object.fromEntries(loadedFiles),
+    fileContents: Object.fromEntries(loadedFiles.map(([filename, content]) => [filename, content])),
+    revisions: Object.fromEntries(loadedFiles.map(([filename, , revision]) => [filename, revision])),
     loadedCount: loadedFiles.length,
     totalCount: CONFIG_BASE_NAMES.length
   };
@@ -581,8 +615,9 @@ async function assertRegularConfigFile(filePath, { allowMissing = false } = {}) 
       error.statusCode = 400;
       throw error;
     }
+    return stats;
   } catch (error) {
-    if (error.code === 'ENOENT' && allowMissing) return;
+    if (error.code === 'ENOENT' && allowMissing) return null;
     if (error.statusCode) throw error;
     const wrappedError = new Error('Configuration file does not exist or cannot be accessed. Check the path and permissions');
     wrappedError.statusCode = 400;
@@ -590,31 +625,77 @@ async function assertRegularConfigFile(filePath, { allowMissing = false } = {}) 
   }
 }
 
-async function saveConfigFile(dirPath, filename, content, { skipUnchanged = false } = {}) {
+function createContentRevision(content) {
+  return crypto.createHash('sha256').update(Buffer.from(content, 'utf8')).digest('hex');
+}
+
+function createConfigConflictError(currentRevision) {
+  const error = new Error('The configuration file changed on disk after it was loaded. Reload the directory before saving again');
+  error.statusCode = 409;
+  error.currentRevision = currentRevision;
+  return error;
+}
+
+async function readConfigFileState(filePath) {
+  const stats = await assertRegularConfigFile(filePath, { allowMissing: true });
+  if (!stats) return { content: null, revision: null, mode: null };
+  const content = await fs.readFile(filePath, 'utf8');
+  return {
+    content,
+    revision: createContentRevision(content),
+    mode: stats.mode & 0o777
+  };
+}
+
+async function replaceConfigFileAtomically(filePath, content, { mode, expectedDiskRevision }) {
+  const temporaryPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${crypto.randomUUID()}.tmp`
+  );
+  let handle = null;
+  try {
+    handle = await fs.open(temporaryPath, 'wx', mode === null ? 0o666 : mode);
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+    await handle.close();
+    handle = null;
+
+    const beforeCommit = await readConfigFileState(filePath);
+    const desiredRevision = createContentRevision(content);
+    if (beforeCommit.revision === desiredRevision) {
+      return { changed: false, revision: desiredRevision };
+    }
+    if (beforeCommit.revision !== expectedDiskRevision) {
+      throw createConfigConflictError(beforeCommit.revision);
+    }
+
+    await fs.rename(temporaryPath, filePath);
+    return { changed: true, revision: desiredRevision };
+  } finally {
+    if (handle) await handle.close().catch(() => undefined);
+    await fs.unlink(temporaryPath).catch((error) => {
+      if (error.code !== 'ENOENT') console.warn('Could not clean up temporary configuration file:', error.message);
+    });
+  }
+}
+
+async function saveConfigFile(dirPath, filename, content, { expectedRevision }) {
   const filePath = resolveConfigFilePath(dirPath, filename);
   const yamlContent = typeof content === 'string' ? content : YAML.stringify(content);
   YAML.parse(yamlContent);
-
-  await assertRegularConfigFile(filePath, { allowMissing: true });
-
-  if (skipUnchanged) {
-    try {
-      const existingContent = await fs.readFile(filePath, 'utf8');
-      if (existingContent.replace(/\r\n/g, '\n') === yamlContent.replace(/\r\n/g, '\n')) {
-        return { filePath, changed: false };
-      }
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        throw error;
-      }
-    }
+  const currentState = await readConfigFileState(filePath);
+  const desiredRevision = createContentRevision(yamlContent);
+  if (currentState.revision === desiredRevision) {
+    return { filePath, changed: false, revision: desiredRevision };
   }
-
-  // Check again immediately before the write so an existing file cannot be
-  // replaced with a symlink between validation and persistence.
-  await assertRegularConfigFile(filePath, { allowMissing: true });
-  await fs.writeFile(filePath, yamlContent, 'utf8');
-  return { filePath, changed: true };
+  if (currentState.revision !== expectedRevision) {
+    throw createConfigConflictError(currentState.revision);
+  }
+  const result = await replaceConfigFileAtomically(filePath, yamlContent, {
+    mode: currentState.mode,
+    expectedDiskRevision: currentState.revision
+  });
+  return { filePath, ...result };
 }
 
 async function applyStartupDirectoryLoad() {
@@ -691,18 +772,20 @@ app.get('/api/startup-directory', async (req, res) => {
     return res.json({
       directory: null,
       files: {},
+      revisions: {},
       hasStartupDirectory: false
     });
   }
 
   try {
-    const { fileContents, loadedCount } = await loadDirectoryContents(startupDirectory);
+    const { fileContents, revisions, loadedCount } = await loadDirectoryContents(startupDirectory);
     if (loadedCount === 0) {
       app.locals.startupDirectory = null;
       app.locals.startupFiles = {};
       return res.json({
         directory: null,
         files: {},
+        revisions: {},
         hasStartupDirectory: false
       });
     }
@@ -710,6 +793,7 @@ app.get('/api/startup-directory', async (req, res) => {
     return res.json({
       directory: startupDirectory,
       files: fileContents,
+      revisions,
       hasStartupDirectory: true
     });
   } catch (error) {
@@ -736,10 +820,11 @@ app.post('/api/directory/load', async (req, res) => {
   try {
     const configDir = await resolveRealAllowedConfigDirectory(req.body.dirPath);
     await assertDirectory(configDir);
-    const { fileContents, loadedCount, totalCount } = await loadDirectoryContents(configDir);
+    const { fileContents, revisions, loadedCount, totalCount } = await loadDirectoryContents(configDir);
     return res.json({
       directory: configDir,
       files: fileContents,
+      revisions,
       message: `Successfully loaded ${loadedCount} of ${totalCount} configuration files`
     });
   } catch (error) {
@@ -753,27 +838,45 @@ app.post('/api/directory/load', async (req, res) => {
 
 app.post('/api/directory/file/save', async (req, res) => {
   try {
-    const { dirPath, filename, content } = req.body;
+    const { dirPath, filename, content, expectedRevision } = req.body;
     if (!dirPath || !filename || content === undefined) {
       return res.status(400).json({
         error: 'Directory path, filename, and file content are required to save a configuration'
       });
     }
+    if (!Object.prototype.hasOwnProperty.call(req.body, 'expectedRevision')) {
+      return res.status(428).json({
+        error: 'A file revision is required before saving',
+        details: 'Reload the configuration directory and try again'
+      });
+    }
+    if (expectedRevision !== null && !/^[a-f0-9]{64}$/.test(expectedRevision)) {
+      return res.status(400).json({
+        error: 'The expected file revision is invalid',
+        details: 'Reload the configuration directory and try again'
+      });
+    }
 
     const configDir = await resolveRealAllowedConfigDirectory(dirPath);
     await assertDirectory(configDir);
-    const result = await saveConfigFile(configDir, filename, content, { skipUnchanged: true });
+    const result = await saveConfigFile(configDir, filename, content, { expectedRevision });
     return res.json({
       message: result.changed ? 'File saved successfully' : 'No changes detected',
       details: result.changed ? `Saved to ${result.filePath}` : `Skipped writing ${result.filePath}`,
-      changed: result.changed
+      changed: result.changed,
+      revision: result.revision
     });
   } catch (error) {
-    console.error('Directory file save error:', error);
+    if (!error.statusCode || error.statusCode >= 500) console.error('Directory file save error:', error);
     const isYamlError = error && (error.name === 'YAMLParseError' || error.code === 'BAD_INDENT');
     return res.status(error.statusCode || (isYamlError ? 400 : 500)).json({
-      error: isYamlError ? 'Invalid YAML in configuration file' : 'Could not save configuration file',
-      details: isYamlError ? formatYamlParseError(error) : (error.statusCode ? error.message : 'The configuration file could not be saved')
+      error: isYamlError
+        ? 'Invalid YAML in configuration file'
+        : error.statusCode === 409
+          ? 'Configuration file changed on disk'
+          : 'Could not save configuration file',
+      details: isYamlError ? formatYamlParseError(error) : (error.statusCode ? error.message : 'The configuration file could not be saved'),
+      ...(error.statusCode === 409 ? { currentRevision: error.currentRevision } : {})
     });
   }
 });
@@ -786,12 +889,20 @@ async function startServer() {
   await fs.mkdir(APP_DATA_DIR, { recursive: true });
   await ensureOptionDefinitions();
   await applyStartupDirectoryLoad();
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  return new Promise((resolve, reject) => {
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      resolve(server);
+    });
+    server.once('error', reject);
   });
 }
 
-startServer().catch((error) => {
-  console.error('Server startup failed:', error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('Server startup failed:', error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { app, startServer };

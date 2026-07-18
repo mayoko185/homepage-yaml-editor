@@ -5,13 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Homepage YAML Editor</title>
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
-    <link rel="stylesheet" href="styles.css?v=35">
+    <link rel="stylesheet" href="styles.css?v=170">
     <script src="runtime-config.js"></script>
-    <script>
-        if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
-            document.documentElement.classList.add('light-mode');
-        }
-    </script>
+    <script src="theme-bootstrap.js?v=1"></script>
 </head>
 <body class="login-page">
     <main class="login-shell">
@@ -35,20 +31,6 @@
             </form>
         </section>
     </main>
-    <script>
-        const errorCode = new URLSearchParams(window.location.search).get('error');
-        const errorElement = document.getElementById('login-error');
-        const warningElement = document.getElementById('connection-warning');
-        if (window.APP_CONFIG && window.APP_CONFIG.loginRequired && window.location.protocol !== 'https:') {
-            warningElement.hidden = false;
-        }
-        if (errorCode === 'invalid') {
-            errorElement.textContent = 'Invalid username or password.';
-            errorElement.hidden = false;
-        } else if (errorCode === 'locked') {
-            errorElement.textContent = 'Too many sign-in attempts. Try again later.';
-            errorElement.hidden = false;
-        }
-    </script>
+    <script src="login.js?v=1"></script>
 </body>
 </html>

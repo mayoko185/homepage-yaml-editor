@@ -38,6 +38,7 @@
         let currentTab = 'services';
         let loadedFiles = {};
         let originalLoadedFiles = {};
+        let loadedFileRevisions = Object.fromEntries(configTabNames.map((tabName) => [tabName, null]));
         let loadedFileNames = Object.fromEntries(
             configTabNames.map((tabName) => [tabName, `${tabName}.yaml`])
         );
@@ -146,19 +147,21 @@
             [`${tabName}.yml`, tabName]
         ]));
 
-        function normalizeLoadedFiles(files) {
+        function normalizeLoadedFiles(files, revisions = {}) {
             const normalizedFiles = {};
             const normalizedFileNames = {};
+            const normalizedRevisions = Object.fromEntries(configTabNames.map((tabName) => [tabName, null]));
 
             Object.entries(files || {}).forEach(([filename, content]) => {
                 const tabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
                 if (tabName) {
                     normalizedFiles[tabName] = content;
                     normalizedFileNames[tabName] = filename;
+                    normalizedRevisions[tabName] = typeof revisions[filename] === 'string' ? revisions[filename] : null;
                 }
             });
 
-            return { files: normalizedFiles, fileNames: normalizedFileNames };
+            return { files: normalizedFiles, fileNames: normalizedFileNames, revisions: normalizedRevisions };
         }
 
         function rememberCurrentEditorValue() {
@@ -329,7 +332,7 @@
         function applyLoadedDirectory(data, tabName = currentTab, { autoloaded = false } = {}) {
             previewUndoState = null;
             updatePreviewUndoButton();
-            const normalized = normalizeLoadedFiles(data.files);
+            const normalized = normalizeLoadedFiles(data.files, data.revisions);
             const missingTabs = configTabNames.filter((tabName) => !Object.prototype.hasOwnProperty.call(normalized.files, tabName));
             loadedFiles = normalized.files;
             originalLoadedFiles = Object.fromEntries(configTabNames.map((tabName) => [
@@ -337,6 +340,7 @@
                 Object.prototype.hasOwnProperty.call(normalized.files, tabName) ? normalized.files[tabName] : ''
             ]));
             loadedFileNames = normalized.fileNames;
+            loadedFileRevisions = normalized.revisions;
             currentDirectoryPath = data.directory;
             currentDirectoryWasAutoloaded = autoloaded;
 
@@ -504,16 +508,19 @@
                             body: JSON.stringify({
                                 dirPath: currentDirectoryPath,
                                 filename: config.filename,
-                                content: config.yamlText
+                                content: config.yamlText,
+                                expectedRevision: loadedFileRevisions[config.tabName] ?? null
                             })
                         });
                         const data = await response.json().catch(() => ({}));
                         if (!response.ok || data.error) {
-                            throw new Error(getApiErrorMessage(data, response, `Could not save ${config.filename}`));
+                            const error = new Error(getApiErrorMessage(data, response, `Could not save ${config.filename}`));
+                            error.status = response.status;
+                            throw error;
                         }
 
-                        loadedFiles[config.tabName] = config.yamlText;
                         originalLoadedFiles[config.tabName] = config.yamlText;
+                        loadedFileRevisions[config.tabName] = data.revision;
                         savedConfigs.push(config);
                     } catch (error) {
                         failedConfigs.push({ config, error });
@@ -523,7 +530,12 @@
                 if (failedConfigs.length > 0) {
                     const firstFailure = failedConfigs[0];
                     setSaveStatus(
-                        `Saved ${savedConfigs.length} of ${unsavedConfigs.length}. Could not save ${firstFailure.config.filename}: ${addErrorGuidance(firstFailure.error, 'Fix the error and try Save again')}`,
+                        `Saved ${savedConfigs.length} of ${unsavedConfigs.length}. Could not save ${firstFailure.config.filename}: ${addErrorGuidance(
+                            firstFailure.error,
+                            firstFailure.error.status === 409
+                                ? 'Your pending edit is still available. Reload the directory before saving again'
+                                : 'Fix the error and try Save again'
+                        )}`,
                         'error'
                     );
                 } else {
@@ -698,7 +710,9 @@
             
             loadedFiles = { ...sampleConfigs };
             originalLoadedFiles = { ...loadedFiles };
+            loadedFileRevisions = Object.fromEntries(configTabNames.map((tabName) => [tabName, null]));
             currentDirectoryPath = null;
+            document.getElementById('security-status').hidden = Boolean(window.APP_CONFIG && window.APP_CONFIG.loginRequired);
             setSampleMode(true);
             const directoryInfo = document.getElementById('directory-info');
             directoryInfo.textContent = 'Examples loaded (read-only).';
@@ -2419,7 +2433,7 @@
             if (!iconUrl) {
                 return '';
             }
-            return `<img class="dashboard-icon" src="${escapeHtml(iconUrl)}" alt="" title="${escapeHtml(label || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">`;
+            return `<img class="dashboard-icon" src="${escapeHtml(iconUrl)}" alt="" title="${escapeHtml(label || '')}" loading="lazy" referrerpolicy="no-referrer">`;
         }
 
         function getSafeLinkUrl(value) {
@@ -2865,6 +2879,15 @@
             const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
             const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
             const widgetsData = parsed.widgets.data;
+            const widgetDataOccurrences = new Map();
+            if (Array.isArray(widgetsData)) {
+                widgetsData.forEach((item) => {
+                    const name = Object.keys(item || {})[0];
+                    if (!name) return;
+                    if (!widgetDataOccurrences.has(name)) widgetDataOccurrences.set(name, []);
+                    widgetDataOccurrences.get(name).push(item[name]);
+                });
+            }
             const widgets = Array.isArray(widgetsData)
                 ? widgetsData.map((item) => Object.keys(item || {})[0]).filter(Boolean)
                 : widgetsData && typeof widgetsData === 'object'
@@ -2936,7 +2959,7 @@
                 const style = String(layoutConfig && layoutConfig.style || '').trim().toLowerCase();
                 const columns = Math.max(1, Math.min(12, Number.parseInt(layoutConfig && layoutConfig.columns, 10) || 1));
                 return style === 'row'
-                    ? ` data-preview-layout-style="row" style="--preview-card-columns: ${columns}"`
+                    ? ` data-preview-layout-style="row" data-preview-card-columns="${columns}"`
                     : '';
             }
 
@@ -3039,7 +3062,7 @@
                     ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                     : '';
                 if (hasNestedGroups) {
-                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" style="--preview-nested-columns: ${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
+                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" data-preview-nested-columns="${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
                 } else {
                     if (!cards) {
                         addPreviewNotice(`No services configured in ${groupName || 'this group'}.`);
@@ -3136,7 +3159,7 @@
             const widgetsHtml = previewWidgets.map((name) => {
                 const occurrenceIndex = takeOccurrence(widgetOccurrenceCounter, name);
                 const widgetData = Array.isArray(widgetsData)
-                    ? widgetsData.filter((item) => Object.prototype.hasOwnProperty.call(item || {}, name))[occurrenceIndex]?.[name]
+                    ? widgetDataOccurrences.get(name)?.[occurrenceIndex]
                     : widgetsData?.[name];
                 const widgetTooltip = getPreviewTooltipAttributes([
                     'Jump to this widget in widgets.yaml',
@@ -3544,10 +3567,9 @@
         jumpSectionButton.addEventListener('click', jumpToMatchingConfigSection);
 
         function clearPreviewDropIndicators() {
-            document.querySelectorAll('.preview-drag-over, .preview-drop-before, .preview-drop-after, .preview-drop-inside').forEach((element) => {
-                element.classList.remove('preview-drag-over', 'preview-drop-before', 'preview-drop-after', 'preview-drop-inside');
+            document.querySelectorAll('.preview-drag-over, .preview-drop-before, .preview-drop-after, .preview-drop-inside, .preview-drop-left, .preview-drop-right').forEach((element) => {
+                element.classList.remove('preview-drag-over', 'preview-drop-before', 'preview-drop-after', 'preview-drop-inside', 'preview-drop-left', 'preview-drop-right');
             });
-            document.querySelectorAll('.preview-main-drop-indicator').forEach((element) => element.remove());
         }
 
         function clearPreviewDragState() {
@@ -3749,29 +3771,11 @@
             clearPreviewDropIndicators();
             target.classList.add('preview-drag-over');
             if (['service', 'bookmark', 'group', 'bookmark-group'].includes(drag.kind)) {
-                const rect = target.getBoundingClientRect();
-                const line = document.createElement('span');
                 if (details.verticalLine) {
-                    line.className = 'preview-main-drop-indicator preview-main-drop-indicator-vertical';
-                    line.setAttribute('aria-hidden', 'true');
-                    line.style.left = `${details.position === 'before' ? rect.left - 2 : rect.right - 2}px`;
-                    line.style.top = `${rect.top + 4}px`;
-                    line.style.height = `${Math.max(0, rect.height - 8)}px`;
-                    document.body.append(line);
+                    target.classList.add(details.position === 'before' ? 'preview-drop-left' : 'preview-drop-right');
                     return;
                 }
-                const inset = details.position === 'inside' ? 12 : 4;
-                const top = details.position === 'before'
-                    ? rect.top - 2
-                    : details.position === 'after'
-                        ? rect.bottom - 2
-                        : rect.bottom - 10;
-                line.className = 'preview-main-drop-indicator';
-                line.setAttribute('aria-hidden', 'true');
-                line.style.left = `${rect.left + inset}px`;
-                line.style.top = `${top}px`;
-                line.style.width = `${Math.max(0, rect.width - (inset * 2))}px`;
-                document.body.append(line);
+                target.classList.add(`preview-drop-${details.position}`);
                 return;
             }
             target.classList.add(`preview-drop-${details.position}`);
@@ -3909,6 +3913,28 @@
             updatePreview();
             requestAnimationFrame(() => this.querySelector('.preview-tab-btn.active')?.focus());
         });
+        document.getElementById('visual-preview').addEventListener('error', function(event) {
+            if (event.target.matches('img.dashboard-icon')) event.target.hidden = true;
+        }, true);
+        document.querySelector('.config-tabs').addEventListener('click', function(event) {
+            const tab = event.target.closest('.tab[data-tab]');
+            if (tab && this.contains(tab)) switchTab(tab.dataset.tab, event);
+        });
+        document.getElementById('scroll-top-button').addEventListener('click', scrollToTop);
+        document.getElementById('scroll-editor-button').addEventListener('click', scrollToEditor);
+        document.getElementById('scroll-preview-button').addEventListener('click', scrollToPreview);
+        document.getElementById('save-config-button').addEventListener('click', saveConfig);
+        document.getElementById('load-directory-button').addEventListener('click', handleLoadDirectory);
+        document.getElementById('reset-sample-button').addEventListener('click', resetToSample);
+        document.getElementById('reload-directory-button').addEventListener('click', reloadCurrentDirectory);
+        document.getElementById('download-config-button').addEventListener('click', downloadAllConfigs);
+        document.getElementById('manual-refresh-button').addEventListener('click', refreshPreview);
+        document.getElementById('directory-modal-close').addEventListener('click', closeDirectoryModal);
+        document.getElementById('directory-modal-cancel').addEventListener('click', closeDirectoryModal);
+        document.getElementById('load-directory-submit').addEventListener('click', loadFromServerPath);
+        document.getElementById('confirmation-modal-close').addEventListener('click', () => closeConfirmationDialog(false));
+        document.getElementById('confirmation-modal-cancel').addEventListener('click', () => closeConfirmationDialog(false));
+        document.getElementById('confirmation-modal-confirm').addEventListener('click', () => closeConfirmationDialog(true));
         const saveStatusElement = document.getElementById('save-status');
         function jumpFromSaveStatus() {
             if (!saveStatusElement.dataset.source) {

@@ -6,26 +6,22 @@
     <title>Homepage YAML Editor</title>
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-        <link rel="stylesheet" href="styles.css?v=169">
+    <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css?v=5.65.16">
+    <link rel="stylesheet" href="styles.css?v=170">
     <script src="runtime-config.js"></script>
-    <script>
-        if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
-            document.documentElement.classList.add('light-mode');
-        }
-    </script>
+    <script src="theme-bootstrap.js?v=1"></script>
 </head>
 <body>
     <div class="floating-nav" id="floating-nav">
-        <button type="button" id="scroll-top-button" class="floating-nav-button" onclick="scrollToTop()" aria-label="Back to top" hidden>
+        <button type="button" id="scroll-top-button" class="floating-nav-button" aria-label="Back to top" hidden>
             <span class="floating-nav-icon" aria-hidden="true">&uarr;</span>
             <span class="floating-nav-label" aria-hidden="true">Back to top</span>
         </button>
-        <button type="button" class="floating-nav-button" onclick="scrollToEditor()" aria-label="Jump to YAML editor">
+        <button type="button" id="scroll-editor-button" class="floating-nav-button" aria-label="Jump to YAML editor">
             <span class="floating-nav-icon" aria-hidden="true">&#9998;</span>
             <span class="floating-nav-label" aria-hidden="true">Jump to YAML editor</span>
         </button>
-        <button type="button" class="floating-nav-button" onclick="scrollToPreview()" aria-label="Jump to dashboard">
+        <button type="button" id="scroll-preview-button" class="floating-nav-button" aria-label="Jump to dashboard">
             <svg class="floating-nav-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="4" width="18" height="16" rx="2"></rect>
                 <path d="M3 9h18M9 9v11M15 9v11"></path>
@@ -64,16 +60,17 @@
 
         <div class="config-navigation">
             <div class="config-tabs">
-                <div class="tab active" data-tab="services" onclick="switchTab('services', event)">Services</div>
-                <div class="tab" data-tab="settings" onclick="switchTab('settings', event)">Settings</div>
-                <div class="tab" data-tab="bookmarks" onclick="switchTab('bookmarks', event)">Bookmarks</div>
-                <div class="tab" data-tab="widgets" onclick="switchTab('widgets', event)">Widgets</div>
-                <div class="tab" data-tab="docker" onclick="switchTab('docker', event)">Docker</div>
-                <div class="tab" data-tab="proxmox" onclick="switchTab('proxmox', event)">Proxmox</div>
-                <div class="tab" data-tab="kubernetes" onclick="switchTab('kubernetes', event)">Kubernetes</div>
+                <div class="tab active" data-tab="services">Services</div>
+                <div class="tab" data-tab="settings">Settings</div>
+                <div class="tab" data-tab="bookmarks">Bookmarks</div>
+                <div class="tab" data-tab="widgets">Widgets</div>
+                <div class="tab" data-tab="docker">Docker</div>
+                <div class="tab" data-tab="proxmox">Proxmox</div>
+                <div class="tab" data-tab="kubernetes">Kubernetes</div>
             </div>
             <section class="notification-area" aria-label="Application notifications">
                 <p id="directory-info" class="directory-status" data-state="idle">No directory loaded.</p>
+                <p id="security-status" class="security-status" role="status" hidden>Authentication is disabled. Anyone who can reach this editor can view or change Homepage configuration files. Restrict network access or enable login credentials.</p>
                 <p id="unsaved-status" class="unsaved-status" role="status" aria-live="polite" hidden></p>
                 <div id="preview-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
                 <div id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
@@ -111,7 +108,7 @@
                     </span>
                 </div>
                 <div class="toolbar-group toolbar-file-actions" aria-label="Configuration file actions">
-                    <button type="button" id="save-config-button" class="toolbar-button toolbar-action-button toolbar-icon-control sample-mode-disabled" onclick="saveConfig()" aria-label="Save unavailable in sample mode" disabled>
+                    <button type="button" id="save-config-button" class="toolbar-button toolbar-action-button toolbar-icon-control sample-mode-disabled" aria-label="Save unavailable in sample mode" disabled>
                         <span class="toolbar-button-icon" aria-hidden="true">
                             <svg class="toolbar-svg-icon toolbar-save-icon" viewBox="0 0 24 24" focusable="false">
                                 <path d="M4 3h13l3 3v15H4V3zm3 1v6h9V4H7zm0 10v5h10v-5H7zm2-9h5v3H9V5z"></path>
@@ -119,19 +116,19 @@
                         </span>
                         <span class="toolbar-button-label" aria-hidden="true">Examples are read-only; load a directory to save</span>
                     </button>
-                    <button type="button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="handleLoadDirectory()" aria-label="Load">
+                    <button type="button" id="load-directory-button" class="toolbar-button toolbar-action-button toolbar-icon-control" aria-label="Load">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8613;</span>
                         <span class="toolbar-button-label" aria-hidden="true">Load Homepage YAML files</span>
                     </button>
-                    <button type="button" id="reset-sample-button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="resetToSample()" aria-label="Reset">
+                    <button type="button" id="reset-sample-button" class="toolbar-button toolbar-action-button toolbar-icon-control" aria-label="Reset">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8634;</span>
                         <span class="toolbar-button-label" aria-hidden="true">Reset</span>
                     </button>
-                    <button type="button" id="reload-directory-button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="reloadCurrentDirectory()" aria-label="Reload" hidden>
+                    <button type="button" id="reload-directory-button" class="toolbar-button toolbar-action-button toolbar-icon-control" aria-label="Reload" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">&#8635;</span>
                         <span class="toolbar-button-label" aria-hidden="true">Reload currently loaded YAML files from disk</span>
                     </button>
-                    <button type="button" class="toolbar-button toolbar-action-button toolbar-icon-control" onclick="downloadAllConfigs()" aria-label="Download">
+                    <button type="button" id="download-config-button" class="toolbar-button toolbar-action-button toolbar-icon-control" aria-label="Download">
                         <span class="toolbar-button-icon" aria-hidden="true">&#8681;</span>
                         <span class="toolbar-button-label" aria-hidden="true">Download all YAML files</span>
                     </button>
@@ -185,7 +182,7 @@
                         </span>
                         <span id="preview-auto-refresh-label" class="preview-control-label" aria-hidden="true">Auto Refresh on</span>
                     </label>
-                    <button type="button" id="manual-refresh-button" class="refresh-btn" onclick="refreshPreview()" aria-label="Refresh dashboard manually" hidden>
+                    <button type="button" id="manual-refresh-button" class="refresh-btn" aria-label="Refresh dashboard manually" hidden>
                         <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                             <path d="M19 7v5h-5M5 17v-5h5M18.2 12A6.5 6.5 0 0 0 7.1 7.4L5 9M5.8 12a6.5 6.5 0 0 0 11.1 4.6L19 15"></path>
                         </svg>
@@ -215,14 +212,14 @@
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="directory-modal-title">
             <div class="modal-header">
                 <h3 id="directory-modal-title" class="modal-title">Load Configuration Directory</h3>
-                <button type="button" class="modal-close" onclick="closeDirectoryModal()" aria-label="Close directory dialog">&times;</button>
+                <button type="button" class="modal-close" id="directory-modal-close" aria-label="Close directory dialog">&times;</button>
             </div>
             <p class="modal-body-text">Enter the server path containing your Homepage YAML files:</p>
             <input type="text" id="serverPathInput" placeholder="/path/to/configs" class="modal-input" />
             <p id="directory-modal-status" class="modal-status" role="alert" hidden></p>
             <div class="modal-actions">
-                <button type="button" onclick="closeDirectoryModal()" class="modal-button modal-button-secondary">Cancel</button>
-                <button type="button" id="load-directory-submit" onclick="loadFromServerPath()" class="modal-button">Load</button>
+                <button type="button" id="directory-modal-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                <button type="button" id="load-directory-submit" class="modal-button">Load</button>
             </div>
         </div>
     </div>
@@ -231,12 +228,12 @@
         <div class="modal-content modal-content-compact" role="dialog" aria-modal="true" aria-labelledby="confirmation-modal-title" aria-describedby="confirmation-modal-message">
             <div class="modal-header">
                 <h3 id="confirmation-modal-title" class="modal-title">Confirm action</h3>
-                <button type="button" class="modal-close" onclick="closeConfirmationDialog(false)" aria-label="Close confirmation dialog">&times;</button>
+                <button type="button" class="modal-close" id="confirmation-modal-close" aria-label="Close confirmation dialog">&times;</button>
             </div>
             <p id="confirmation-modal-message" class="modal-body-text"></p>
             <div class="modal-actions">
-                <button type="button" onclick="closeConfirmationDialog(false)" class="modal-button modal-button-secondary">Cancel</button>
-                <button type="button" id="confirmation-modal-confirm" onclick="closeConfirmationDialog(true)" class="modal-button modal-button-danger">Continue</button>
+                <button type="button" id="confirmation-modal-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                <button type="button" id="confirmation-modal-confirm" class="modal-button modal-button-danger">Continue</button>
             </div>
         </div>
     </div>
@@ -425,9 +422,9 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=145"></script>
+    <script src="vendor/js-yaml/js-yaml.min.js?v=4.3.0"></script>
+    <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
+    <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
+    <script src="app.js?v=146"></script>
 </body>
 </html>

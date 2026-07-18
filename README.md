@@ -29,6 +29,7 @@ Add, edit, reorder, and remove dashboard groups, services, and bookmarks from th
 - Remembers theme, a custom page and browser-tab title, visible tabs, editor preferences, and custom option types.
 - Lets custom option types target any combination of services, service groups, bookmarks, and service widgets, with configurable defaults for new items.
 - Can be protected with an optional username and password.
+- Warns prominently when authentication is disabled and rejects saves when a loaded file changed on disk.
 
 ## Installation
 
@@ -62,6 +63,8 @@ services:
 
 Use matching `PUID` and `PGID` values so both containers can access the configuration files. Set `HOMEPAGE_ALLOWED_HOSTS` to the hostname or IP address used to open Homepage when accessing it through anything other than localhost. The commented Docker socket mount is optional; configure the required socket permissions before enabling it, or use a Docker socket proxy. Editor-specific settings remain separate in `./data`.
 
+The Compose example publishes the editor on every host interface. When login is disabled, anyone who can reach port `8081` can read or change the mounted Homepage configuration. The editor displays a persistent warning in this state. Restrict the port with a firewall, bind it to `127.0.0.1`, or enable login before exposing it to an untrusted network.
+
 After saving in the editor, Homepage reads the updated files from the shared directory. Some `settings.yaml` changes require using Homepage's refresh control before they appear.
 
 ### Docker image
@@ -73,6 +76,8 @@ docker run -d \
   --name homepage-yaml-editor \
   --restart unless-stopped \
   -p 127.0.0.1:8081:8081 \
+  -e PUID=1000 \
+  -e PGID=1000 \
   -e AUTOLOAD_DIR=/hp_config \
   -v /path/to/homepage/config:/hp_config \
   -v "$PWD/data:/app/data" \
@@ -88,6 +93,13 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+The default Node integration suite does not require a browser. The optional real-browser suite uses Playwright Chromium:
+
+```sh
+pnpm exec playwright install chromium
+pnpm test:browser
+```
+
 The development server listens on <http://localhost:8081>. Set `DATA_DIR`, `AUTOLOAD_DIR`, or `ALLOWED_CONFIG_DIRS` to point it at your Homepage configuration directory.
 
 ## Configuration
@@ -101,14 +113,18 @@ The development server listens on <http://localhost:8081>. Set `DATA_DIR`, `AUTO
 | `DEFAULT_THEME` | `dark` | Initial theme; use `light` for the light theme. |
 | `REQUIRE_LOGIN_USER` | unset | Optional login username. Must be paired with `REQUIRE_LOGIN_PASSWORD`. |
 | `REQUIRE_LOGIN_PASSWORD` | unset | Optional login password. |
+| `TRUST_PROXY` | `false` | Set to `true` only behind a trusted reverse proxy so secure requests and client addresses are detected correctly. |
 | `PUID` / `PGID` | `1000` | Container user and group IDs used by the startup script. |
 
 To enable login in Compose, uncomment and change both `REQUIRE_LOGIN_USER` and `REQUIRE_LOGIN_PASSWORD`.
+
+Login credentials sent over plain HTTP are not encrypted. Use HTTPS through a trusted reverse proxy for remote access, enable `TRUST_PROXY=true` only when direct access to the application port is blocked, and keep the editor off untrusted networks when login is disabled.
 
 ## Usage notes
 
 - If no configuration directory is available, the app opens bundled sample YAML files in read-only mode.
 - Saving validates YAML first and only writes the supported Homepage filenames.
+- Saving uses atomic file replacement and refuses to overwrite a file changed by another process after it was loaded. Reload the directory to review the current disk version while preserving or copying the pending editor content first.
 - Loaded directories must be `/hp_config`, `DATA_DIR`, `AUTOLOAD_DIR`, or a path listed in `ALLOWED_CONFIG_DIRS`.
 - The Interactive Editor currently focuses on service and bookmark YAML. Raw YAML editing remains available for every supported file.
 
