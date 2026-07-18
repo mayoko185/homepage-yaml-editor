@@ -3570,6 +3570,23 @@
             document.querySelectorAll('.preview-drag-over, .preview-drop-before, .preview-drop-after, .preview-drop-inside, .preview-drop-left, .preview-drop-right').forEach((element) => {
                 element.classList.remove('preview-drag-over', 'preview-drop-before', 'preview-drop-after', 'preview-drop-inside', 'preview-drop-left', 'preview-drop-right');
             });
+            document.querySelectorAll('.preview-main-drop-indicator').forEach((element) => element.remove());
+        }
+
+        function ensurePreviewMainDropIndicator(vertical) {
+            const existing = document.body.querySelector(':scope > .preview-main-drop-indicator');
+            const existingIsVertical = existing && existing.classList.contains('preview-main-drop-indicator-vertical');
+            let line = existing && existingIsVertical === Boolean(vertical) ? existing : null;
+            if (existing && existingIsVertical !== Boolean(vertical)) existing.remove();
+            if (!line) {
+                line = document.createElement('span');
+                line.className = vertical
+                    ? 'preview-main-drop-indicator preview-main-drop-indicator-vertical'
+                    : 'preview-main-drop-indicator';
+                line.setAttribute('aria-hidden', 'true');
+                document.body.append(line);
+            }
+            return line;
         }
 
         function clearPreviewDragState() {
@@ -3771,11 +3788,25 @@
             clearPreviewDropIndicators();
             target.classList.add('preview-drag-over');
             if (['service', 'bookmark', 'group', 'bookmark-group'].includes(drag.kind)) {
+                const rect = target.getBoundingClientRect();
+                const line = ensurePreviewMainDropIndicator(Boolean(details.verticalLine));
                 if (details.verticalLine) {
-                    target.classList.add(details.position === 'before' ? 'preview-drop-left' : 'preview-drop-right');
+                    line.style.left = `${details.position === 'before' ? rect.left - 2 : rect.right - 2}px`;
+                    line.style.top = `${rect.top + 4}px`;
+                    line.style.height = `${Math.max(0, rect.height - 8)}px`;
+                    line.style.width = '';
                     return;
                 }
-                target.classList.add(`preview-drop-${details.position}`);
+                const inset = details.position === 'inside' ? 12 : 4;
+                const top = details.position === 'before'
+                    ? rect.top - 2
+                    : details.position === 'after'
+                        ? rect.bottom - 2
+                        : rect.bottom - 10;
+                line.style.left = `${rect.left + inset}px`;
+                line.style.top = `${top}px`;
+                line.style.width = `${Math.max(0, rect.width - (inset * 2))}px`;
+                line.style.height = '';
                 return;
             }
             target.classList.add(`preview-drop-${details.position}`);
