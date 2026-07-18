@@ -91,6 +91,7 @@ node --check public/app.js
 
 - Preserve unrelated user changes in the working tree.
 - Prefer focused changes over broad rewrites.
-- Update `CHANGELOG.md` for every user-visible, security, deployment, or behavior change.
+- Update `CHANGELOG.md` only for releases, security or deployment changes, and meaningful user-visible feature or behavior changes.
+- Keep changelog entries concise and grouped by theme. Do not add entries for minor visual polish, wording or icon tweaks, routine bug fixes, internal refactors, or changes already covered by a broader entry.
 - Update `README.md` when commands, environment variables, deployment behavior, or user-visible functionality changes.
 - Do not commit generated dependency directories such as `node_modules` or `.pnpm-store`.

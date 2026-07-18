@@ -28,6 +28,21 @@ layout:
     tab: Other
 `;
 
+const bookmarks = `# keep this bookmarks comment
+- Developer:
+    - Github:
+        - abbr: GH
+          href: https://github.com
+          icon: github
+    - Docs:
+        - href: https://docs.example
+
+- Social:
+    - Reddit:
+        - abbr: RE
+          href: https://reddit.com
+`;
+
 function transform(operation, currentFiles = { services, settings }) {
   return transformPreviewYaml({ files: currentFiles, operation }).files;
 }
@@ -67,6 +82,87 @@ test('edits, adds, moves and removes services without losing advanced fields or 
   }, files);
   parsed = YAML.parse(files.services);
   assert.deepEqual(parsed[0]['First Group'].map((item) => Object.keys(item)[0]), ['Renamed Service', 'Added Service']);
+});
+
+test('edits, adds, moves and removes bookmark groups and links without losing comments', () => {
+  let files = transform({
+    type: 'bookmark-group.edit',
+    target: { groupName: 'Developer', groupIndex: 0 },
+    values: { name: 'Engineering', fields: [] }
+  }, { services, settings, bookmarks });
+  let parsed = YAML.parse(files.bookmarks);
+  assert.match(files.bookmarks, /keep this bookmarks comment/);
+  assert.deepEqual(parsed.map((group) => Object.keys(group)[0]), ['Engineering', 'Social']);
+
+  files = transform({
+    type: 'bookmark.edit',
+    target: { groupName: 'Engineering', groupIndex: 0, bookmarkName: 'Github', bookmarkIndex: 0 },
+    values: {
+      name: 'GitHub',
+      fields: [
+        { key: 'abbr', value: 'GHX' },
+        { key: 'href', value: 'https://github.example' },
+        { key: 'icon', value: 'github' }
+      ]
+    }
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.equal(parsed[0].Engineering[0].GitHub[0].href, 'https://github.example');
+  assert.deepEqual(Object.keys(parsed[0].Engineering[0].GitHub[0]), ['abbr', 'href', 'icon']);
+
+  files = transform({
+    type: 'bookmark.add',
+    target: { groupName: 'Engineering', groupIndex: 0 },
+    values: {
+      name: 'Example',
+      fields: [
+        { key: 'href', value: 'https://example.com' },
+        { key: 'abbr', value: 'EX' }
+      ]
+    }
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.equal(parsed[0].Engineering[2].Example[0].abbr, 'EX');
+
+  files = transform({
+    type: 'bookmark.move',
+    target: { groupName: 'Engineering', groupIndex: 0, bookmarkName: 'Example', bookmarkIndex: 0 },
+    direction: 'up'
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.deepEqual(parsed[0].Engineering.map((item) => Object.keys(item)[0]), ['GitHub', 'Example', 'Docs']);
+
+  files = transform({
+    type: 'bookmark.remove',
+    target: { groupName: 'Engineering', groupIndex: 0, bookmarkName: 'Docs', bookmarkIndex: 0 }
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.deepEqual(parsed[0].Engineering.map((item) => Object.keys(item)[0]), ['GitHub', 'Example']);
+
+  files = transform({
+    type: 'bookmark-group.add',
+    values: { name: 'Reference', fields: [] }
+  }, files);
+  files = transform({
+    type: 'bookmark-group.move',
+    target: { groupName: 'Reference', groupIndex: 0 },
+    direction: 'up'
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.deepEqual(parsed.map((group) => Object.keys(group)[0]), ['Engineering', 'Reference', 'Social']);
+
+  files = transform({
+    type: 'bookmark-group.remove',
+    target: { groupName: 'Reference', groupIndex: 0 }
+  }, files);
+  parsed = YAML.parse(files.bookmarks);
+  assert.deepEqual(parsed.map((group) => Object.keys(group)[0]), ['Engineering', 'Social']);
+
+  const filesWithEmptyBookmarks = transformPreviewYaml({
+    files: { services, settings, bookmarks: '' },
+    operation: { type: 'bookmark-group.add', values: { name: 'First bookmark group' } }
+  }).files;
+  assert.deepEqual(YAML.parse(filesWithEmptyBookmarks.bookmarks), [{ 'First bookmark group': [] }]);
 });
 
 test('edits ordered service and group options from the Preview editor', () => {

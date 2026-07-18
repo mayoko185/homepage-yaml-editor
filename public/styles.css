@@ -1127,21 +1127,162 @@
                 padding-bottom: 7px;
             }
         }
-        .dashboard-widgets,
-        .dashboard-bookmarks {
+        .dashboard-widgets {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
             padding: 8px 0;
         }
-        .bookmark-chip {
-            text-decoration: none;
-            color: var(--text-color);
+        .dashboard-bookmarks {
+            padding: 12px;
             border: 1px solid var(--border-color);
+            border-radius: 10px;
             background: var(--config-item-bg);
-            border-radius: 999px;
-            padding: 6px 12px;
-            font-size: 0.85em;
+        }
+        .bookmark-panel-heading,
+        .bookmark-group-heading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+        .bookmark-panel-heading {
+            justify-content: space-between;
+            margin-bottom: 11px;
+        }
+        .bookmark-panel-title {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            color: var(--group-title-color);
+            font-size: 0.98em;
+            font-weight: 700;
+        }
+        .bookmark-panel-icon {
+            width: 19px;
+            height: 19px;
+            fill: none;
+            stroke: currentColor;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 1.8;
+        }
+        .bookmark-panel-count,
+        .bookmark-group-count {
+            color: var(--text-color);
+            font-size: 0.75em;
+            opacity: 0.62;
+        }
+        .bookmark-groups {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 10px;
+        }
+        .bookmark-group {
+            min-width: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            background: var(--preview-bg);
+        }
+        .bookmark-group-heading {
+            margin-bottom: 9px;
+        }
+        .bookmark-group-title {
+            flex: 1 1 auto;
+            min-width: 0;
+            color: var(--group-title-color);
+            font-size: 0.88em;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+        .bookmark-group-count {
+            flex: 0 0 auto;
+            margin-left: 0;
+            white-space: nowrap;
+        }
+        .bookmark-links {
+            display: grid;
+            gap: 7px;
+        }
+        .bookmark-group-heading .preview-edit-actions,
+        .bookmark-card > .preview-edit-actions {
+            flex: 0 0 auto;
+        }
+        .bookmark-card {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            gap: 9px;
+            padding: 8px 9px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+        }
+        .bookmark-card:hover {
+            border-color: color-mix(in srgb, var(--tab-active-bg) 58%, var(--border-color));
+            background: color-mix(in srgb, var(--tab-active-bg) 10%, var(--config-item-bg));
+            transform: translateY(-1px);
+        }
+        .bookmark-card-link {
+            display: flex;
+            align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
+            gap: 9px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .bookmark-card-link.preview-jump-target:not(.yaml-error-card):hover {
+            outline: none;
+            box-shadow: none;
+        }
+        .bookmark-card-link:focus-visible,
+        .bookmark-group-title:focus-visible {
+            outline: 2px solid var(--tab-active-bg);
+            outline-offset: 2px;
+        }
+        .bookmark-card > .preview-edit-actions {
+            margin-left: auto;
+        }
+        .bookmark-card-mark {
+            display: grid;
+            place-items: center;
+            width: 30px;
+            height: 30px;
+            flex: 0 0 auto;
+            border: 1px solid color-mix(in srgb, var(--tab-active-bg) 38%, var(--border-color));
+            border-radius: 7px;
+            background: color-mix(in srgb, var(--tab-active-bg) 13%, var(--config-item-bg));
+            color: var(--tab-active-bg);
+            font-size: 0.72em;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        .bookmark-card-copy {
+            display: grid;
+            min-width: 0;
+            gap: 2px;
+        }
+        .bookmark-card-name {
+            font-size: 0.86em;
+            font-weight: 650;
+            overflow-wrap: anywhere;
+        }
+        .bookmark-card-arrow {
+            margin-left: auto;
+            color: var(--tab-active-bg);
+            font-size: 1em;
+            opacity: 0.72;
+        }
+        .bookmark-empty {
+            margin: 0;
+            color: var(--text-color);
+            font-size: 0.8em;
+            opacity: 0.62;
         }
         .dashboard-grid {
             display: grid;
@@ -1462,6 +1603,13 @@
         }
         .preview-add-service {
             margin-top: 10px;
+        }
+        .preview-add-bookmark,
+        .preview-add-bookmark-group {
+            margin-top: 10px;
+        }
+        .preview-add-bookmark {
+            width: 100%;
         }
         .preview-add-group {
             justify-self: start;
@@ -2189,17 +2337,26 @@
         }
         .settings-modal-content {
             width: min(100%, 600px);
+            height: min(600px, calc(100vh - 40px));
+            max-height: calc(100vh - 40px);
             border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
         #settings-form {
             display: grid;
+            grid-template-rows: minmax(0, 1fr) auto;
             gap: 9px;
+            min-height: 0;
+            flex: 1;
         }
         .settings-tabs {
             display: grid;
             grid-template-columns: 124px minmax(0, 1fr);
             align-items: start;
             gap: 10px;
+            min-height: 0;
         }
         .settings-tab-list {
             display: grid;
@@ -2245,6 +2402,9 @@
         .settings-tab-panel {
             display: grid;
             gap: 9px;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
         .settings-tab-panel[hidden] {
             display: none;

@@ -685,7 +685,7 @@
                 await loadOptionDefinitions();
             } catch (error) {
                 console.warn('Could not load option type definitions', error);
-                setSaveStatus(`Could not load Preview option types. Some editing controls may be unavailable. ${addErrorGuidance(error, 'You can try again by reloading the page')}`, 'error');
+                setSaveStatus(`Could not load option types. Some editing controls may be unavailable. ${addErrorGuidance(error, 'You can try again by reloading the page')}`, 'error');
             }
 
             try {
@@ -793,7 +793,7 @@
         function findPreviewGroup(source) {
             const services = parseTabConfig('services');
             if (services.error || !Array.isArray(services.data)) {
-                throw new Error('Fix the services.yaml error shown in the Preview before editing it.');
+                throw new Error('Fix the services.yaml error shown on the dashboard before editing it.');
             }
             let seen = 0;
             for (const group of services.data) {
@@ -804,7 +804,7 @@
                 }
                 seen++;
             }
-            throw new Error(`Service group "${source.groupName}" is no longer available. Refresh the Preview and try again.`);
+            throw new Error(`Service group "${source.groupName}" is no longer available. Refresh the dashboard and try again.`);
         }
 
         function findPreviewService(source) {
@@ -818,7 +818,51 @@
                 }
                 seen++;
             }
-            throw new Error(`Service "${source.serviceName}" is no longer available. Refresh the Preview and try again.`);
+            throw new Error(`Service "${source.serviceName}" is no longer available. Refresh the dashboard and try again.`);
+        }
+
+        function findPreviewBookmarkGroup(source) {
+            const bookmarks = parseTabConfig('bookmarks');
+            if (bookmarks.error || !Array.isArray(bookmarks.data)) {
+                throw new Error('Fix the bookmarks.yaml error shown on the dashboard before editing it.');
+            }
+            let seen = 0;
+            for (const group of bookmarks.data) {
+                const groupName = Object.keys(group || {})[0] || '';
+                if (groupName !== source.groupName) continue;
+                if (seen === (Number(source.groupIndex) || 0)) {
+                    return {
+                        group,
+                        groupName,
+                        groupIndex: seen,
+                        entries: Array.isArray(group[groupName]) ? group[groupName] : []
+                    };
+                }
+                seen++;
+            }
+            throw new Error(`Bookmark group "${source.groupName}" is no longer available. Refresh the dashboard and try again.`);
+        }
+
+        function findPreviewBookmark(source) {
+            const group = findPreviewBookmarkGroup(source);
+            let seen = 0;
+            for (const bookmark of group.entries) {
+                const bookmarkName = Object.keys(bookmark || {})[0] || '';
+                if (bookmarkName !== source.bookmarkName) continue;
+                if (seen === (Number(source.bookmarkIndex) || 0)) {
+                    const rawData = bookmark[bookmarkName];
+                    const data = Array.isArray(rawData) ? rawData[0] : rawData;
+                    return {
+                        ...group,
+                        bookmark,
+                        bookmarkName,
+                        bookmarkIndex: seen,
+                        data: data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+                    };
+                }
+                seen++;
+            }
+            throw new Error(`Bookmark "${source.bookmarkName}" is no longer available. Refresh the dashboard and try again.`);
         }
 
         let optionDefinitions = new Map();
@@ -838,6 +882,7 @@
         function getPreviewOptionTarget(action) {
             if (String(action || '').startsWith('service.')) return 'service';
             if (String(action || '').startsWith('group.')) return 'group';
+            if (String(action || '').startsWith('bookmark.')) return 'bookmark';
             return null;
         }
 
@@ -854,7 +899,7 @@
             const response = await fetch('/api/option-types', { cache: 'no-store' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok || data.error) {
-                throw new Error(getApiErrorMessage(data, response, 'Could not load Preview option types'));
+                throw new Error(getApiErrorMessage(data, response, 'Could not load option types'));
             }
             setOptionDefinitions(data.options);
             return data.options;
@@ -947,11 +992,11 @@
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || data.error) {
-                    throw new Error(getApiErrorMessage(data, response, 'Could not save Preview option types'));
+                    throw new Error(getApiErrorMessage(data, response, 'Could not save option types'));
                 }
                 setOptionDefinitions(data.options);
                 if (previewEditDialogState) renderPreviewEditOptions();
-                setSaveStatus('Preview option types saved.', 'success');
+                setSaveStatus('Option types saved.', 'success');
                 closeOptionTypesModal();
             } catch (error) {
                 setOptionTypesStatus(addErrorGuidance(error, 'Review the option type values and try again'));
@@ -1021,7 +1066,7 @@
             const addButton = document.getElementById('preview-edit-add-option');
             const addOptionNote = document.getElementById('preview-edit-add-option-note');
             const state = previewEditDialogState;
-            const supportsOptions = state && ['service.add', 'service.edit', 'group.edit'].includes(state.action);
+            const supportsOptions = state && ['service.add', 'service.edit', 'group.edit', 'bookmark.add', 'bookmark.edit'].includes(state.action);
             options.hidden = !supportsOptions;
             addButton.hidden = !supportsOptions;
             addOptionNote.hidden = !supportsOptions || !state.hasAddedOption;
@@ -1031,7 +1076,11 @@
                 return;
             }
             const optionTarget = getPreviewOptionTarget(state.action);
-            const availableOptionNames = getOptionDefinitionsForTarget(optionTarget).map((definition) => definition.name);
+            const bookmarkOptionNames = state.action.startsWith('bookmark.') ? ['abbr', 'href', 'icon', 'target'] : [];
+            const availableOptionNames = [...new Set([
+                ...getOptionDefinitionsForTarget(optionTarget).map((definition) => definition.name),
+                ...bookmarkOptionNames
+            ])];
             function getFieldCollection(path = '') {
                 if (!path) return state.fields;
                 return path.split('.').reduce((fields, index) => fields[Number(index)].fields, state.fields);
@@ -1045,7 +1094,8 @@
                 const isSelectOption = optionType === 'select';
                 const isBooleanOption = !field.fields && (optionType === 'boolean' || field.value.trim() === 'true' || field.value.trim() === 'false');
                 const isTextareaOption = optionType === 'textarea';
-                const isSingleLineOption = optionType === 'text';
+                const isSingleLineOption = optionType === 'text'
+                    || state.action.startsWith('bookmark.') && ['abbr', 'href', 'icon', 'target'].includes(field.key);
                 const tabNames = state.availableTabs || [];
                 const tabOptions = [...new Set(field.value && !tabNames.includes(field.value)
                     ? [field.value, ...tabNames] : tabNames)]
@@ -1065,7 +1115,7 @@
                 const valueControl = field.fields
                     ? `<div class="preview-edit-nested-options" data-preview-nested-options>${renderRows(field.fields, path)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
                     : isTabOption
-                    ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Preview tab"><option value="" disabled${field.value ? '' : ' selected'}>Select a tab</option>${tabOptions}</select>`
+                    ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Dashboard tab"><option value="" disabled${field.value ? '' : ' selected'}>Select a tab</option>${tabOptions}</select>`
                     : isSelectOption
                     ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Value for ${escapeHtml(field.key || 'option')}"><option value="" disabled${field.value ? '' : ' selected'}>Select a value</option>${selectOptions}</select>`
                     : isBooleanOption
@@ -1093,7 +1143,7 @@
 
         function openPreviewEditDialog(action, source) {
             if (sampleModeEnabled) {
-                setSaveStatus('Load a configuration directory before editing the Preview.', 'error');
+                setSaveStatus('Load a configuration directory before editing the dashboard.', 'error');
                 return;
             }
             const modal = document.getElementById('preview-edit-modal');
@@ -1103,7 +1153,7 @@
 
             previewEditDialogState = { action, source, fields: [], availableTabs: [] };
             previewEditPreviousFocus = document.activeElement;
-            modal.querySelector('.modal-content').classList.toggle('preview-edit-modal-wide', action === 'group.edit' || action.startsWith('service.'));
+            modal.querySelector('.modal-content').classList.toggle('preview-edit-modal-wide', action === 'group.edit' || action.startsWith('service.') || action.startsWith('bookmark.'));
             nameInput.value = '';
             setPreviewEditModalStatus();
 
@@ -1118,7 +1168,7 @@
             } else if (action === 'group.edit') {
                 const group = findPreviewGroup(source);
                 const settings = parseTabConfig('settings');
-                if (settings.error) throw new Error('Fix the settings.yaml error shown in the Preview before editing this group.');
+                if (settings.error) throw new Error('Fix the settings.yaml error shown on the dashboard before editing this group.');
                 const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
                     ? settings.data.layout : {};
                 title.textContent = 'Edit service group';
@@ -1141,6 +1191,27 @@
                 submit.textContent = 'Apply';
                 nameInput.value = service.serviceName;
                 previewEditDialogState.fields = getPreviewOptionFields(service.data);
+            } else if (action === 'bookmark-group.add') {
+                title.textContent = 'Add bookmark group';
+                submit.textContent = 'Add group';
+            } else if (action === 'bookmark-group.edit') {
+                const group = findPreviewBookmarkGroup(source);
+                title.textContent = 'Edit bookmark group';
+                submit.textContent = 'Apply';
+                nameInput.value = group.groupName;
+            } else if (action === 'bookmark.add') {
+                title.textContent = `Add bookmark to ${source.groupName}`;
+                submit.textContent = 'Add bookmark';
+                previewEditDialogState.fields = [
+                    { key: 'href', value: '' },
+                    { key: 'abbr', value: '' }
+                ];
+            } else if (action === 'bookmark.edit') {
+                const bookmark = findPreviewBookmark(source);
+                title.textContent = 'Edit bookmark';
+                submit.textContent = 'Apply';
+                nameInput.value = bookmark.bookmarkName;
+                previewEditDialogState.fields = getPreviewOptionFields(bookmark.data);
             }
 
             renderPreviewEditOptions();
@@ -1173,15 +1244,15 @@
             const settings = parseTabConfig('settings');
             const services = parseTabConfig('services');
             if (settings.error) {
-                throw new Error('Fix the settings.yaml error shown in the Preview before managing tabs.');
+                throw new Error('Fix the settings.yaml error shown on the dashboard before managing tabs.');
             }
             if (services.error || !Array.isArray(services.data)) {
-                throw new Error('Fix the services.yaml error shown in the Preview before managing tabs.');
+                throw new Error('Fix the services.yaml error shown on the dashboard before managing tabs.');
             }
             const settingsData = settings.data && typeof settings.data === 'object' ? settings.data : {};
             const layout = settingsData.layout;
             if (layout !== undefined && (typeof layout !== 'object' || Array.isArray(layout) || layout === null)) {
-                throw new Error('Preview tab management requires settings.yaml layout to be a mapping of group names to options.');
+                throw new Error('Tab management requires settings.yaml layout to be a mapping of group names to options.');
             }
             const layoutGroups = layout || {};
             const tabs = [];
@@ -1271,7 +1342,7 @@
 
         function openPreviewTabManager() {
             if (sampleModeEnabled) {
-                setSaveStatus('Load a configuration directory before managing Preview tabs.', 'error');
+                setSaveStatus('Load a configuration directory before managing tabs.', 'error');
                 return;
             }
             const modal = document.getElementById('preview-tab-modal');
@@ -1340,7 +1411,7 @@
                     const data = getPreviewTabManagerData();
                     const groupCount = (data.groupsByTab[tabName] || []).length;
                     const confirmed = await showConfirmationDialog({
-                        title: 'Remove Preview tab?',
+                        title: 'Remove tab?',
                         message: `Remove ${tabName}? ${groupCount} assigned group${groupCount === 1 ? '' : 's'} will become visible on every tab. No groups or services will be deleted.`,
                         confirmText: 'Remove tab'
                     });
@@ -1353,17 +1424,17 @@
                     }
                 }
             } catch (error) {
-                setPreviewTabModalStatus(`Could not update Preview tabs. ${addErrorGuidance(error, 'Fix the YAML error and try again')}`);
+                setPreviewTabModalStatus(`Could not update tabs. ${addErrorGuidance(error, 'Fix the YAML error and try again')}`);
             }
         }
 
         function replacePreviewEditedFiles(files) {
             applyingPreviewFiles = true;
             try {
-                for (const tabName of ['services', 'settings']) {
-                    if (typeof files[tabName] === 'string') loadedFiles[tabName] = files[tabName];
+                for (const tabName of configTabNames) {
+                    if (typeof files?.[tabName] === 'string') loadedFiles[tabName] = files[tabName];
                 }
-                if (typeof files[currentTab] === 'string' && getEditorValue() !== files[currentTab]) {
+                if (typeof files?.[currentTab] === 'string' && getEditorValue() !== files[currentTab]) {
                     const lastLine = Math.max(0, yamlCodeEditor.lineCount() - 1);
                     const lastCharacter = (yamlCodeEditor.getLine(lastLine) || '').length;
                     yamlCodeEditor.operation(() => {
@@ -1392,7 +1463,8 @@
             if (sampleModeEnabled) return false;
             const beforeFiles = {
                 services: getTabYamlText('services'),
-                settings: getTabYamlText('settings')
+                settings: getTabYamlText('settings'),
+                bookmarks: getTabYamlText('bookmarks')
             };
             try {
                 const response = await fetch('/api/yaml/transform', {
@@ -1402,7 +1474,7 @@
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || data.error) {
-                    throw new Error(getApiErrorMessage(data, response, 'Could not apply the Preview edit'));
+                    throw new Error(getApiErrorMessage(data, response, 'Could not apply the edit'));
                 }
                 previewUndoState = { files: beforeFiles, message: successMessage };
                 replacePreviewEditedFiles(data.files);
@@ -1410,7 +1482,7 @@
                 setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
                 return true;
             } catch (error) {
-                setSaveStatus(`Could not edit Preview: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
+                setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
                 return false;
             }
         }
@@ -1445,7 +1517,12 @@
                 return;
             }
             if (action === 'group.edit' && fields.some((field) => field.key === 'tab' && !field.value.trim())) {
-                setPreviewEditModalStatus('Choose a Preview tab or remove the tab option.');
+                setPreviewEditModalStatus('Choose a dashboard tab or remove the tab option.');
+                return;
+            }
+            if (['bookmark.add', 'bookmark.edit'].includes(action)
+                && !fields.some((field) => field.key === 'href' && String(field.value || '').trim())) {
+                setPreviewEditModalStatus('Add a bookmark URL in the href option.');
                 return;
             }
             const values = { name, fields };
@@ -1458,7 +1535,15 @@
                     ? `Updated group ${name}.`
                     : action === 'service.add'
                         ? `Added service ${name}.`
-                        : `Updated service ${name}.`;
+                        : action === 'service.edit'
+                            ? `Updated service ${name}.`
+                            : action === 'bookmark-group.add'
+                                ? `Added bookmark group ${name}.`
+                                : action === 'bookmark-group.edit'
+                                    ? `Updated bookmark group ${name}.`
+                                    : action === 'bookmark.add'
+                                        ? `Added bookmark ${name}.`
+                                        : `Updated bookmark ${name}.`;
             const applied = await applyPreviewEdit({ type: action, target: source, values }, message);
             submitButton.disabled = false;
             if (applied) closePreviewEditDialog();
@@ -1480,7 +1565,7 @@
                     openPreviewTabManager();
                     return;
                 }
-                if (['group.add', 'group.edit', 'service.add', 'service.edit'].includes(action)) {
+                if (['group.add', 'group.edit', 'service.add', 'service.edit', 'bookmark-group.add', 'bookmark-group.edit', 'bookmark.add', 'bookmark.edit'].includes(action)) {
                     openPreviewEditDialog(action, source);
                     return;
                 }
@@ -1497,6 +1582,22 @@
                     await applyPreviewEdit(
                         { type: 'group.move', target: source, direction },
                         `Moved group ${source.groupName} ${direction}.`
+                    );
+                    return;
+                }
+                if (action === 'bookmark-group.move-up' || action === 'bookmark-group.move-down') {
+                    const direction = action.endsWith('up') ? 'up' : 'down';
+                    await applyPreviewEdit(
+                        { type: 'bookmark-group.move', target: source, direction },
+                        `Moved bookmark group ${source.groupName} ${direction}.`
+                    );
+                    return;
+                }
+                if (action === 'bookmark.move-up' || action === 'bookmark.move-down') {
+                    const direction = action.endsWith('up') ? 'up' : 'down';
+                    await applyPreviewEdit(
+                        { type: 'bookmark.move', target: source, direction },
+                        `Moved bookmark ${source.bookmarkName} ${direction}.`
                     );
                     return;
                 }
@@ -1528,9 +1629,39 @@
                             `Deleted group ${source.groupName}.`
                         );
                     }
+                    return;
+                }
+                if (action === 'bookmark.remove') {
+                    const confirmed = await showConfirmationDialog({
+                        title: 'Delete bookmark?',
+                        message: `Delete ${source.bookmarkName} from ${source.groupName}? Its complete YAML block will be removed.`,
+                        confirmText: 'Delete bookmark'
+                    });
+                    if (confirmed) {
+                        await applyPreviewEdit(
+                            { type: 'bookmark.remove', target: source },
+                            `Deleted bookmark ${source.bookmarkName}.`
+                        );
+                    }
+                    return;
+                }
+                if (action === 'bookmark-group.remove') {
+                    const group = findPreviewBookmarkGroup(source);
+                    const count = group.entries.length;
+                    const confirmed = await showConfirmationDialog({
+                        title: 'Delete bookmark group?',
+                        message: `Delete ${source.groupName} and ${count} bookmark${count === 1 ? '' : 's'}?`,
+                        confirmText: 'Delete group'
+                    });
+                    if (confirmed) {
+                        await applyPreviewEdit(
+                            { type: 'bookmark-group.remove', target: source },
+                            `Deleted bookmark group ${source.groupName}.`
+                        );
+                    }
                 }
             } catch (error) {
-                setSaveStatus(`Could not edit Preview: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
+                setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
             }
         }
 
@@ -2135,8 +2266,11 @@
             if (source.kind === 'service') {
                 return findNestedYamlKeyLine('services', source.groupName, source.serviceName, source.groupIndex || 0, source.serviceIndex || 0);
             }
+            if (source.kind === 'bookmark-group') {
+                return findNthYamlListKeyLine('bookmarks', source.groupName, source.groupIndex || 0, { indent: 0 });
+            }
             if (source.kind === 'bookmark') {
-                return findNthYamlListKeyLine('bookmarks', source.name, source.index || 0, { indent: 0 });
+                return findNestedYamlKeyLine('bookmarks', source.groupName, source.bookmarkName, source.groupIndex || 0, source.bookmarkIndex || 0);
             }
             if (source.kind === 'widget') {
                 return source.isList
@@ -2225,10 +2359,7 @@
                 if (!entryName) {
                     return;
                 }
-                const entryValue = entry[entryName];
-                const details = Array.isArray(entryValue) ? entryValue[0] : entryValue;
-                const href = details && typeof details === 'object' ? details.href : null;
-                lines.push(href ? `${entryName}: ${href}` : entryName);
+                lines.push(entryName);
             });
             return lines;
         }
@@ -2316,6 +2447,24 @@
             </span>`;
         }
 
+        function getBookmarkGroupEditControls(source, position, groupCount) {
+            return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('bookmark-group.edit', source, 'Edit bookmark group', '&#9998;')}
+                ${getPreviewEditActionButton('bookmark-group.move-up', source, 'Move bookmark group up', '&uarr;', { disabled: position === 0 })}
+                ${getPreviewEditActionButton('bookmark-group.move-down', source, 'Move bookmark group down', '&darr;', { disabled: position === groupCount - 1 })}
+                ${getPreviewEditActionButton('bookmark-group.remove', source, 'Delete bookmark group', '&times;', { danger: true })}
+            </span>`;
+        }
+
+        function getBookmarkEditControls(source, position, bookmarkCount) {
+            return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('bookmark.edit', source, 'Edit bookmark', '&#9998;')}
+                ${getPreviewEditActionButton('bookmark.move-up', source, 'Move bookmark up', '&uarr;', { disabled: position === 0 })}
+                ${getPreviewEditActionButton('bookmark.move-down', source, 'Move bookmark down', '&darr;', { disabled: position === bookmarkCount - 1 })}
+                ${getPreviewEditActionButton('bookmark.remove', source, 'Delete bookmark', '&times;', { danger: true })}
+            </span>`;
+        }
+
         function updateVisualPreview() {
             const previewDiv = document.getElementById('visual-preview');
             const parsed = Object.fromEntries(
@@ -2326,8 +2475,8 @@
             if (parsed.services.error && previewEditToggleElement.checked) {
                 previewEditToggleElement.checked = false;
                 document.getElementById('preview-edit-label').textContent = 'Interactive editor off';
-                document.getElementById('preview-title-label').textContent = 'Preview';
-                document.getElementById('preview-title-icon').innerHTML = '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path><circle cx="12" cy="12" r="2.75"></circle>';
+                document.getElementById('preview-title-label').textContent = 'Dashboard';
+                document.getElementById('preview-title-icon').innerHTML = '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11M15 9v11"></path>';
                 previewEditToggleElement.setAttribute('aria-label', 'Enable Interactive editor');
                 document.getElementById('preview-manage-tabs-button').hidden = true;
                 document.getElementById('preview-option-types-button').hidden = true;
@@ -2336,7 +2485,7 @@
             const previewNotices = [];
             const addPreviewNotice = (message) => previewNotices.push(message);
             if (previewEditMode) {
-                addPreviewNotice('Preview editing is on. Changes update the YAML editor and remain pending until Save is clicked.');
+                addPreviewNotice('Dashboard editing is on. Changes update the YAML editor and remain pending until Save is clicked.');
             }
 
             const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
@@ -2347,7 +2496,7 @@
                 : widgetsData && typeof widgetsData === 'object'
                     ? Object.keys(widgetsData)
                     : [];
-            const previewWidgets = widgets.filter((name) => String(name).trim().toLowerCase() !== 'search');
+            const previewWidgets = widgets.filter((name) => !['search', 'resources'].includes(String(name).trim().toLowerCase()));
 
             const homepageTabInfo = getHomepageTabInfo(parsed.settings.data);
             const homepageTabs = homepageTabInfo.tabs;
@@ -2519,17 +2668,78 @@
             if (!parsed.bookmarks.error && bookmarks.length === 0) addPreviewNotice('No bookmarks configured.');
             if (!parsed.services.error && services.length === 0) addPreviewNotice('No service groups configured.');
 
-            const bookmarkOccurrenceCounter = new Map();
-            const bookmarksHtml = bookmarks.map((item) => {
-                const name = Object.keys(item || {})[0] || 'Bookmark';
-                const occurrenceIndex = takeOccurrence(bookmarkOccurrenceCounter, name);
-                const data = item[name] || {};
-                const bookmarkTooltip = getPreviewTooltipAttributes([
-                    'Jump to this bookmark in bookmarks.yaml',
-                    ...getBookmarkTooltipLines(name, data)
-                ], { focusable: false });
-                return `<a class="bookmark-chip preview-jump-target" href="${escapeHtml(getSafeLinkUrl(data.href))}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes({ tab: 'bookmarks', kind: 'bookmark', name, index: occurrenceIndex })} ${bookmarkTooltip}>${escapeHtml(name)}</a>`;
+            const bookmarkGroupOccurrenceCounter = new Map();
+            let bookmarkLinkCount = 0;
+            const bookmarkGroupsHtml = bookmarks.map((item, groupPosition) => {
+                const groupName = Object.keys(item || {})[0] || 'Bookmarks';
+                const groupIndex = takeOccurrence(bookmarkGroupOccurrenceCounter, groupName);
+                const groupData = item[groupName];
+                const entries = Array.isArray(groupData)
+                    ? groupData
+                    : groupData && typeof groupData === 'object'
+                        ? [{ [groupName]: groupData }]
+                        : [];
+                const groupSource = { tab: 'bookmarks', kind: 'bookmark-group', groupName, groupIndex };
+                const groupEditControls = previewEditMode
+                    ? getBookmarkGroupEditControls(groupSource, groupPosition, bookmarks.length)
+                    : '';
+                const groupTooltip = getPreviewTooltipAttributes([
+                    'Jump to this bookmark group in bookmarks.yaml',
+                    ...getBookmarkTooltipLines(groupName, groupData)
+                ]);
+                const bookmarkOccurrenceCounter = new Map();
+                const linksHtml = entries.map((entry, bookmarkPosition) => {
+                    const bookmarkName = Object.keys(entry || {})[0] || 'Bookmark';
+                    const bookmarkIndex = takeOccurrence(bookmarkOccurrenceCounter, bookmarkName);
+                    const rawData = entry && entry[bookmarkName];
+                    const data = Array.isArray(rawData) ? rawData[0] : rawData;
+                    const bookmarkData = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+                    const bookmarkSource = {
+                        tab: 'bookmarks',
+                        kind: 'bookmark',
+                        groupName,
+                        groupIndex,
+                        bookmarkName,
+                        bookmarkIndex
+                    };
+                    const bookmarkEditControls = previewEditMode
+                        ? getBookmarkEditControls(bookmarkSource, bookmarkPosition, entries.length)
+                        : '';
+                    const href = getSafeLinkUrl(bookmarkData.href);
+                    const abbr = String(bookmarkData.abbr || '').trim();
+                    const bookmarkTooltip = getPreviewTooltipAttributes([
+                        'Jump to this bookmark in bookmarks.yaml',
+                        `Group: ${groupName}`,
+                        `Bookmark: ${bookmarkName}`,
+                    ], { focusable: false });
+                    bookmarkLinkCount += 1;
+                    return `<div class="bookmark-card">
+                        <a class="bookmark-card-link preview-jump-target" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes(bookmarkSource)} ${bookmarkTooltip}>
+                            <span class="bookmark-card-mark" aria-hidden="true">${abbr ? escapeHtml(abbr.slice(0, 4)) : '&#8599;'}</span>
+                            <span class="bookmark-card-copy"><span class="bookmark-card-name">${escapeHtml(bookmarkName)}</span></span>
+                            <span class="bookmark-card-arrow" aria-hidden="true">&#8594;</span>
+                        </a>
+                        ${bookmarkEditControls}
+                    </div>`;
+                }).join('');
+                const addBookmarkButton = previewEditMode
+                    ? `<button type="button" class="preview-add-button preview-add-bookmark" data-preview-action="bookmark.add" ${getSourceAttributes(groupSource)}><span aria-hidden="true">+</span> Add bookmark</button>`
+                    : '';
+                return `<section class="bookmark-group"><div class="bookmark-group-heading"><span class="bookmark-group-title preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName)}</span><span class="bookmark-group-count">${entries.length} ${entries.length === 1 ? 'link' : 'links'}</span>${groupEditControls}</div>${linksHtml ? `<div class="bookmark-links">${linksHtml}</div>` : '<p class="bookmark-empty">No links configured.</p>'}${addBookmarkButton}</section>`;
             }).join('');
+            const addBookmarkGroupButton = previewEditMode
+                ? '<button type="button" class="preview-add-button preview-add-bookmark-group" data-preview-action="bookmark-group.add"><span aria-hidden="true">+</span> Add bookmark group</button>'
+                : '';
+            const bookmarksHtml = (bookmarkGroupsHtml || previewEditMode)
+                ? `<section class="dashboard-bookmarks">
+                    <div class="bookmark-panel-heading">
+                        <div class="bookmark-panel-title"><svg class="bookmark-panel-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V21l-6-3-6 3V4.5Z"></path></svg><span>Bookmarks</span></div>
+                        <span class="bookmark-panel-count">${bookmarks.length} ${bookmarks.length === 1 ? 'group' : 'groups'} &middot; ${bookmarkLinkCount} ${bookmarkLinkCount === 1 ? 'link' : 'links'}</span>
+                    </div>
+                    <div class="bookmark-groups">${bookmarkGroupsHtml || '<p class="bookmark-empty">No bookmark groups configured.</p>'}</div>
+                    ${addBookmarkGroupButton}
+                </section>`
+                : '';
 
             const widgetOccurrenceCounter = new Map();
             const widgetsHtml = previewWidgets.map((name) => {
@@ -2548,7 +2758,7 @@
             const previewTabsHtml = homepageTabs.length > 0
                 ? `<div class="preview-tab-navigation">
                     <span class="preview-tab-label">Tabs</span>
-                    <div class="preview-tab-strip" role="tablist" aria-label="Homepage preview pages">${homepageTabs.map((name) => {
+                    <div class="preview-tab-strip" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name) => {
                         const isActive = name === previewHomepageTab;
                         return `<button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`;
                     }).join('')}</div>
@@ -2563,8 +2773,8 @@
                     ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
                     ${previewTabsHtml}
                     ${widgetsHtml ? `<div class="dashboard-widgets">${widgetsHtml}</div>` : ''}
-                    ${bookmarksHtml ? `<div class="dashboard-bookmarks">${bookmarksHtml}</div>` : ''}
                     ${groupsHtml || addGroupButton ? `<div class="dashboard-grid">${groupsHtml}${addGroupButton}</div>` : ''}
+                    ${bookmarksHtml}
                 </div>`;
             setPreviewStatus(previewNotices);
 
@@ -2591,16 +2801,16 @@
             const refreshBtn = document.getElementById('manual-refresh-button');
             refreshBtn.disabled = true;
             refreshBtn.classList.add('is-refreshing');
-            refreshBtn.setAttribute('aria-label', 'Refreshing preview');
-            refreshBtn.querySelector('.preview-control-label').textContent = 'Refreshing preview';
+            refreshBtn.setAttribute('aria-label', 'Refreshing dashboard');
+            refreshBtn.querySelector('.preview-control-label').textContent = 'Refreshing dashboard';
 
             updatePreview({ force: true });
 
             setTimeout(() => {
                 refreshBtn.disabled = false;
                 refreshBtn.classList.remove('is-refreshing');
-                refreshBtn.setAttribute('aria-label', 'Refresh preview manually');
-                refreshBtn.querySelector('.preview-control-label').textContent = 'Refresh preview manually';
+                refreshBtn.setAttribute('aria-label', 'Refresh dashboard manually');
+                refreshBtn.querySelector('.preview-control-label').textContent = 'Refresh dashboard manually';
             }, 500);
         }
 
@@ -2757,8 +2967,8 @@
                 });
             return pendingAppSettingsSave;
         }
-        const settingsTabNames = ['appearance', 'yaml'];
-        let settingsActiveTab = 'appearance';
+        const settingsTabNames = ['misc', 'appearance', 'yaml'];
+        let settingsActiveTab = 'misc';
         let settingsModalPreviousFocus = null;
         function activateSettingsTab(tabName, { focus = false } = {}) {
             const activeTabName = settingsTabNames.includes(tabName) ? tabName : settingsTabNames[0];
@@ -2857,10 +3067,10 @@
         function updatePreviewEditMode() {
             const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
             previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
-            document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive Editor' : 'Preview';
+            document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive Editor' : 'Dashboard';
             document.getElementById('preview-title-icon').innerHTML = isEnabled
                 ? '<path d="M4 20l4.2-1L18.8 8.4a2 2 0 0 0-2.8-2.8L5.4 16.2 4 20zM14.6 7l2.8 2.8"></path>'
-                : '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path><circle cx="12" cy="12" r="2.75"></circle>';
+                : '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11M15 9v11"></path>';
             previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
             document.getElementById('preview-manage-tabs-button').hidden = !isEnabled;
             document.getElementById('preview-option-types-button').hidden = !isEnabled;

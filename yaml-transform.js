@@ -87,6 +87,75 @@ function getServicesSequence(document) {
   return document.contents;
 }
 
+function getBookmarksSequence(document) {
+  if (document.contents === null) {
+    document.contents = document.createNode([]);
+  }
+  if (!YAML.isSeq(document.contents)) {
+    throw new YamlTransformError('bookmarks.yaml must be a YAML list of bookmark groups');
+  }
+  return document.contents;
+}
+
+function getBookmarkGroup(document, target) {
+  return findNamedSequenceItem(
+    getBookmarksSequence(document),
+    String(target.groupName || ''),
+    Number(target.groupIndex) || 0,
+    'Bookmark group'
+  );
+}
+
+function getBookmarkEntries(group) {
+  if (!YAML.isSeq(group.pair.value)) {
+    throw new YamlTransformError(`Bookmark group "${scalarValue(group.pair.key)}" must be a YAML list of bookmarks`);
+  }
+  return group.pair.value;
+}
+
+function getBookmark(document, target) {
+  const group = getBookmarkGroup(document, target);
+  const bookmarks = getBookmarkEntries(group);
+  const bookmark = findNamedSequenceItem(
+    bookmarks,
+    String(target.bookmarkName || ''),
+    Number(target.bookmarkIndex) || 0,
+    'Bookmark'
+  );
+  return { group, bookmark, bookmarks };
+}
+
+function assertUniqueBookmarkGroupName(bookmarksSequence, name, excludedIndex = -1) {
+  const alreadyExists = bookmarksSequence.items.some((item, index) => (
+    index !== excludedIndex && scalarValue(getSinglePair(item, 'Bookmark group').key) === name
+  ));
+  if (alreadyExists) {
+    throw new YamlTransformError(`Bookmark group "${name}" already exists. Choose a different group name`);
+  }
+}
+
+function setBookmarkFields(document, bookmarkPair, fields) {
+  const normalizedFields = normalizeEditableFields(fields);
+  let fieldMap = null;
+  if (YAML.isMap(bookmarkPair.value)) {
+    fieldMap = bookmarkPair.value;
+  } else if (YAML.isSeq(bookmarkPair.value) && bookmarkPair.value.items.length > 0 && YAML.isMap(bookmarkPair.value.items[0])) {
+    fieldMap = bookmarkPair.value.items[0];
+  }
+
+  if (!fieldMap) {
+    fieldMap = document.createNode({});
+    bookmarkPair.value = document.createNode([fieldMap]);
+  }
+  setMapFields(document, fieldMap, normalizedFields);
+}
+
+function createBookmarkValue(document, fields) {
+  const fieldMap = document.createNode({});
+  setMapFields(document, fieldMap, normalizeEditableFields(fields || []));
+  return document.createNode([fieldMap]);
+}
+
 function getGroup(document, target) {
   return findNamedSequenceItem(
     getServicesSequence(document),
@@ -383,14 +452,28 @@ function transformPreviewYaml({ files, operation }) {
 
   const servicesText = files.services;
   const settingsText = typeof files.settings === 'string' ? files.settings : '';
+  const bookmarksText = typeof files.bookmarks === 'string' ? files.bookmarks : '';
   const servicesDocument = parseDocument(servicesText, 'services.yaml');
   const operationUsesLayout = ['group.edit', 'group.rename', 'group.remove', 'group.move', 'tab.add', 'tab.remove', 'tab.move'].includes(operation.type);
   const settingsDocument = operationUsesLayout ? parseDocument(settingsText, 'settings.yaml') : null;
+  const operationUsesBookmarks = [
+    'bookmark-group.add',
+    'bookmark-group.edit',
+    'bookmark-group.remove',
+    'bookmark-group.move',
+    'bookmark.add',
+    'bookmark.edit',
+    'bookmark.remove',
+    'bookmark.move'
+  ].includes(operation.type);
+  const bookmarksDocument = operationUsesBookmarks ? parseDocument(bookmarksText, 'bookmarks.yaml') : null;
   const servicesSequence = getServicesSequence(servicesDocument);
+  const bookmarksSequence = operationUsesBookmarks ? getBookmarksSequence(bookmarksDocument) : null;
   const target = operation.target || {};
   const values = operation.values || {};
   let servicesChanged = false;
   let settingsChanged = false;
+  let bookmarksChanged = false;
 
   switch (operation.type) {
     case 'service.add': {
@@ -526,6 +609,90 @@ function transformPreviewYaml({ files, operation }) {
       servicesChanged = true;
       break;
     }
+    case 'bookmark-group.add': {
+      const name = requireName(values.name, 'Bookmark group');
+      assertUniqueBookmarkGroupName(bookmarksSequence, name);
+      bookmarksSequence.items.push(bookmarksDocument.createNode({ [name]: [] }));
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark-group.edit': {
+      const group = getBookmarkGroup(bookmarksDocument, target);
+      const name = requireName(values.name, 'Bookmark group');
+      const oldName = scalarValue(group.pair.key);
+      if (name !== oldName) {
+        assertUniqueBookmarkGroupName(bookmarksSequence, name, group.index);
+        if (YAML.isScalar(group.pair.key)) group.pair.key.value = name;
+      }
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark-group.remove': {
+      const group = getBookmarkGroup(bookmarksDocument, target);
+      bookmarksSequence.items.splice(group.index, 1);
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark-group.move': {
+      const group = getBookmarkGroup(bookmarksDocument, target);
+      const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
+      const destination = group.index + offset;
+      if (!['up', 'down'].includes(operation.direction)) {
+        throw new YamlTransformError('Bookmark group move direction must be "up" or "down"');
+      }
+      if (destination < 0 || destination >= bookmarksSequence.items.length) {
+        throw new YamlTransformError(`Bookmark group "${target.groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
+      }
+      const [item] = bookmarksSequence.items.splice(group.index, 1);
+      bookmarksSequence.items.splice(destination, 0, item);
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark.add': {
+      const group = getBookmarkGroup(bookmarksDocument, target);
+      const bookmarks = getBookmarkEntries(group);
+      const name = requireName(values.name, 'Bookmark');
+      if (!Array.isArray(values.fields)) {
+        throw new YamlTransformError('Bookmark options must be a YAML list');
+      }
+      const bookmarkItem = bookmarksDocument.createNode({});
+      bookmarkItem.set(name, createBookmarkValue(bookmarksDocument, values.fields));
+      bookmarks.items.push(bookmarkItem);
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark.edit': {
+      const { bookmark } = getBookmark(bookmarksDocument, target);
+      const name = requireName(values.name, 'Bookmark');
+      if (!Array.isArray(values.fields)) {
+        throw new YamlTransformError('Bookmark options must be a YAML list');
+      }
+      if (YAML.isScalar(bookmark.pair.key)) bookmark.pair.key.value = name;
+      setBookmarkFields(bookmarksDocument, bookmark.pair, values.fields);
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark.remove': {
+      const { bookmark, bookmarks } = getBookmark(bookmarksDocument, target);
+      bookmarks.items.splice(bookmark.index, 1);
+      bookmarksChanged = true;
+      break;
+    }
+    case 'bookmark.move': {
+      const { bookmark, bookmarks } = getBookmark(bookmarksDocument, target);
+      const offset = operation.direction === 'up' ? -1 : operation.direction === 'down' ? 1 : 0;
+      const destination = bookmark.index + offset;
+      if (!['up', 'down'].includes(operation.direction)) {
+        throw new YamlTransformError('Bookmark move direction must be "up" or "down"');
+      }
+      if (destination < 0 || destination >= bookmarks.items.length) {
+        throw new YamlTransformError(`Bookmark "${target.bookmarkName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of its group and cannot be moved farther`);
+      }
+      const [item] = bookmarks.items.splice(bookmark.index, 1);
+      bookmarks.items.splice(destination, 0, item);
+      bookmarksChanged = true;
+      break;
+    }
     case 'tab.add': {
       const tabName = requireName(values.name, 'Tab');
       const groupName = requireName(values.groupName, 'Initial group');
@@ -566,8 +733,12 @@ function transformPreviewYaml({ files, operation }) {
     services: servicesChanged ? serializeDocument(servicesDocument, servicesText) : servicesText,
     settings: settingsChanged ? serializeDocument(settingsDocument, settingsText) : settingsText
   };
+  if (operationUsesBookmarks || Object.prototype.hasOwnProperty.call(files, 'bookmarks')) {
+    transformedFiles.bookmarks = bookmarksChanged ? serializeDocument(bookmarksDocument, bookmarksText) : bookmarksText;
+  }
   parseDocument(transformedFiles.services, 'services.yaml');
   if (settingsChanged) parseDocument(transformedFiles.settings, 'settings.yaml');
+  if (bookmarksChanged) parseDocument(transformedFiles.bookmarks, 'bookmarks.yaml');
   return { files: transformedFiles };
 }
 

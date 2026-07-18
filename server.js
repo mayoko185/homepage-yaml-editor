@@ -106,17 +106,17 @@ function createOptionTypeError(message) {
 }
 
 function normalizeOptionDefinitions(value) {
-  if (!Array.isArray(value)) throw createOptionTypeError('Preview option types must be provided as a JSON list');
+  if (!Array.isArray(value)) throw createOptionTypeError('Option types must be provided as a JSON list');
   const names = new Set();
   return value.map((definition) => {
     const name = String(definition && definition.name || '').trim();
     const type = String(definition && definition.type || '').trim();
     const appliesTo = String(definition && definition.appliesTo || 'both').trim();
-    if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each Preview option type needs a single-line name');
-    if (names.has(name)) throw createOptionTypeError(`Preview option type "${name}" is listed more than once. Remove the duplicate definition`);
+    if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each option type needs a single-line name');
+    if (names.has(name)) throw createOptionTypeError(`Option type "${name}" is listed more than once. Remove the duplicate definition`);
     names.add(name);
-    if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Preview option type "${name}" has unsupported value type "${type}". Choose text, textarea, boolean, tab, mapping, or select`);
-    if (!OPTION_APPLIES_TO.has(appliesTo)) throw createOptionTypeError(`Preview option type "${name}" has unsupported applicability "${appliesTo}". Choose service, group, or both`);
+    if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Option type "${name}" has unsupported value type "${type}". Choose text, textarea, boolean, tab, mapping, or select`);
+    if (!OPTION_APPLIES_TO.has(appliesTo)) throw createOptionTypeError(`Option type "${name}" has unsupported applicability "${appliesTo}". Choose service, group, or both`);
     const normalized = { name, type, appliesTo };
     if (type === 'select') {
       const values = Array.isArray(definition.values) ? definition.values : [];
@@ -632,7 +632,7 @@ app.put('/api/option-types', async (req, res) => {
     return res.json({ options: await saveOptionDefinitions(req.body && req.body.options) });
   } catch (error) {
     console.error('Could not save option type definitions:', error);
-    return res.status(error.statusCode || 500).json({ error: 'Could not save Preview option types', details: error.message });
+    return res.status(error.statusCode || 500).json({ error: 'Could not save option types', details: error.message });
   }
 });
 
@@ -678,7 +678,7 @@ app.post('/api/yaml/transform', (req, res) => {
     return res.json(transformPreviewYaml(req.body));
   } catch (error) {
     return res.status(error.statusCode || 500).json({
-      error: error.statusCode ? 'Could not apply Preview edit' : 'Preview edit failed unexpectedly',
+      error: error.statusCode ? 'Could not apply edit' : 'Edit failed unexpectedly',
       details: error.message
     });
   }
