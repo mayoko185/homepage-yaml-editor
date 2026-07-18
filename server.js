@@ -68,6 +68,7 @@ app.locals.startupFiles = {};
 function getDefaultAppSettings() {
   return {
     theme: DEFAULT_THEME,
+    customPageTitle: '',
     autoIndent: true,
     previewAutoRefresh: true,
     editorVisible: true,
@@ -222,6 +223,7 @@ function normalizeAppSettings(value) {
   const tabOrder = normalizeTabOrder(value.tabOrder);
   return {
     theme: value.theme === 'light' ? 'light' : value.theme === 'dark' ? 'dark' : defaults.theme,
+    customPageTitle: typeof value.customPageTitle === 'string' ? value.customPageTitle.trim() : defaults.customPageTitle,
     autoIndent: typeof value.autoIndent === 'boolean' ? value.autoIndent : defaults.autoIndent,
     previewAutoRefresh: typeof value.previewAutoRefresh === 'boolean'
       ? value.previewAutoRefresh : defaults.previewAutoRefresh,

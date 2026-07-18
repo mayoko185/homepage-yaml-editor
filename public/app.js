@@ -19,6 +19,7 @@
         });
         const sampleConfigs = Object.fromEntries(configTabNames.map((tabName) => [tabName, '']));
         const createNewTabGroupValue = '__create_new_service_group__';
+        const defaultPageTitle = 'Homepage YAML Editor';
 
         async function loadSampleConfigs() {
             const response = await fetch('/api/examples', { cache: 'no-store' });
@@ -2494,7 +2495,7 @@
                     : action.endsWith('.move-down')
                         ? ' preview-edit-move-down'
                         : '';
-            return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
+            return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}<span class="preview-control-label preview-edit-action-label" aria-hidden="true">${escapeHtml(label)}</span></button>`;
         }
 
         function getGroupEditControls(source, position, groupCount) {
@@ -2721,14 +2722,17 @@
                 const addServiceButton = previewEditMode
                     ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(serviceGroupSource)}><span aria-hidden="true">+</span> Add service</button>`
                     : '';
+                const serviceCardsGrid = cards || addServiceButton
+                    ? `<div class="dashboard-cards">${cards}${addServiceButton}</div>`
+                    : '';
                 const hasNestedGroups = Array.isArray(entries) && entries.some(isNestedServiceGroup);
                 if (hasNestedGroups) {
-                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root"${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${cards ? `<div class="dashboard-cards">${cards}</div>` : ''}<div class="dashboard-nested-groups" style="--preview-nested-columns: ${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div>${addServiceButton}</section>`;
+                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root"${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" style="--preview-nested-columns: ${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
                 } else {
                     if (!cards) {
                         addPreviewNotice(`No services configured in ${groupName || 'this group'}.`);
                     }
-                    groupsHtml += `<details class="dashboard-group"${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${cards ? `<div class="dashboard-cards">${cards}</div>` : ''}${addServiceButton}</details>`;
+                    groupsHtml += `<details class="dashboard-group"${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${serviceCardsGrid}</details>`;
                 }
             });
 
@@ -2775,16 +2779,17 @@
                         : '';
                     const href = getSafeLinkUrl(bookmarkData.href);
                     const abbr = String(bookmarkData.abbr || '').trim();
+                    const description = bookmarkData.description == null ? '' : String(bookmarkData.description).trim();
                     const bookmarkTooltip = getPreviewTooltipAttributes([
-                        'Jump to this bookmark in bookmarks.yaml',
-                        `Group: ${groupName}`,
+                        'Jump to this item in bookmarks.yaml',
                         `Bookmark: ${bookmarkName}`,
+                        ...getPreviewDetailLines(bookmarkData, ['description', 'href', 'icon', 'abbr']),
                     ], { focusable: false });
                     bookmarkLinkCount += 1;
                     return `<div class="bookmark-card">
                         <a class="bookmark-card-link preview-jump-target" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes(bookmarkSource)} ${bookmarkTooltip}>
                             <span class="bookmark-card-mark" aria-hidden="true">${abbr ? escapeHtml(abbr.slice(0, 4)) : '&#8599;'}</span>
-                            <span class="bookmark-card-copy"><span class="bookmark-card-name">${escapeHtml(bookmarkName)}</span></span>
+                            <span class="bookmark-card-copy"><span class="bookmark-card-name">${escapeHtml(bookmarkName)}</span>${description ? `<span class="dashboard-card-desc">${escapeHtml(description)}</span>` : ''}</span>
                             <span class="bookmark-card-arrow" aria-hidden="true">&#8594;</span>
                         </a>
                         ${bookmarkEditControls}
@@ -2908,6 +2913,7 @@
         let settingsTabOrderDraft = [...configTabNames];
         let savedAppSettings = {
             theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
+            customPageTitle: '',
             autoIndent: autoIndentToggle.checked,
             previewAutoRefresh: previewAutoRefreshToggle.checked,
             editorVisible: editorVisibilityToggle.checked,
@@ -2993,6 +2999,7 @@
         function applyPersistentAppSettings(settings) {
             savedAppSettings = {
                 theme: settings.theme === 'light' ? 'light' : 'dark',
+                customPageTitle: typeof settings.customPageTitle === 'string' ? settings.customPageTitle.trim() : '',
                 autoIndent: settings.autoIndent !== false,
                 previewAutoRefresh: settings.previewAutoRefresh !== false,
                 editorVisible: settings.editorVisible !== false,
@@ -3001,6 +3008,9 @@
                 visibleTabs: normalizeVisibleConfigTabs(settings.visibleTabs, normalizeConfigTabOrder(settings.tabOrder))
             };
             applyConfigTabNavigation();
+            const pageTitle = savedAppSettings.customPageTitle || defaultPageTitle;
+            document.title = pageTitle;
+            document.getElementById('app-title').textContent = pageTitle;
             applyTheme(savedAppSettings.theme !== 'light');
             autoIndentToggle.checked = savedAppSettings.autoIndent;
             previewAutoRefreshToggle.checked = savedAppSettings.previewAutoRefresh;
@@ -3079,6 +3089,7 @@
             settingsModalPreviousFocus = document.activeElement;
             const settings = getPersistentAppSettings();
             document.querySelector(`input[name="settings-theme"][value="${settings.theme}"]`).checked = true;
+            document.getElementById('settings-custom-page-title').value = settings.customPageTitle;
             document.getElementById('settings-auto-indent').checked = settings.autoIndent;
             document.getElementById('settings-preview-auto-refresh').checked = settings.previewAutoRefresh;
             document.getElementById('settings-editor-visible').checked = settings.editorVisible;
@@ -3105,6 +3116,7 @@
             const tabSettings = getSettingsTabDraftFromControls();
             applyPersistentAppSettings({
                 theme,
+                customPageTitle: document.getElementById('settings-custom-page-title').value,
                 autoIndent: document.getElementById('settings-auto-indent').checked,
                 previewAutoRefresh: document.getElementById('settings-preview-auto-refresh').checked,
                 editorVisible: document.getElementById('settings-editor-visible').checked,
@@ -3228,6 +3240,15 @@
             if (target.classList.contains('preview-tab-btn')) {
                 previewHomepageTab = target.getAttribute('data-preview-tab');
                 updatePreview();
+                return;
+            }
+            if (previewEditToggle.checked
+                && !previewEditToggle.disabled
+                && !target.classList.contains('yaml-error-card')) {
+                if (target.classList.contains('bookmark-card-link')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
                 return;
             }
             event.preventDefault();

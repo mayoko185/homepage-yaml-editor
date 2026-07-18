@@ -101,6 +101,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     const defaultAppSettings = await (await fetch(`${baseUrl}/api/app-settings`)).json();
     assert.deepEqual(defaultAppSettings.settings, {
       theme: 'light',
+      customPageTitle: '',
       autoIndent: true,
       previewAutoRefresh: true,
       editorVisible: true,
@@ -114,6 +115,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       body: JSON.stringify({
         settings: {
           theme: 'dark', autoIndent: false, previewAutoRefresh: false, editorVisible: false, interactiveEditor: true,
+          customPageTitle: '  My YAML Dashboard  ',
           visibleTabs: ['kubernetes', 'services'], tabOrder: ['kubernetes', 'services'], ignored: 'value'
         }
       })
@@ -121,6 +123,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(settingsSaveResponse.status, 200);
     assert.deepEqual((await settingsSaveResponse.json()).settings, {
       theme: 'dark',
+      customPageTitle: 'My YAML Dashboard',
       autoIndent: false,
       previewAutoRefresh: false,
       editorVisible: false,
@@ -130,6 +133,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     });
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'settings.json'), 'utf8')), {
       theme: 'dark',
+      customPageTitle: 'My YAML Dashboard',
       autoIndent: false,
       previewAutoRefresh: false,
       editorVisible: false,

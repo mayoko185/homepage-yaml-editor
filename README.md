@@ -26,7 +26,7 @@ Add, edit, reorder, and remove dashboard groups, services, and bookmarks from th
 - Renders groups, service cards, bookmarks, widgets, icons, layouts, and common Homepage options in the preview.
 - Includes an Interactive Editor for adding, editing, moving, reordering, and deleting supported dashboard items.
 - Keeps changes pending until Save, with undo support and a ZIP download for all loaded files.
-- Remembers theme, visible tabs, editor preferences, and custom option types.
+- Remembers theme, a custom page and browser-tab title, visible tabs, editor preferences, and custom option types.
 - Lets custom option types target any combination of services, service groups, and bookmarks.
 - Can be protected with an optional username and password.
 

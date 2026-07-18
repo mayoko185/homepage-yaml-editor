@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-        <link rel="stylesheet" href="styles.css?v=133">
+        <link rel="stylesheet" href="styles.css?v=143">
     <script src="runtime-config.js"></script>
     <script>
         if (window.APP_CONFIG && window.APP_CONFIG.defaultTheme === 'light') {
@@ -35,7 +35,7 @@
     </div>
     <div class="container">
         <header class="page-header">
-            <h1>Homepage YAML Editor</h1>
+            <h1 id="app-title">Homepage YAML Editor</h1>
             <div class="header-actions">
                 <a class="docs-link header-icon-control" href="https://gethomepage.dev/configs/" target="_blank" rel="noopener noreferrer" aria-label="Open Homepage configuration documentation">
                     <svg class="header-control-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -282,6 +282,11 @@
                                         <label class="settings-theme-option"><input type="radio" name="settings-theme" value="light"><span class="settings-theme-icon" aria-hidden="true">&#9788;</span><span>Light</span></label>
                                     </div>
                                 </fieldset>
+                                <label class="settings-text-field" for="settings-custom-page-title">
+                                    <span>Custom page title</span>
+                                    <input type="text" id="settings-custom-page-title" maxlength="200" placeholder="Homepage YAML Editor">
+                                    <small>Leave blank to use Homepage YAML Editor</small>
+                                </label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                             </div>
@@ -396,6 +401,6 @@
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
-    <script src="app.js?v=112"></script>
+    <script src="app.js?v=120"></script>
 </body>
 </html>
