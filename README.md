@@ -1,6 +1,8 @@
 # Homepage YAML Editor
 
-Homepage YAML Editor is a small browser-based editor for [Homepage](https://gethomepage.dev/) configuration files. Edit YAML with syntax highlighting, preview the dashboard as you work, or use the interactive editor to manage services and bookmarks without hand-editing every block.
+Homepage YAML Editor is a browser-based editor for [Homepage](https://gethomepage.dev/) configuration files. I find it a pain to edit yaml files especially long ones so I designed this to run side by side with homepage. 
+
+Disclaimer this project uses AI to write code and troubleshoot issues.
 
 ## Screenshots
 
