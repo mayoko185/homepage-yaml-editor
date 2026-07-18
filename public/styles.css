@@ -630,6 +630,32 @@
         .preview-section.homepage-preview {
             min-height: 360px;
         }
+        .app-footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            color: var(--text-color);
+            font-size: 12px;
+            opacity: 0.68;
+        }
+        .app-footer-link {
+            display: inline-flex;
+            align-items: center;
+            color: inherit;
+            text-decoration: none;
+        }
+        .github-logo {
+            width: 17px;
+            height: 17px;
+            fill: currentColor;
+        }
+        .app-footer-link:hover,
+        .app-footer-link:focus-visible {
+            color: var(--button-bg);
+            text-decoration: underline;
+        }
         .preview-header {
             display: flex;
             justify-content: space-between;
