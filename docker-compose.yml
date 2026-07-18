@@ -2,7 +2,7 @@ services:
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     ports:
-      - 127.0.0.1:3000:3000
+      - 3000:3000
     environment:
       - PUID=1000
       - PGID=1000
@@ -18,7 +18,7 @@ services:
   homepage-editor:
     image: docker.io/mayoko185/homepage-yaml-editor:latest
     ports:
-      - 127.0.0.1:8081:8081
+      - 8081:8081
     environment:
       - PUID=1000
       - PGID=1000

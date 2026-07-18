@@ -43,7 +43,7 @@ cd homepage-yaml-editor
 docker compose up -d
 ```
 
-Open Homepage at <http://localhost:3000> and the editor at <http://localhost:8081>.
+Open Homepage at `http://server-ip:3000` and the editor at `http://server-ip:8081` (or use `localhost` when browsing from the Docker host).
 
 Both containers mount the same `/opt/stacks/homepage/config` host directory. Homepage sees it at `/app/config`, while the editor sees it at `/hp_config`. Change both volume entries if your Homepage configuration is stored elsewhere, keeping the host-side path identical:
 
