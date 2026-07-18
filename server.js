@@ -46,7 +46,8 @@ const ALLOWED_CONFIG_FILES = new Set(
   CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`))
 );
 const OPTION_VALUE_TYPES = new Set(['text', 'textarea', 'boolean', 'tab', 'mapping', 'select']);
-const OPTION_APPLIES_TO = new Set(['service', 'group', 'both']);
+const OPTION_TARGETS = Object.freeze(['service', 'group', 'bookmark']);
+const OPTION_TARGET_SET = new Set(OPTION_TARGETS);
 const EXTRA_ALLOWED_CONFIG_DIRS = (process.env.ALLOWED_CONFIG_DIRS || '')
   .split(',')
   .map((dirPath) => dirPath.trim())
@@ -111,13 +112,30 @@ function normalizeOptionDefinitions(value) {
   return value.map((definition) => {
     const name = String(definition && definition.name || '').trim();
     const type = String(definition && definition.type || '').trim();
-    const appliesTo = String(definition && definition.appliesTo || 'both').trim();
+    const rawAppliesTo = definition && definition.appliesTo;
+    const appliesTo = Array.isArray(rawAppliesTo)
+      ? rawAppliesTo.map((target) => String(target).trim())
+      : String(rawAppliesTo || 'both').trim() === 'both'
+        ? ['service', 'group']
+        : [String(rawAppliesTo || '').trim()];
     if (!name || /[\r\n]/.test(name)) throw createOptionTypeError('Each option type needs a single-line name');
     if (names.has(name)) throw createOptionTypeError(`Option type "${name}" is listed more than once. Remove the duplicate definition`);
     names.add(name);
     if (!OPTION_VALUE_TYPES.has(type)) throw createOptionTypeError(`Option type "${name}" has unsupported value type "${type}". Choose text, textarea, boolean, tab, mapping, or select`);
-    if (!OPTION_APPLIES_TO.has(appliesTo)) throw createOptionTypeError(`Option type "${name}" has unsupported applicability "${appliesTo}". Choose service, group, or both`);
-    const normalized = { name, type, appliesTo };
+    if (appliesTo.length === 0 || appliesTo.some((target) => !OPTION_TARGET_SET.has(target))) {
+      throw createOptionTypeError(`Option type "${name}" must apply to at least one supported target: service, group, or bookmark`);
+    }
+    const normalizedAppliesTo = OPTION_TARGETS.filter((target) => appliesTo.includes(target));
+    const normalized = { name, type, appliesTo: normalizedAppliesTo };
+    if (definition && Object.prototype.hasOwnProperty.call(definition, 'defaultForAdd')) {
+      const defaultForAdd = Array.isArray(definition.defaultForAdd)
+        ? definition.defaultForAdd.map((target) => String(target).trim())
+        : [];
+      if (defaultForAdd.some((target) => !normalizedAppliesTo.includes(target))) {
+        throw createOptionTypeError(`Option type "${name}" can only be added by default where it applies`);
+      }
+      normalized.defaultForAdd = OPTION_TARGETS.filter((target) => defaultForAdd.includes(target));
+    }
     if (type === 'select') {
       const values = Array.isArray(definition.values) ? definition.values : [];
       normalized.values = Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)));
@@ -154,24 +172,31 @@ async function saveOptionDefinitions(definitions) {
 async function ensureOptionDefinitions() {
   try {
     const storedDefinitions = JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8'));
-    normalizeOptionDefinitions(storedDefinitions);
+    const normalizedStoredDefinitions = normalizeOptionDefinitions(storedDefinitions);
     const defaultDefinitions = getDefaultOptionDefinitions();
     const defaultByName = new Map(defaultDefinitions.map((definition) => [definition.name, definition]));
-    const storedNames = new Set(storedDefinitions.map((definition) => String(definition && definition.name || '').trim()));
-    const mergedLocalDefinitions = storedDefinitions.map((definition) => {
-      const defaults = defaultByName.get(String(definition && definition.name || '').trim());
+    const storedNames = new Set(normalizedStoredDefinitions.map((definition) => definition.name));
+    const mergedLocalDefinitions = normalizedStoredDefinitions.map((definition, index) => {
+      const defaults = defaultByName.get(definition.name);
       if (!definition || typeof definition !== 'object' || Array.isArray(definition)) return definition;
       const merged = { ...definition };
-      if (!defaults) {
-        if (!Object.prototype.hasOwnProperty.call(merged, 'appliesTo')) merged.appliesTo = 'both';
-        return merged;
-      }
+      if (!defaults) return merged;
+      const storedDefinition = storedDefinitions[index];
       Object.entries(defaults).forEach(([key, value]) => {
         if ((key === 'values' || key === 'rows') && merged.type !== defaults.type) return;
-        if (!Object.prototype.hasOwnProperty.call(merged, key)) {
+        if (!storedDefinition || !Object.prototype.hasOwnProperty.call(storedDefinition, key)) {
           merged[key] = Array.isArray(value) ? [...value] : value;
         }
       });
+      const storedAppliesTo = storedDefinition && storedDefinition.appliesTo;
+      const oldDefaultApplicability = {
+        href: 'service',
+        icon: 'both',
+        target: 'service'
+      }[definition.name];
+      if (oldDefaultApplicability && storedAppliesTo === oldDefaultApplicability) {
+        merged.appliesTo = [...defaults.appliesTo];
+      }
       return merged;
     });
     const missingDefaults = defaultDefinitions.filter((definition) => !storedNames.has(definition.name));

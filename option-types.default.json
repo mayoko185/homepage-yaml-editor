@@ -2,113 +2,122 @@
   {
     "name": "description",
     "type": "textarea",
-    "appliesTo": "service",
+    "appliesTo": ["service"],
+    "defaultForAdd": ["service"],
     "rows": 4
   },
   {
     "name": "widget",
     "type": "mapping",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "tab",
     "type": "tab",
-    "appliesTo": "group"
+    "appliesTo": ["group"]
   },
   {
     "name": "target",
     "type": "select",
-    "appliesTo": "service",
+    "appliesTo": ["service", "bookmark"],
     "values": ["_blank", "_self", "_top"]
   },
   {
     "name": "header",
     "type": "boolean",
-    "appliesTo": "group"
+    "appliesTo": ["group"]
   },
   {
     "name": "showStats",
     "type": "boolean",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "showLabel",
     "type": "boolean",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "showStatus",
     "type": "boolean",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "showTime",
     "type": "boolean",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "showName",
     "type": "boolean",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "hideVersion",
     "type": "boolean",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "useEqualHeights",
     "type": "boolean",
-    "appliesTo": "group"
+    "appliesTo": ["group"]
   },
   {
     "name": "icon",
     "type": "text",
-    "appliesTo": "both"
+    "appliesTo": ["service", "group", "bookmark"],
+    "defaultForAdd": ["service"]
   },
   {
     "name": "href",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service", "bookmark"],
+    "defaultForAdd": ["service", "bookmark"]
+  },
+  {
+    "name": "abbr",
+    "type": "text",
+    "appliesTo": ["bookmark"],
+    "defaultForAdd": ["bookmark"]
   },
   {
     "name": "siteMonitor",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "statusStyle",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "style",
     "type": "text",
-    "appliesTo": "group"
+    "appliesTo": ["group"]
   },
   {
     "name": "columns",
     "type": "text",
-    "appliesTo": "group"
+    "appliesTo": ["group"]
   },
   {
     "name": "type",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "fields",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "url",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   },
   {
     "name": "key",
     "type": "text",
-    "appliesTo": "service"
+    "appliesTo": ["service"]
   }
 ]

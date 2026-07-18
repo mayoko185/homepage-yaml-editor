@@ -271,10 +271,26 @@ test('rejects duplicate service group names before creating invalid YAML', () =>
 
 test('manages Homepage layout tabs and can create an initial service group', () => {
   let files = transform({
+    type: 'tab.rename',
+    target: { name: 'Other' },
+    values: { name: 'Operations' }
+  });
+  let parsedSettings = YAML.parse(files.settings);
+  assert.equal(parsedSettings.layout['First Group'].tab, 'Main');
+  assert.equal(parsedSettings.layout['Second Group'].tab, 'Operations');
+  assert.match(files.settings, /keep this settings comment/);
+
+  assert.throws(() => transform({
+    type: 'tab.rename',
+    target: { name: 'Main' },
+    values: { name: 'Other' }
+  }), /Preview tab "Other" already exists/);
+
+  files = transform({
     type: 'tab.add',
     values: { name: 'Archive', groupName: 'Second Group' }
   });
-  let parsedSettings = YAML.parse(files.settings);
+  parsedSettings = YAML.parse(files.settings);
   assert.equal(files.services, services);
   assert.equal(parsedSettings.layout['Second Group'].tab, 'Archive');
   assert.match(files.settings, /keep this settings comment/);

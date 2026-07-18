@@ -112,7 +112,11 @@
         body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 20px 20px 8px;
+            min-height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
             background-color: var(--bg-color);
             color: var(--text-color);
             background-image: radial-gradient(ellipse 75% 52% at 18% -10%, color-mix(in srgb, var(--button-bg) 16%, transparent), transparent),
@@ -121,11 +125,14 @@
         }
         .container {
             max-width: 1200px;
+            width: 100%;
+            flex: 1 0 auto;
+            box-sizing: border-box;
             margin: 0 auto;
             background-color: var(--container-bg);
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            padding: 18px 24px 24px;
+            padding: 18px 24px 8px;
         }
         .preview-container {
             background-color: var(--preview-bg);
@@ -391,7 +398,7 @@
         }
         .toolbar-icon-control:hover > .toolbar-button-label,
         .toolbar-button.toolbar-icon-control:focus-visible > .toolbar-button-label,
-        .toolbar-toggle.toolbar-icon-control:focus-within > .toolbar-button-label {
+        .toolbar-toggle.toolbar-icon-control:has(input:focus-visible) > .toolbar-button-label {
             overflow: visible;
             clip: auto;
             clip-path: none;
@@ -405,7 +412,7 @@
         }
         .toolbar-file-actions .toolbar-icon-control:hover > .toolbar-button-label,
         .toolbar-file-actions .toolbar-button.toolbar-icon-control:focus-visible > .toolbar-button-label,
-        .toolbar-file-actions .toolbar-toggle.toolbar-icon-control:focus-within > .toolbar-button-label {
+        .toolbar-file-actions .toolbar-toggle.toolbar-icon-control:has(input:focus-visible) > .toolbar-button-label {
             transform: translateY(0);
         }
         .editor-wrapper {
@@ -634,11 +641,18 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 100%;
+            max-width: 1200px;
+            box-sizing: border-box;
             gap: 8px;
-            margin-top: 16px;
+            margin-top: auto;
+            margin-right: auto;
+            margin-left: auto;
+            padding: 6px 24px 0;
             color: var(--text-color);
             font-size: 12px;
             opacity: 0.68;
+            text-align: center;
         }
         .app-footer-link {
             display: inline-flex;
@@ -823,7 +837,7 @@
         .toolbar-button.toolbar-icon-control:hover > .preview-control-label,
         .toolbar-button.toolbar-icon-control:focus-visible > .preview-control-label,
         .preview-refresh-toggle:hover > .preview-control-label,
-        .preview-refresh-toggle:focus-within > .preview-control-label {
+        .preview-refresh-toggle:has(input:focus-visible) > .preview-control-label {
             overflow: visible;
             clip: auto;
             clip-path: none;
@@ -2255,6 +2269,51 @@
             padding: 8px 9px;
             font-size: 0.88rem;
         }
+        .option-applies-to {
+            display: inline-flex;
+            min-width: 0;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            gap: 5px;
+        }
+        .option-applies-to-choice {
+            position: relative;
+            display: inline-flex;
+            flex: 1 1 0;
+            min-width: 30px;
+            cursor: pointer;
+        }
+        .option-applies-to-choice input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .option-applies-to-choice span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 32px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--config-item-bg);
+            color: var(--text-color);
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .option-applies-to-choice input:checked + span {
+            border-color: var(--button-bg);
+            background: var(--button-bg);
+            color: var(--tab-active-text);
+        }
+        .option-applies-to-choice input:focus-visible + span {
+            outline: 2px solid var(--button-bg);
+            outline-offset: 2px;
+        }
         .option-types-extra-placeholder {
             min-width: 0;
             min-height: 34px;
@@ -2275,7 +2334,7 @@
             }
             .option-types-row [data-option-type-name],
             .option-types-row [data-option-value-type],
-            .option-types-row [data-option-applies-to],
+            .option-types-row .option-applies-to,
             .option-types-row [data-option-select-values],
             .option-types-row [data-option-textarea-rows],
             .option-types-row .option-types-extra-placeholder,
@@ -2318,6 +2377,20 @@
             overflow-wrap: break-word;
             word-break: normal;
             font-weight: 600;
+        }
+        .preview-tab-manager-name-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 100%;
+            margin: 0;
+            padding: 6px 8px;
+            box-sizing: border-box;
+            font: inherit;
+            font-weight: 600;
+        }
+        .preview-tab-manager-name-input:focus-visible {
+            outline: 2px solid var(--button-bg);
+            outline-offset: 1px;
         }
         .preview-tab-manager-count {
             flex: 0 0 auto;

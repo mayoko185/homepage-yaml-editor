@@ -408,6 +408,33 @@ function removeLayoutTab(settingsDocument, tabName) {
   }
 }
 
+function renameLayoutTab(settingsDocument, oldTabName, newTabName) {
+  const layoutMap = getLayoutMap(settingsDocument);
+  if (!layoutMap) {
+    throw new YamlTransformError(`Preview tab "${oldTabName}" was not found. Check its name and try again`);
+  }
+  const tabs = getLayoutTabs(layoutMap);
+  if (!tabs.includes(oldTabName)) {
+    throw new YamlTransformError(`Preview tab "${oldTabName}" was not found. Check its name and try again`);
+  }
+  if (tabs.includes(newTabName) && newTabName !== oldTabName) {
+    throw new YamlTransformError(`Preview tab "${newTabName}" already exists. Choose a different tab name`);
+  }
+
+  let changed = false;
+  for (const pair of layoutMap.items) {
+    if (!YAML.isMap(pair.value) || getLayoutPairTab(pair) !== oldTabName) {
+      continue;
+    }
+    const tabPair = pair.value.items.find((item) => scalarValue(item.key) === 'tab');
+    setScalarPairValue(settingsDocument, tabPair, newTabName);
+    changed = true;
+  }
+  if (!changed) {
+    throw new YamlTransformError(`Preview tab "${oldTabName}" was not found. Check its name and try again`);
+  }
+}
+
 function moveLayoutTab(settingsDocument, tabName, direction) {
   const layoutMap = getLayoutMap(settingsDocument);
   if (!layoutMap) {
@@ -454,7 +481,7 @@ function transformPreviewYaml({ files, operation }) {
   const settingsText = typeof files.settings === 'string' ? files.settings : '';
   const bookmarksText = typeof files.bookmarks === 'string' ? files.bookmarks : '';
   const servicesDocument = parseDocument(servicesText, 'services.yaml');
-  const operationUsesLayout = ['group.edit', 'group.rename', 'group.remove', 'group.move', 'tab.add', 'tab.remove', 'tab.move'].includes(operation.type);
+  const operationUsesLayout = ['group.edit', 'group.rename', 'group.remove', 'group.move', 'tab.add', 'tab.remove', 'tab.rename', 'tab.move'].includes(operation.type);
   const settingsDocument = operationUsesLayout ? parseDocument(settingsText, 'settings.yaml') : null;
   const operationUsesBookmarks = [
     'bookmark-group.add',
@@ -716,6 +743,13 @@ function transformPreviewYaml({ files, operation }) {
     case 'tab.remove': {
       const tabName = requireName(target.name, 'Tab');
       removeLayoutTab(settingsDocument, tabName);
+      settingsChanged = true;
+      break;
+    }
+    case 'tab.rename': {
+      const oldTabName = requireName(target.name, 'Tab');
+      const newTabName = requireName(values.name, 'Tab');
+      renameLayoutTab(settingsDocument, oldTabName, newTabName);
       settingsChanged = true;
       break;
     }

@@ -85,8 +85,8 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(startup.files['services.yaml'], yamlContent);
     const mergedOptionTypesOnDisk = JSON.parse(await fs.readFile(path.join(appDataDir, 'option-types.json'), 'utf8'));
     assert.deepEqual(mergedOptionTypesOnDisk.slice(0, 2), [
-      { name: 'description', type: 'text', appliesTo: 'service' },
-      { name: 'localOnly', type: 'boolean', appliesTo: 'both' }
+      { name: 'description', type: 'text', appliesTo: ['service'], defaultForAdd: ['service'] },
+      { name: 'localOnly', type: 'boolean', appliesTo: ['service', 'group'] }
     ]);
 
     const examplesResponse = await fetch(`${baseUrl}/api/examples`);
@@ -142,41 +142,50 @@ test('serves optimized assets and supports the active configuration APIs', async
     const optionTypes = await optionTypesResponse.json();
     assert.equal(optionTypesResponse.status, 200);
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'description'), {
-      name: 'description', type: 'text', appliesTo: 'service'
+      name: 'description', type: 'text', appliesTo: ['service'], defaultForAdd: ['service']
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'localOnly'), {
-      name: 'localOnly', type: 'boolean', appliesTo: 'both'
+      name: 'localOnly', type: 'boolean', appliesTo: ['service', 'group']
     });
     assert.deepEqual(optionTypes.options.find((option) => option.name === 'target'), {
-      name: 'target', type: 'select', appliesTo: 'service', values: ['_blank', '_self', '_top']
+      name: 'target', type: 'select', appliesTo: ['service', 'bookmark'], values: ['_blank', '_self', '_top']
+    });
+    assert.deepEqual(optionTypes.options.find((option) => option.name === 'href'), {
+      name: 'href', type: 'text', appliesTo: ['service', 'bookmark'], defaultForAdd: ['service', 'bookmark']
+    });
+    assert.deepEqual(optionTypes.options.find((option) => option.name === 'abbr'), {
+      name: 'abbr', type: 'text', appliesTo: ['bookmark'], defaultForAdd: ['bookmark']
+    });
+    assert.deepEqual(optionTypes.options.find((option) => option.name === 'icon'), {
+      name: 'icon', type: 'text', appliesTo: ['service', 'group', 'bookmark'], defaultForAdd: ['service']
     });
     const optionTypesSaveResponse = await fetch(`${baseUrl}/api/option-types`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ options: [
-        { name: 'customText', type: 'text', appliesTo: 'service' },
-        { name: 'customFlag', type: 'boolean', appliesTo: 'group' }
+        { name: 'customText', type: 'text', appliesTo: ['service', 'bookmark'] },
+        { name: 'customFlag', type: 'boolean', appliesTo: ['group'] }
       ] })
     });
     assert.equal(optionTypesSaveResponse.status, 200);
     assert.deepEqual((await optionTypesSaveResponse.json()).options, [
-      { name: 'customText', type: 'text', appliesTo: 'service' },
-      { name: 'customFlag', type: 'boolean', appliesTo: 'group' }
+      { name: 'customText', type: 'text', appliesTo: ['service', 'bookmark'] },
+      { name: 'customFlag', type: 'boolean', appliesTo: ['group'] }
     ]);
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'option-types.json'), 'utf8')), [
-      { name: 'customText', type: 'text', appliesTo: 'service' },
-      { name: 'customFlag', type: 'boolean', appliesTo: 'group' }
+      { name: 'customText', type: 'text', appliesTo: ['service', 'bookmark'] },
+      { name: 'customFlag', type: 'boolean', appliesTo: ['group'] }
     ]);
     const invalidApplicabilityResponse = await fetch(`${baseUrl}/api/option-types`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ options: [{ name: 'invalid', type: 'text', appliesTo: 'bookmark' }] })
+      body: JSON.stringify({ options: [{ name: 'invalid', type: 'text', appliesTo: ['bookmark', 'widget'] }] })
     });
     assert.equal(invalidApplicabilityResponse.status, 400);
-    assert.match((await invalidApplicabilityResponse.json()).details, /service, group, or both/);
+    assert.match((await invalidApplicabilityResponse.json()).details, /service, group, or bookmark/);
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'option-types.json'), 'utf8')), [
-      { name: 'customText', type: 'text', appliesTo: 'service' },
-      { name: 'customFlag', type: 'boolean', appliesTo: 'group' }
+      { name: 'customText', type: 'text', appliesTo: ['service', 'bookmark'] },
+      { name: 'customFlag', type: 'boolean', appliesTo: ['group'] }
     ]);
 
     const removedSaveResponse = await fetch(`${baseUrl}/api/config/save`, {
