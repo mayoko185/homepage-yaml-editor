@@ -14,6 +14,7 @@ COPY server.js ./
 COPY auth-state.js ./
 COPY yaml-transform.js ./
 COPY option-types.default.json ./
+COPY app-settings.default.json ./
 COPY public ./public
 COPY examples ./examples
 COPY --chmod=755 start.sh ./start.sh

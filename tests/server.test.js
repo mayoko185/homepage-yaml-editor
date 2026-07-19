@@ -39,6 +39,29 @@ test('Docker image copies every runtime server module', async () => {
   assert.match(dockerfile, /^COPY auth-state\.js \.\/$/m);
   assert.match(dockerfile, /^COPY yaml-transform\.js \.\/$/m);
   assert.match(dockerfile, /^COPY option-types\.default\.json \.\/$/m);
+  assert.match(dockerfile, /^COPY app-settings\.default\.json \.\/$/m);
+});
+
+test('app-settings.default.json ships well-formed editor setting defaults', async () => {
+  const defaults = JSON.parse(await fs.readFile(path.resolve(__dirname, '..', 'app-settings.default.json'), 'utf8'));
+  assert.equal(typeof defaults, 'object');
+  assert.equal(Array.isArray(defaults), false);
+  for (const key of ['customPageTitle', 'liveHomepageUrl']) {
+    assert.equal(typeof defaults[key], 'string', `app-settings.default.json "${key}" must be a string`);
+  }
+  for (const key of ['autoIndent', 'previewAutoRefresh', 'editorVisible', 'interactiveEditor']) {
+    assert.equal(typeof defaults[key], 'boolean', `app-settings.default.json "${key}" must be a boolean`);
+  }
+  assert.ok(['light', 'dark'].includes(defaults.theme), 'app-settings.default.json "theme" must be "light" or "dark"');
+  for (const key of ['visibleTabs', 'tabOrder']) {
+    assert.ok(Array.isArray(defaults[key]), `app-settings.default.json "${key}" must be an array`);
+    defaults[key].forEach((tab) => {
+      assert.equal(typeof tab, 'string', `app-settings.default.json "${key}" entries must be strings`);
+    });
+  }
+  const supportedTabs = ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'];
+  assert.deepEqual(defaults.tabOrder.slice().sort(), [...supportedTabs].sort(), 'app-settings.default.json "tabOrder" must list every supported tab');
+  assert.deepEqual(defaults.visibleTabs.slice().sort(), [...supportedTabs].sort(), 'app-settings.default.json "visibleTabs" must list every supported tab');
 });
 
 test('footer version in public/index.html matches package.json', async () => {

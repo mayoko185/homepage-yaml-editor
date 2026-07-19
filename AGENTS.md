@@ -22,6 +22,8 @@ The server reads and writes configuration files from explicitly allowed server-s
 
 - `server.js`: Express server, configuration-directory validation, YAML validation, and file APIs.
 - `yaml-transform.js`: In-memory Preview edit operations for service and Settings YAML documents.
+- `option-types.default.json`: Bundled JSON defaults for Preview option types, loaded by `server.js`.
+- `app-settings.default.json`: Bundled JSON defaults for editor settings (theme, page title, tab order, auto-indent, etc.), loaded by `server.js`. `DEFAULT_THEME` still overrides the bundled `theme` default.
 - `public/index.html`: Page markup and external asset loading.
 - `public/app.js`: Editor state, save/load behavior, ZIP generation, preview rendering, and preview-to-source navigation.
 - `public/styles.css`: Application and CodeMirror styling.

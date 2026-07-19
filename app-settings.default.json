@@ -1,0 +1,11 @@
+{
+  "theme": "dark",
+  "customPageTitle": "",
+  "liveHomepageUrl": "",
+  "autoIndent": true,
+  "previewAutoRefresh": true,
+  "editorVisible": true,
+  "interactiveEditor": false,
+  "visibleTabs": ["services", "settings", "bookmarks", "widgets", "docker", "proxmox", "kubernetes"],
+  "tabOrder": ["services", "settings", "bookmarks", "widgets", "docker", "proxmox", "kubernetes"]
+}

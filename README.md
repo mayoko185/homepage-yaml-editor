@@ -118,13 +118,15 @@ The development server listens on <http://localhost:8081>. Set `DATA_DIR`, `AUTO
 | `AUTOLOAD_DIR` | unset | Directory to load automatically at startup. |
 | `ALLOWED_CONFIG_DIRS` | unset | Comma-separated additional directories allowed for loading and saving. |
 | `APP_DATA_DIR` | `/app/data` | Persistent editor settings and option definitions. |
-| `DEFAULT_THEME` | `dark` | Initial theme; use `light` for the light theme. |
+| `DEFAULT_THEME` | `dark` | Initial theme; use `light` for the light theme. Overrides the `theme` default in `app-settings.default.json` when set. |
 | `REQUIRE_LOGIN_USER` | unset | Optional login username. Must be paired with `REQUIRE_LOGIN_PASSWORD`. |
 | `REQUIRE_LOGIN_PASSWORD` | unset | Optional login password. |
 | `TRUST_PROXY` | `false` | Set to `true` only behind a trusted reverse proxy so secure requests and client addresses are detected correctly. |
 | `PUID` / `PGID` | `1000` | Container user and group IDs used by the startup script. |
 
 To enable login in Compose, uncomment and change both `REQUIRE_LOGIN_USER` and `REQUIRE_LOGIN_PASSWORD`.
+
+The bundled `app-settings.default.json` seeds the editor defaults (theme, page title, auto-indent, tab visibility and order, etc.) shipped with the image. Edit that JSON file to change the defaults without touching server code; when `DEFAULT_THEME` is set it still overrides the bundled `theme` default. Runtime preferences chosen in the Settings panel continue to be persisted in `settings.json` under `APP_DATA_DIR`.
 
 Login credentials sent over plain HTTP are not encrypted. Use HTTPS through a trusted reverse proxy for remote access, enable `TRUST_PROXY=true` only when direct access to the application port is blocked, and keep the editor off untrusted networks when login is disabled.
 

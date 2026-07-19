@@ -7,6 +7,7 @@ const YAML = require('yaml');
 const { formatYamlParseError, transformPreviewYaml } = require('./yaml-transform');
 const { pruneExpiredAuthState, setBoundedMapEntry } = require('./auth-state');
 const defaultOptionDefinitions = require('./option-types.default.json');
+const defaultAppSettingsTemplate = require('./app-settings.default.json');
 
 const app = express();
 const PORT = process.env.PORT || 8081;
@@ -18,9 +19,10 @@ const OPTION_TYPES_PATH = path.join(APP_DATA_DIR, 'option-types.json');
 const DEFAULT_DATA_DIR = '/hp_config';
 const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
 const AUTOLOAD_DIR = process.env.AUTOLOAD_DIR;
-const DEFAULT_THEME = String(process.env.DEFAULT_THEME || 'dark').trim().toLowerCase() === 'light'
-  ? 'light'
-  : 'dark';
+const ENV_DEFAULT_THEME = process.env.DEFAULT_THEME ? String(process.env.DEFAULT_THEME).trim().toLowerCase() : '';
+const DEFAULT_THEME = ENV_DEFAULT_THEME
+  ? (ENV_DEFAULT_THEME === 'light' ? 'light' : 'dark')
+  : (defaultAppSettingsTemplate.theme === 'light' ? 'light' : 'dark');
 const LOGIN_USER = process.env.REQUIRE_LOGIN_USER || '';
 const LOGIN_PASSWORD = process.env.REQUIRE_LOGIN_PASSWORD || '';
 const LOGIN_ENABLED = Boolean(LOGIN_USER && LOGIN_PASSWORD);
@@ -76,16 +78,17 @@ const authCleanupTimer = setInterval(pruneAuthenticationState, AUTH_CLEANUP_INTE
 authCleanupTimer.unref();
 
 function getDefaultAppSettings() {
+  const template = defaultAppSettingsTemplate;
   return {
     theme: DEFAULT_THEME,
-    customPageTitle: '',
-    liveHomepageUrl: '',
-    autoIndent: true,
-    previewAutoRefresh: true,
-    editorVisible: true,
-    interactiveEditor: false,
-    visibleTabs: [...DEFAULT_CONFIG_TAB_ORDER],
-    tabOrder: [...DEFAULT_CONFIG_TAB_ORDER]
+    customPageTitle: template.customPageTitle,
+    liveHomepageUrl: template.liveHomepageUrl,
+    autoIndent: template.autoIndent,
+    previewAutoRefresh: template.previewAutoRefresh,
+    editorVisible: template.editorVisible,
+    interactiveEditor: template.interactiveEditor,
+    visibleTabs: Array.isArray(template.visibleTabs) ? [...template.visibleTabs] : [...DEFAULT_CONFIG_TAB_ORDER],
+    tabOrder: Array.isArray(template.tabOrder) ? [...template.tabOrder] : [...DEFAULT_CONFIG_TAB_ORDER]
   };
 }
 
@@ -297,7 +300,7 @@ async function loadAppSettings() {
     if (error.code !== 'ENOENT') {
       console.warn('Could not read persistent app settings:', error.message);
     }
-    return getDefaultAppSettings();
+    return normalizeAppSettings(getDefaultAppSettings());
   }
 }
 
