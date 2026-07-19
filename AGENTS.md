@@ -53,6 +53,7 @@ node --check public/app.js
 
 ## Implementation Guidelines
 
+- **CRITICAL ROLE**: Act as an equal, critical programming partner. If an instruction or request is ambiguous, flawed, or violates the architectural principles of this Express app, do not write or apply code immediately. Explicitly challenge the assumption, surface the design flaws, and propose a clean alternative architecture first.
 - Preserve raw YAML text when loading and saving so comments and formatting are not lost.
 - Validate YAML before writing any configuration file.
 - Only allow the supported configuration filenames and directories approved by `DATA_DIR`, `AUTOLOAD_DIR`, `ALLOWED_CONFIG_DIRS`, or `/hp_config`.
