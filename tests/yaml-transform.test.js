@@ -507,3 +507,351 @@ test('rejects invalid YAML and invalid movement', () => {
     direction: 'up'
   }), /cannot be moved/);
 });
+
+const nestedServices = `# nested services comment
+- Top Group:
+    - Direct Service:
+        href: https://direct.example
+    - Inner Group:
+        - Inner Service A:
+            href: https://a.example
+        - Inner Service B:
+            href: https://b.example
+    - After Nested:
+        href: https://after.example
+`;
+
+const nestedSettings = `title: Nested
+layout:
+  Top Group:
+    tab: Main
+  Inner Group:
+    icon: inner.png
+    columns: 2
+`;
+
+const nestedPath = [{ name: 'Inner Group', index: 0 }];
+
+test('adds, edits, moves and removes services inside nested groups', () => {
+  let files = transform({
+    type: 'service.add',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'Added Inner', href: 'https://added.example', description: 'Added' }
+  }, { services: nestedServices, settings: nestedSettings });
+  let parsed = YAML.parse(files.services);
+  const inner = parsed[0]['Top Group'].find((entry) => Object.keys(entry)[0] === 'Inner Group')['Inner Group'];
+  assert.equal(inner[2]['Added Inner'].description, 'Added');
+  assert.match(files.services, /nested services comment/);
+
+  files = transform({
+    type: 'service.edit',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath, serviceName: 'Inner Service A', serviceIndex: 0 },
+    values: { name: 'Renamed Inner A', href: 'https://a-updated.example' }
+  }, files);
+  parsed = YAML.parse(files.services);
+  const innerAfter = parsed[0]['Top Group'].find((entry) => Object.keys(entry)[0] === 'Inner Group')['Inner Group'];
+  assert.equal(innerAfter[0]['Renamed Inner A'].href, 'https://a-updated.example');
+  assert.equal(innerAfter[0]['Renamed Inner A'].description, undefined);
+
+  files = transform({
+    type: 'service.move',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath, serviceName: 'Renamed Inner A', serviceIndex: 0 },
+    direction: 'down'
+  }, files);
+  parsed = YAML.parse(files.services);
+  const innerMoved = parsed[0]['Top Group'].find((entry) => Object.keys(entry)[0] === 'Inner Group')['Inner Group'];
+  assert.equal(Object.keys(innerMoved[0])[0], 'Inner Service B');
+  assert.equal(Object.keys(innerMoved[1])[0], 'Renamed Inner A');
+
+  files = transform({
+    type: 'service.remove',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath, serviceName: 'Inner Service B', serviceIndex: 0 }
+  }, files);
+  parsed = YAML.parse(files.services);
+  const innerRemoved = parsed[0]['Top Group'].find((entry) => Object.keys(entry)[0] === 'Inner Group')['Inner Group'];
+  assert.equal(innerRemoved.length, 2);
+  assert.equal(Object.keys(innerRemoved[0])[0], 'Renamed Inner A');
+});
+
+test('moves a service from a nested group to a top-level group', () => {
+  let files = transform({
+    type: 'service.move',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath, serviceName: 'Inner Service A', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Top Group', groupIndex: 0 },
+    destinationIndex: 0
+  }, { services: nestedServices, settings: nestedSettings });
+  const parsed = YAML.parse(files.services);
+  const topEntries = parsed[0]['Top Group'];
+  assert.equal(Object.keys(topEntries[0])[0], 'Inner Service A');
+  const inner = topEntries.find((entry) => Object.keys(entry)[0] === 'Inner Group')['Inner Group'];
+  assert.equal(inner.length, 1);
+  assert.equal(Object.keys(inner[0])[0], 'Inner Service B');
+});
+
+test('edits, moves and removes nested service groups while keeping layout in sync', () => {
+  let files = transform({
+    type: 'group.edit',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: {
+      name: 'Renamed Inner',
+      fields: [
+        { key: 'icon', value: 'updated.png' },
+        { key: 'columns', value: '3' }
+      ]
+    }
+  }, { services: nestedServices, settings: nestedSettings });
+  let parsedServices = YAML.parse(files.services);
+  let parsedSettings = YAML.parse(files.settings);
+  const topEntries = parsedServices[0]['Top Group'];
+  assert.ok(topEntries.some((entry) => Object.keys(entry)[0] === 'Renamed Inner'));
+  assert.equal(parsedSettings.layout['Renamed Inner'].icon, 'updated.png');
+  assert.equal(parsedSettings.layout['Renamed Inner'].columns, 3);
+  assert.equal(parsedSettings.layout['Inner Group'], undefined);
+  assert.match(files.services, /nested services comment/);
+
+  files = transform({
+    type: 'group.move',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Renamed Inner', index: 0 }] },
+    direction: 'up'
+  }, files);
+  parsedServices = YAML.parse(files.services);
+  const movedEntries = parsedServices[0]['Top Group'];
+  assert.equal(Object.keys(movedEntries[0])[0], 'Renamed Inner');
+  assert.equal(Object.keys(movedEntries[1])[0], 'Direct Service');
+
+  files = transform({
+    type: 'group.remove',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Renamed Inner', index: 0 }] }
+  }, files);
+  parsedServices = YAML.parse(files.services);
+  parsedSettings = YAML.parse(files.settings);
+  const remaining = parsedServices[0]['Top Group'].map((entry) => Object.keys(entry)[0]);
+  assert.deepEqual(remaining, ['Direct Service', 'After Nested']);
+  assert.equal(parsedSettings.layout['Renamed Inner'], undefined);
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+});
+
+test('rejects duplicate nested group names within the same parent', () => {
+  assert.throws(() => transform({
+    type: 'group.edit',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'Direct Service', fields: [] }
+  }, { services: nestedServices, settings: nestedSettings }), /Group "Direct Service" already exists/);
+
+  assert.throws(() => transform({
+    type: 'group.rename',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'Top Group' }
+  }, { services: nestedServices, settings: nestedSettings }), /Group "Top Group" already exists/);
+});
+
+test('rejects moves that would push a nested group outside its parent list', () => {
+  const boundaryServices = `- Top Group:
+    - Inner Group:
+        - Inner Service A:
+            href: https://a.example
+    - Trailing Service:
+        href: https://trailing.example
+`;
+  assert.throws(() => transform({
+    type: 'group.move',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] },
+    direction: 'up'
+  }, { services: boundaryServices, settings: nestedSettings }), /cannot be moved/);
+
+  const trailingNestedServices = `- Top Group:
+    - Leading Service:
+        href: https://leading.example
+    - Inner Group:
+        - Inner Service A:
+            href: https://a.example
+`;
+  assert.throws(() => transform({
+    type: 'group.move',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] },
+    direction: 'down'
+  }, { services: trailingNestedServices, settings: nestedSettings }), /cannot be moved/);
+});
+
+test('converts a flat service group into a nested group and adjusts the sub-group count', () => {
+  const flatServices = `- Flat Group:
+    - Service A:
+        href: https://a.example
+    - Service B:
+        href: https://b.example
+    - Service C:
+        href: https://c.example
+`;
+  const flatSettings = `title: Flat
+layout:
+  Flat Group:
+    columns: 3
+`;
+
+  let files = transform({
+    type: 'group.convert-to-nested',
+    target: { groupName: 'Flat Group', groupIndex: 0 }
+  }, { services: flatServices, settings: flatSettings });
+  let parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Flat Group'];
+  assert.equal(entries.length, 1);
+  assert.equal(Object.keys(entries[0])[0], '1');
+  const subGroup = entries[0]['1'];
+  assert.equal(subGroup.length, 3);
+  assert.equal(Object.keys(subGroup[0])[0], 'Service A');
+  assert.equal(Object.keys(subGroup[2])[0], 'Service C');
+
+  files = transform({
+    type: 'group.set-nested-count',
+    target: { groupName: 'Flat Group', groupIndex: 0 },
+    values: { count: 3 }
+  }, files);
+  parsed = YAML.parse(files.services);
+  const afterExpand = parsed[0]['Flat Group'];
+  assert.equal(afterExpand.length, 3);
+  assert.deepEqual(afterExpand.map((entry) => Object.keys(entry)[0]), ['1', '2', '3']);
+  assert.equal(afterExpand[0]['1'].length, 3);
+  assert.equal(afterExpand[1]['2'].length, 0);
+  assert.equal(afterExpand[2]['3'].length, 0);
+
+  files = transform({
+    type: 'group.set-nested-count',
+    target: { groupName: 'Flat Group', groupIndex: 0 },
+    values: { count: 1 }
+  }, { services: files.services, settings: flatSettings });
+  parsed = YAML.parse(files.services);
+  const merged = parsed[0]['Flat Group'];
+  assert.equal(merged.length, 1);
+  assert.equal(Object.keys(merged[0])[0], '1');
+});
+
+test('set-nested-count merges services from removed sub-groups into the last kept one', () => {
+  const services = `- Top:
+    - "1":
+        - A:
+            href: https://a.example
+    - "2":
+        - B:
+            href: https://b.example
+    - "3":
+        - C:
+            href: https://c.example
+`;
+  const files = transform({
+    type: 'group.set-nested-count',
+    target: { groupName: 'Top', groupIndex: 0 },
+    values: { count: 1 }
+  }, { services, settings: 'title: T\n' });
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top'];
+  assert.equal(entries.length, 1);
+  const subGroup = entries[0]['1'];
+  assert.deepEqual(subGroup.map((service) => Object.keys(service)[0]), ['A', 'B', 'C']);
+});
+
+test('set-nested-count renames existing sub-groups to numbered names', () => {
+  const services = `- Top:
+    - Alpha:
+        - A:
+            href: https://a.example
+    - Beta:
+        - B:
+            href: https://b.example
+`;
+  const files = transform({
+    type: 'group.set-nested-count',
+    target: { groupName: 'Top', groupIndex: 0 },
+    values: { count: 2 }
+  }, { services, settings: 'title: T\n' });
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top'];
+  assert.deepEqual(entries.map((entry) => Object.keys(entry)[0]), ['1', '2']);
+  assert.equal(entries[0]['1'][0]['A'].href, 'https://a.example');
+  assert.equal(entries[1]['2'][0]['B'].href, 'https://b.example');
+});
+
+test('convert-to-nested preserves direct services alongside existing nested sub-groups', () => {
+  const services = `- Top:
+    - Existing Nested:
+        - Inner A:
+            href: https://inner-a.example
+    - Direct Service:
+        href: https://direct.example
+`;
+  const files = transform({
+    type: 'group.convert-to-nested',
+    target: { groupName: 'Top', groupIndex: 0 }
+  }, { services, settings: 'title: T\n' });
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top'];
+  assert.equal(entries.length, 2);
+  assert.equal(Object.keys(entries[0])[0], 'Existing Nested');
+  assert.equal(Object.keys(entries[1])[0], '1');
+  assert.equal(entries[1]['1'][0]['Direct Service'].href, 'https://direct.example');
+});
+
+test('convert-from-nested flattens nested sub-groups back into direct services', () => {
+  const services = `- Top:
+    - "1":
+        - Service A:
+            href: https://a.example
+        - Service B:
+            href: https://b.example
+    - "2":
+        - Service C:
+            href: https://c.example
+    - Direct Service:
+        href: https://direct.example
+`;
+  const files = transform({
+    type: 'group.convert-from-nested',
+    target: { groupName: 'Top', groupIndex: 0 }
+  }, { services, settings: 'title: T\n' });
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top'];
+  assert.equal(entries.length, 4);
+  assert.deepEqual(entries.map((entry) => Object.keys(entry)[0]), ['Service A', 'Service B', 'Service C', 'Direct Service']);
+  assert.equal(entries[0]['Service A'].href, 'https://a.example');
+  assert.equal(entries[2]['Service C'].href, 'https://c.example');
+  assert.equal(entries[3]['Direct Service'].href, 'https://direct.example');
+});
+
+test('convert-from-nested on a group with empty nested sub-groups drops them', () => {
+  const services = `- Top:
+    - "1":
+        - Service A:
+            href: https://a.example
+    - "2": []
+`;
+  const files = transform({
+    type: 'group.convert-from-nested',
+    target: { groupName: 'Top', groupIndex: 0 }
+  }, { services, settings: 'title: T\n' });
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top'];
+  assert.equal(entries.length, 1);
+  assert.equal(Object.keys(entries[0])[0], 'Service A');
+});
+
+test('round-trip convert to nested and back restores the original flat structure', () => {
+  const originalServices = `- Top:
+    - Service A:
+        href: https://a.example
+    - Service B:
+        href: https://b.example
+`;
+  let files = transform({
+    type: 'group.convert-to-nested',
+    target: { groupName: 'Top', groupIndex: 0 }
+  }, { services: originalServices, settings: 'title: T\n' });
+  files = transform({
+    type: 'group.convert-from-nested',
+    target: { groupName: 'Top', groupIndex: 0 }
+  }, files);
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top'];
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map((entry) => Object.keys(entry)[0]), ['Service A', 'Service B']);
+  assert.equal(entries[0]['Service A'].href, 'https://a.example');
+  assert.equal(entries[1]['Service B'].href, 'https://b.example');
+});

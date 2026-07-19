@@ -9,7 +9,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Added a bundled `app-settings.default.json` that seeds editor setting defaults (theme, page title, tab order, auto-indent, etc.), so defaults can be changed by editing JSON instead of server code. `DEFAULT_THEME` still overrides the bundled `theme` default.
 - Added a configurable Live Homepage URL in the Appearance settings tab that, when set, surfaces a header button linking to the live dashboard.
+
+### Changed
+
+- Extended the Interactive Editor to nested service groups: hover toolbars now support editing, moving, and deleting nested groups and the services inside them, each nested group has its own Add service button, and preview-to-source navigation jumps to the correct nested YAML line.
+- Added a Convert into a nested group control in the service group edit dialog that wraps a group's direct services into numbered nested sub-groups, with an adjustable count that auto-names sub-groups 1..N. A convert-back control flattens nested sub-groups into direct services with a collapse warning.
 
 ## [1.3.1] - 2026-07-18
 

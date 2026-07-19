@@ -1478,6 +1478,7 @@
         [data-preview-nested-columns="7"] { --preview-nested-columns: 7; }
         [data-preview-nested-columns="8"] { --preview-nested-columns: 8; }
         .dashboard-nested-group-title {
+            position: relative;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -1771,7 +1772,8 @@
         .dashboard-card > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions,
         .bookmark-group > .bookmark-group-heading > .preview-edit-actions,
-        .dashboard-group > .dashboard-group-title > .preview-edit-actions {
+        .dashboard-group > .dashboard-group-title > .preview-edit-actions,
+        .dashboard-nested-group > .dashboard-nested-group-title > .preview-edit-actions {
             position: absolute;
             top: -10px;
             right: -6px;
@@ -1822,7 +1824,9 @@
         .bookmark-group:hover > .bookmark-group-heading > .preview-edit-actions,
         .bookmark-group > .bookmark-group-heading > .preview-edit-actions:has(.preview-edit-action:focus-visible),
         .dashboard-group:hover > .dashboard-group-title > .preview-edit-actions,
-        .dashboard-group > .dashboard-group-title > .preview-edit-actions:has(.preview-edit-action:focus-visible) {
+        .dashboard-group > .dashboard-group-title > .preview-edit-actions:has(.preview-edit-action:focus-visible),
+        .dashboard-nested-group:hover > .dashboard-nested-group-title > .preview-edit-actions,
+        .dashboard-nested-group > .dashboard-nested-group-title > .preview-edit-actions:has(.preview-edit-action:focus-visible) {
             opacity: 1;
             pointer-events: auto;
             transform: translateY(0);
@@ -1913,6 +1917,9 @@
             text-decoration: none;
             box-shadow: none;
             transition: background-color 0.18s ease, color 0.18s ease;
+        }
+        .docs-link {
+            margin-right: 12px;
         }
         .docs-link:hover,
         .live-homepage-link:hover,
@@ -2216,6 +2223,23 @@
             margin-top: 6px;
         }
         .preview-edit-service-location .preview-edit-note {
+            margin-top: 6px;
+        }
+        .preview-edit-group-nested-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .preview-edit-group-nested-row .modal-input {
+            width: 5em;
+            flex: 0 0 auto;
+        }
+        .preview-edit-group-nested-row .modal-button {
+            flex: 0 0 auto;
+        }
+        .preview-edit-group-convert-button {
+            width: 100%;
             margin-top: 6px;
         }
         #preview-edit-modal .preview-edit-tab-warning {

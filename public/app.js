@@ -823,17 +823,67 @@
         }
 
         function findPreviewService(source) {
-            const group = findPreviewGroup(source);
+            const { services: entries, groupName } = findPreviewGroup(source);
+            const sequence = resolvePreviewEntries(entries, source);
             let seen = 0;
-            for (const service of group.services) {
+            for (const service of sequence) {
                 const serviceName = Object.keys(service || {})[0] || '';
                 if (serviceName !== source.serviceName) continue;
                 if (seen === (Number(source.serviceIndex) || 0)) {
-                    return { ...group, service, serviceName, data: service[serviceName] || {} };
+                    return { group: { groupName }, services: sequence, service, serviceName, data: service[serviceName] || {} };
                 }
                 seen++;
             }
             throw new Error(`Service "${source.serviceName}" is no longer available. Refresh the dashboard and try again.`);
+        }
+
+        function resolvePreviewEntries(entries, source) {
+            if (!Array.isArray(entries)) return [];
+            if (!Array.isArray(source.nestedGroupPath) || source.nestedGroupPath.length === 0) {
+                return entries;
+            }
+            let current = entries;
+            for (const step of source.nestedGroupPath) {
+                const stepName = String(step && step.name || '');
+                const stepIndex = Number(step && step.index) || 0;
+                let seen = 0;
+                let nextEntries = null;
+                for (const item of current) {
+                    const itemName = Object.keys(item || {})[0] || '';
+                    if (itemName !== stepName) continue;
+                    if (seen === stepIndex) {
+                        nextEntries = Array.isArray(item[itemName]) ? item[itemName] : [];
+                        break;
+                    }
+                    seen++;
+                }
+                if (!nextEntries) {
+                    throw new Error(`Nested group "${stepName}" is no longer available. Refresh the dashboard and try again.`);
+                }
+                current = nextEntries;
+            }
+            return current;
+        }
+
+        function findPreviewNestedGroup(source) {
+            if (!Array.isArray(source.nestedGroupPath) || source.nestedGroupPath.length === 0) {
+                throw new Error('A nested service group path is required.');
+            }
+            const { services: entries } = findPreviewGroup(source);
+            const parentEntries = resolvePreviewEntries(entries, { ...source, nestedGroupPath: source.nestedGroupPath.slice(0, -1) });
+            const lastStep = source.nestedGroupPath[source.nestedGroupPath.length - 1];
+            const stepName = String(lastStep && lastStep.name || '');
+            const stepIndex = Number(lastStep && lastStep.index) || 0;
+            let seen = 0;
+            for (const item of parentEntries) {
+                const itemName = Object.keys(item || {})[0] || '';
+                if (itemName !== stepName) continue;
+                if (seen === stepIndex) {
+                    return { groupName: stepName, entries: Array.isArray(item[itemName]) ? item[itemName] : [] };
+                }
+                seen++;
+            }
+            throw new Error(`Nested group "${stepName}" is no longer available. Refresh the dashboard and try again.`);
         }
 
         function findPreviewBookmarkGroup(source) {
@@ -1365,6 +1415,55 @@
             ].join('');
         }
 
+        function renderPreviewEditGroupNested() {
+            const section = document.getElementById('preview-edit-group-nested');
+            const state = previewEditDialogState;
+            const visible = state?.action === 'group.edit';
+            section.hidden = !visible;
+            if (!visible) {
+                section.innerHTML = '';
+                return;
+            }
+            const source = state.source;
+            const isNestedGroup = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0;
+            let entries;
+            try {
+                if (isNestedGroup) {
+                    entries = findPreviewNestedGroup(source).entries;
+                } else {
+                    entries = findPreviewGroup(source).services;
+                }
+            } catch (error) {
+                section.innerHTML = `<p class="preview-edit-note">${escapeHtml(error.message)}</p>`;
+                return;
+            }
+            const nestedSubGroups = Array.isArray(entries) ? entries.filter(isNestedServiceGroup) : [];
+            const hasNestedSubGroups = nestedSubGroups.length > 0;
+            const settings = parseTabConfig('settings');
+            const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
+                ? settings.data.layout : {};
+            const groupName = isNestedGroup ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name : source.groupName;
+            const layoutConfig = layout[groupName];
+            const columnsDefault = getNestedGroupColumns(layoutConfig);
+            if (!hasNestedSubGroups) {
+                section.innerHTML = `
+                    <button type="button" id="preview-edit-group-convert" class="preview-add-option preview-edit-group-convert-button">Convert into a nested group</button>
+                    <p class="preview-edit-note">Wraps this group's services into a single nested sub-group named "1".</p>
+                `;
+            } else {
+                section.innerHTML = `
+                    <label for="preview-edit-group-nested-count">Nested sub-groups</label>
+                    <div class="preview-edit-group-nested-row">
+                        <input type="number" id="preview-edit-group-nested-count" class="modal-input" min="1" max="12" value="${columnsDefault}">
+                        <button type="button" id="preview-edit-group-nested-apply" class="modal-button modal-button-secondary">Apply</button>
+                    </div>
+                    <p class="preview-edit-note">Renames sub-groups to 1..N and adjusts the count. Currently ${nestedSubGroups.length} sub-group${nestedSubGroups.length === 1 ? '' : 's'}; columns suggests ${columnsDefault}.</p>
+                    <button type="button" id="preview-edit-group-convert-back" class="preview-add-option preview-edit-group-convert-button">Convert back to normal service group</button>
+                    <p class="preview-edit-note">Flattens all nested sub-groups into direct services. All services will collapse into this group.</p>
+                `;
+            }
+        }
+
         function openPreviewEditDialog(action, source) {
             if (sampleModeEnabled) {
                 setSaveStatus('Load a configuration directory before editing the dashboard.', 'error');
@@ -1392,12 +1491,13 @@
                 submit.textContent = 'Add group';
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('group', { availableTabs: previewEditDialogState.availableTabs });
             } else if (action === 'group.edit') {
-                const group = findPreviewGroup(source);
+                const isNestedGroup = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0;
+                const group = isNestedGroup ? findPreviewNestedGroup(source) : findPreviewGroup(source);
                 const settings = parseTabConfig('settings');
                 if (settings.error) throw new Error('Fix the settings.yaml error shown on the dashboard before editing this group.');
                 const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
                     ? settings.data.layout : {};
-                title.textContent = 'Edit service group';
+                title.textContent = isNestedGroup ? 'Edit nested service group' : 'Edit service group';
                 submit.textContent = 'Save';
                 nameInput.value = group.groupName;
                 previewEditDialogState.availableTabs = getPreviewTabManagerData().tabs;
@@ -1408,7 +1508,10 @@
                     ? groupFields.filter((field) => field.key !== 'tab')
                     : groupFields;
             } else if (action === 'service.add') {
-                title.textContent = `Add service to ${source.groupName}`;
+                const targetGroupName = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0
+                    ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name
+                    : source.groupName;
+                title.textContent = `Add service to ${targetGroupName}`;
                 submit.textContent = 'Add service';
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('service');
             } else if (action === 'service.edit') {
@@ -1443,6 +1546,7 @@
             renderPreviewEditOptions();
             renderPreviewEditServiceLocation();
             renderPreviewEditGroupLocation();
+            renderPreviewEditGroupNested();
             modal.hidden = false;
             window.requestAnimationFrame(() => {
                 nameInput.focus();
@@ -1909,9 +2013,12 @@
                 }
                 if (action === 'group.move-up' || action === 'group.move-down') {
                     const direction = action.endsWith('up') ? 'up' : 'down';
+                    const displayName = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0
+                        ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name
+                        : source.groupName;
                     await applyPreviewEdit(
                         { type: 'group.move', target: source, direction },
-                        `Moved group ${source.groupName} ${direction}.`
+                        `Moved group ${displayName} ${direction}.`
                     );
                     return;
                 }
@@ -1932,9 +2039,12 @@
                     return;
                 }
                 if (action === 'service.remove') {
+                    const fromGroupName = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0
+                        ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name
+                        : source.groupName;
                     const confirmed = await showConfirmationDialog({
                         title: 'Delete service?',
-                        message: `Delete ${source.serviceName} from ${source.groupName}? Its complete YAML block will be removed.`,
+                        message: `Delete ${source.serviceName} from ${fromGroupName}? Its complete YAML block will be removed.`,
                         confirmText: 'Delete service'
                     });
                     if (confirmed) {
@@ -1946,17 +2056,19 @@
                     return;
                 }
                 if (action === 'group.remove') {
-                    const group = findPreviewGroup(source);
-                    const count = group.services.length;
+                    const isNestedGroup = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0;
+                    const group = isNestedGroup ? findPreviewNestedGroup(source) : findPreviewGroup(source);
+                    const count = (isNestedGroup ? group.entries : group.services).length;
+                    const displayName = group.groupName;
                     const confirmed = await showConfirmationDialog({
-                        title: 'Delete service group?',
-                        message: `Delete ${source.groupName} and ${count} service${count === 1 ? '' : 's'}? A matching settings.yaml layout entry will also be removed.`,
+                        title: isNestedGroup ? 'Delete nested service group?' : 'Delete service group?',
+                        message: `Delete ${displayName} and ${count} service${count === 1 ? '' : 's'}? A matching settings.yaml layout entry will also be removed.`,
                         confirmText: 'Delete group'
                     });
                     if (confirmed) {
                         await applyPreviewEdit(
                             { type: 'group.remove', target: source },
-                            `Deleted group ${source.groupName}.`
+                            `Deleted group ${displayName}.`
                         );
                     }
                     return;
@@ -2081,6 +2193,52 @@
         document.getElementById('preview-edit-modal-close').addEventListener('click', closePreviewEditDialog);
         document.getElementById('preview-edit-cancel').addEventListener('click', closePreviewEditDialog);
         document.getElementById('preview-edit-form').addEventListener('submit', submitPreviewEditForm);
+        document.getElementById('preview-edit-group-nested').addEventListener('click', async function(event) {
+            const convertButton = event.target.closest('#preview-edit-group-convert');
+            const convertBackButton = event.target.closest('#preview-edit-group-convert-back');
+            const applyButton = event.target.closest('#preview-edit-group-nested-apply');
+            if (!convertButton && !convertBackButton && !applyButton) return;
+            const state = previewEditDialogState;
+            if (!state || state.action !== 'group.edit') return;
+            event.preventDefault();
+            if (convertButton) {
+                convertButton.disabled = true;
+                const applied = await applyPreviewEdit(
+                    { type: 'group.convert-to-nested', target: state.source },
+                    'Converted group into a nested group.'
+                );
+                convertButton.disabled = false;
+                if (applied) renderPreviewEditGroupNested();
+                return;
+            }
+            if (convertBackButton) {
+                const confirmed = await showConfirmationDialog({
+                    title: 'Convert back to normal service group?',
+                    message: 'All nested sub-groups will be flattened. Every service across all sub-groups will collapse into this single group.',
+                    confirmText: 'Convert back'
+                });
+                if (!confirmed) return;
+                convertBackButton.disabled = true;
+                const applied = await applyPreviewEdit(
+                    { type: 'group.convert-from-nested', target: state.source },
+                    'Converted nested group back to a normal service group.'
+                );
+                convertBackButton.disabled = false;
+                if (applied) renderPreviewEditGroupNested();
+                return;
+            }
+            if (applyButton) {
+                const countInput = document.getElementById('preview-edit-group-nested-count');
+                const count = Math.max(1, Math.min(12, Number(countInput && countInput.value) || 1));
+                applyButton.disabled = true;
+                const applied = await applyPreviewEdit(
+                    { type: 'group.set-nested-count', target: state.source, values: { count } },
+                    `Updated nested sub-groups to ${count}.`
+                );
+                applyButton.disabled = false;
+                if (applied) renderPreviewEditGroupNested();
+            }
+        });
         document.getElementById('preview-edit-add-option').addEventListener('click', () => {
             syncPreviewEditOptionState();
             previewEditDialogState.hasAddedOption = true;
@@ -2405,6 +2563,15 @@
                 || String(layoutConfig.initiallyCollapsed).toLowerCase() === 'true';
         }
 
+        function isNestedServiceGroup(item) {
+            const name = Object.keys(item || {})[0];
+            return Boolean(name && Array.isArray(item[name]));
+        }
+
+        function getNestedGroupColumns(layoutConfig) {
+            return Math.max(1, Math.min(8, Number.parseInt(layoutConfig && layoutConfig.columns, 10) || 2));
+        }
+
         function resolveIconUrl(icon) {
             const iconName = String(icon || '').trim();
             if (!iconName) {
@@ -2508,10 +2675,8 @@
             return options.fallbackLine || findYamlKeyLine(tabName, key, options);
         }
 
-        function findYamlGroupRange(tabName, groupName, occurrenceIndex = 0) {
-            const lines = getYamlLines(tabName);
-            const groupLine = findNthYamlListKeyLine(tabName, groupName, occurrenceIndex, { indent: 0 });
-            const groupIndex = Math.max(0, groupLine - 1);
+        function findGroupRangeFromLine(lines, startLine) {
+            const groupIndex = Math.max(0, startLine - 1);
             const groupIndent = getYamlIndent(lines[groupIndex]);
             let endLine = lines.length;
 
@@ -2526,7 +2691,32 @@
                 }
             }
 
-            return { startLine: groupLine, endLine };
+            return { startLine, endLine, groupIndent };
+        }
+
+        function findYamlGroupRange(tabName, groupName, occurrenceIndex = 0) {
+            const lines = getYamlLines(tabName);
+            const groupLine = findNthYamlListKeyLine(tabName, groupName, occurrenceIndex, { indent: 0 });
+            const range = findGroupRangeFromLine(lines, groupLine);
+            return { startLine: range.startLine, endLine: range.endLine };
+        }
+
+        function findNestedGroupPathRange(tabName, source) {
+            const lines = getYamlLines(tabName);
+            let groupLine = findNthYamlListKeyLine(tabName, source.groupName, source.groupIndex || 0, { indent: 0 });
+            let range = findGroupRangeFromLine(lines, groupLine);
+            if (Array.isArray(source.nestedGroupPath)) {
+                for (const step of source.nestedGroupPath) {
+                    groupLine = findNthYamlListKeyLine(tabName, String(step && step.name || ''), Number(step && step.index) || 0, {
+                        startLine: groupLine + 1,
+                        endLine: range.endLine,
+                        minIndent: range.groupIndent + 1,
+                        fallbackLine: groupLine
+                    });
+                    range = findGroupRangeFromLine(lines, groupLine);
+                }
+            }
+            return range;
         }
 
         function findServicesGroupAtLine(lineIndex) {
@@ -2653,9 +2843,21 @@
             }
 
             if (source.kind === 'services-group') {
+                if (Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0) {
+                    return findNestedGroupPathRange('services', source).startLine;
+                }
                 return findNthYamlListKeyLine('services', source.groupName, source.groupIndex || 0, { indent: 0 });
             }
             if (source.kind === 'service') {
+                if (Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0) {
+                    const range = findNestedGroupPathRange('services', source);
+                    return findNthYamlListKeyLine('services', source.serviceName, source.serviceIndex || 0, {
+                        startLine: range.startLine + 1,
+                        endLine: range.endLine,
+                        minIndent: range.groupIndent + 1,
+                        fallbackLine: range.startLine
+                    });
+                }
                 return findNestedYamlKeyLine('services', source.groupName, source.serviceName, source.groupIndex || 0, source.serviceIndex || 0);
             }
             if (source.kind === 'bookmark-group') {
@@ -2963,16 +3165,7 @@
                     : '';
             }
 
-            function getNestedGroupColumns(layoutConfig) {
-                return Math.max(1, Math.min(8, Number.parseInt(layoutConfig && layoutConfig.columns, 10) || 2));
-            }
-
-            function isNestedServiceGroup(item) {
-                const name = Object.keys(item || {})[0];
-                return Boolean(name && Array.isArray(item[name]));
-            }
-
-            function renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig, nested = false, parentSource = null } = {}) {
+            function renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig, nested = false, nestedGroupPath = [] } = {}) {
                 const servicesOnly = Array.isArray(entries) ? entries.map((entry, entryIndex) => ({ entry, entryIndex })).filter(({ entry }) => !isNestedServiceGroup(entry)) : [];
                 const serviceOccurrenceCounter = new Map();
                 return servicesOnly.map(({ entry: service, entryIndex }, servicePosition) => {
@@ -2980,49 +3173,100 @@
                     const serviceOccurrenceIndex = takeOccurrence(serviceOccurrenceCounter, name);
                     const data = service[name] || {};
                     const directSource = {
-                        servicesSource: { tab: 'services', kind: 'service', groupName, groupIndex, serviceName: name, serviceIndex: serviceOccurrenceIndex },
-                        settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
+                        servicesSource: {
+                            tab: 'services',
+                            kind: 'service',
+                            groupName,
+                            groupIndex,
+                            ...(nestedGroupPath.length > 0 ? { nestedGroupPath } : {}),
+                            serviceName: name,
+                            serviceIndex: serviceOccurrenceIndex
+                        },
+                        settingsSource: {
+                            tab: 'settings',
+                            kind: 'settings-layout-group',
+                            groupName: nestedGroupPath.length > 0 ? nestedGroupPath[nestedGroupPath.length - 1].name : groupName
+                        }
                     };
-                    const serviceSource = nested ? parentSource : directSource;
                     const serviceIcon = renderIcon(data.icon, name);
                     const serviceSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
+                    const serviceJumpLabel = nested
+                        ? `Nested service in ${nestedGroupPath.map((step) => step.name).join(' \u203a ')}`
+                        : `Jump to this item in ${serviceSourceFile}`;
                     const serviceTooltip = getPreviewTooltipAttributes([
-                        nested ? `Nested service in ${groupName}` : `Jump to this item in ${serviceSourceFile}`,
+                        serviceJumpLabel,
                         `Service: ${name}`,
                         ...getPreviewDetailLines(data, ['description', 'href', 'icon', 'siteMonitor', 'ping', 'container', 'server']),
                         ...getPreviewDetailLines(data.widget, ['type', 'url'])
                     ]);
-                    const serviceEditControls = previewEditMode && !nested
+                    const serviceEditControls = previewEditMode
                         ? getServiceEditControls(directSource.servicesSource, servicePosition, servicesOnly.length)
                         : '';
-                    const serviceDragAttributes = previewEditMode && !nested
-                        ? `${getDragItemAttributes('service', directSource.servicesSource, entryIndex)} data-preview-drop-kind="service" data-preview-drop-index="${entryIndex}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
+                    const dropSource = { groupName, groupIndex, ...(nestedGroupPath.length > 0 ? { nestedGroupPath } : {}) };
+                    const serviceDragAttributes = previewEditMode
+                        ? `${getDragItemAttributes('service', directSource.servicesSource, entryIndex)} data-preview-drop-kind="service" data-preview-drop-index="${entryIndex}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"`
                         : '';
-                    return `<div class="dashboard-card preview-jump-target" ${serviceDragAttributes} ${getSourceAttributes(serviceSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                    return `<div class="dashboard-card preview-jump-target" ${serviceDragAttributes} ${getSourceAttributes(directSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
                 }).join('');
             }
 
-            function renderNestedPreviewGroups(entries, layoutConfig, groupName, groupIndex, parentSource) {
+            function buildNestedGroupSource(groupName, groupIndex, nestedName, nestedGroupPath) {
+                const servicesSource = {
+                    tab: 'services',
+                    kind: 'services-group',
+                    groupName,
+                    groupIndex,
+                    nestedGroupPath
+                };
+                return {
+                    servicesSource,
+                    settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName: nestedName }
+                };
+            }
+
+            function renderNestedPreviewGroups(entries, layoutConfig, groupName, groupIndex, parentPath = []) {
                 if (!Array.isArray(entries)) return '';
-                return entries.filter(isNestedServiceGroup).map((nestedGroup) => {
-                    const nestedName = Object.keys(nestedGroup)[0];
-                    const nestedEntries = nestedGroup[nestedName];
+                const nestedGroupOccurrenceCounter = new Map();
+                const totalEntries = entries.length;
+                return entries.map((entry, entryIndex) => {
+                    if (!isNestedServiceGroup(entry)) return '';
+                    const nestedName = Object.keys(entry)[0];
+                    const nestedOccurrenceIndex = takeOccurrence(nestedGroupOccurrenceCounter, nestedName);
+                    const nestedEntries = entry[nestedName];
                     const nestedLayout = layoutConfig && typeof layoutConfig === 'object' && !Array.isArray(layoutConfig)
                         ? layoutConfig[nestedName]
                         : null;
                     const nestedIcon = renderIcon(nestedLayout && nestedLayout.icon, nestedName);
+                    const nestedGroupPath = [...parentPath, { name: nestedName, index: nestedOccurrenceIndex }];
+                    const nestedGroupSource = buildNestedGroupSource(groupName, groupIndex, nestedName, nestedGroupPath);
                     const nestedCards = renderPreviewServiceCards(nestedEntries, {
                         groupName,
                         groupIndex,
                         layoutConfig: nestedLayout,
                         nested: true,
-                        parentSource
+                        nestedGroupPath
                     });
-                    const nestedChildren = renderNestedPreviewGroups(nestedEntries, nestedLayout, groupName, groupIndex, parentSource);
+                    const nestedChildren = renderNestedPreviewGroups(nestedEntries, nestedLayout, groupName, groupIndex, nestedGroupPath);
                     if (!nestedCards && !nestedChildren) {
                         addPreviewNotice(`No services configured in ${nestedName}.`);
                     }
-                    return `<section class="dashboard-nested-group"${getPreviewLayoutAttributes(nestedLayout)}><div class="dashboard-nested-group-title">${nestedIcon}<span>${escapeHtml(nestedName)}</span></div>${nestedCards ? `<div class="dashboard-cards">${nestedCards}</div>` : ''}${nestedChildren}</section>`;
+                    const nestedGroupEditControls = previewEditMode
+                        ? getGroupEditControls(nestedGroupSource.servicesSource, entryIndex, totalEntries)
+                        : '';
+                    const nestedGroupTooltip = getPreviewTooltipAttributes([
+                        `Nested group in ${groupName}`,
+                        `Group: ${nestedName}`,
+                        `Services: ${Array.isArray(nestedEntries) ? nestedEntries.length : 0}`,
+                        ...getPreviewDetailLines(nestedLayout, ['icon', 'style', 'columns', 'header', 'tab'])
+                    ], { focusable: false });
+                    const addServiceButton = previewEditMode
+                        ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(nestedGroupSource.servicesSource)}><span aria-hidden="true">+</span> Add service</button>`
+                        : '';
+                    const dropSource = { groupName, groupIndex, nestedGroupPath };
+                    const serviceCardsGrid = nestedCards || addServiceButton
+                        ? `<div class="dashboard-cards"${previewEditMode ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(nestedEntries) ? nestedEntries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"` : ''}>${nestedCards}${addServiceButton}</div>`
+                        : '';
+                    return `<section class="dashboard-nested-group"${getPreviewLayoutAttributes(nestedLayout)}><div class="dashboard-nested-group-title">${nestedIcon}<span class="preview-jump-target" ${getSourceAttributes(nestedGroupSource)} ${nestedGroupTooltip}>${escapeHtml(nestedName)}</span>${nestedGroupEditControls}</div>${serviceCardsGrid}${nestedChildren}</section>`;
                 }).join('');
             }
 
@@ -3042,7 +3286,8 @@
                     ? getGroupEditControls(serviceGroupSource, groupPositionByItem.get(group) || 0, services.length)
                     : '';
                 const cards = renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig });
-                const nestedGroups = renderNestedPreviewGroups(entries, layoutConfig, groupName, groupIndex, groupSource);
+                const hasNestedGroups = Array.isArray(entries) && entries.some(isNestedServiceGroup);
+                const nestedGroups = renderNestedPreviewGroups(entries, layoutConfig, groupName, groupIndex);
                 const groupSourceFile = currentTab === 'settings' ? 'settings.yaml' : 'services.yaml';
                 const groupTooltip = getPreviewTooltipAttributes([
                     `Jump to this group in ${groupSourceFile}`,
@@ -3050,13 +3295,13 @@
                     `Services: ${Array.isArray(entries) ? entries.length : 0}`,
                     ...getPreviewDetailLines(layoutConfig, ['icon', 'style', 'columns', 'header'])
                 ], { focusable: false });
-                const addServiceButton = previewEditMode
+                const showTopLevelAddService = previewEditMode && (cards || !hasNestedGroups);
+                const addServiceButton = showTopLevelAddService
                     ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(serviceGroupSource)}><span aria-hidden="true">+</span> Add service</button>`
                     : '';
                 const serviceCardsGrid = cards || addServiceButton
                     ? `<div class="dashboard-cards"${previewEditMode ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${cards}${addServiceButton}</div>`
                     : '';
-                const hasNestedGroups = Array.isArray(entries) && entries.some(isNestedServiceGroup);
                 const groupPosition = groupPositionByItem.get(group) || 0;
                 const groupDragAttributes = previewEditMode
                     ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
@@ -3631,8 +3876,19 @@
 
         function isSamePreviewDropCollection(drag, destinationTarget) {
             if (drag.kind === 'service' || drag.kind === 'bookmark') {
-                return drag.source.groupName === destinationTarget?.groupName
+                const sameGroup = drag.source.groupName === destinationTarget?.groupName
                     && Number(drag.source.groupIndex) === Number(destinationTarget?.groupIndex);
+                if (!sameGroup) return false;
+                if (drag.kind === 'service') {
+                    const dragPath = drag.source.nestedGroupPath || [];
+                    const destPath = destinationTarget?.nestedGroupPath || [];
+                    if (dragPath.length !== destPath.length) return false;
+                    return dragPath.every((step, index) => (
+                        String(step && step.name || '') === String(destPath[index] && destPath[index].name || '')
+                        && Number(step && step.index || 0) === Number(destPath[index] && destPath[index].index || 0)
+                    ));
+                }
+                return true;
             }
             return true;
         }
@@ -3682,9 +3938,12 @@
             }
             if (drag.kind === 'service') {
                 if (sameCollection && drag.index === adjustedDestinationIndex) return;
+                const destinationName = Array.isArray(destinationTarget?.nestedGroupPath) && destinationTarget.nestedGroupPath.length > 0
+                    ? destinationTarget.nestedGroupPath[destinationTarget.nestedGroupPath.length - 1].name
+                    : destinationTarget?.groupName || drag.source.groupName;
                 await applyPreviewEdit(
                     { type: 'service.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget },
-                    `Moved service ${drag.source.serviceName} to ${destinationTarget?.groupName || drag.source.groupName}.`
+                    `Moved service ${drag.source.serviceName} to ${destinationName}.`
                 );
                 return;
             }

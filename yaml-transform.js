@@ -187,18 +187,62 @@ function assertUniqueGroupName(servicesSequence, name, excludedIndex = -1) {
   }
 }
 
-function getService(document, target) {
+function resolveServiceSequence(document, target, { createIfMissing = false } = {}) {
   const group = getGroup(document, target);
-  if (!YAML.isSeq(group.pair.value)) {
-    throw new YamlTransformError(`Service group "${target.groupName}" must be a YAML list of services`);
+  let sequence = group.pair.value;
+  if (!YAML.isSeq(sequence)) {
+    if (!createIfMissing) {
+      throw new YamlTransformError(`Service group "${scalarValue(group.pair.key)}" must be a YAML list of services`);
+    }
+    sequence = document.createNode([]);
+    group.pair.value = sequence;
   }
+  if (!Array.isArray(target.nestedGroupPath) || target.nestedGroupPath.length === 0) {
+    return sequence;
+  }
+  for (const step of target.nestedGroupPath) {
+    const stepName = String(step && step.name || '');
+    const stepIndex = Number(step && step.index) || 0;
+    const nested = findNamedSequenceItem(sequence, stepName, stepIndex, 'Nested service group');
+    let nestedSequence = nested.pair.value;
+    if (!YAML.isSeq(nestedSequence)) {
+      if (!createIfMissing) {
+        throw new YamlTransformError(`Nested service group "${stepName}" must be a YAML list of services`);
+      }
+      nestedSequence = document.createNode([]);
+      nested.pair.value = nestedSequence;
+    }
+    sequence = nestedSequence;
+  }
+  return sequence;
+}
+
+function findServiceGroupPair(servicesDocument, target) {
+  if (Array.isArray(target.nestedGroupPath) && target.nestedGroupPath.length > 0) {
+    const parentTarget = { ...target, nestedGroupPath: target.nestedGroupPath.slice(0, -1) };
+    const parentSequence = resolveServiceSequence(servicesDocument, parentTarget);
+    const lastStep = target.nestedGroupPath[target.nestedGroupPath.length - 1];
+    const found = findNamedSequenceItem(
+      parentSequence,
+      String(lastStep && lastStep.name || ''),
+      Number(lastStep && lastStep.index) || 0,
+      'Nested service group'
+    );
+    return { pair: found.pair, index: found.index, parentSequence, isNested: true };
+  }
+  const group = getGroup(servicesDocument, target);
+  return { pair: group.pair, index: group.index, parentSequence: getServicesSequence(servicesDocument), isNested: false };
+}
+
+function getServiceInPath(document, target) {
+  const sequence = resolveServiceSequence(document, target);
   const service = findNamedSequenceItem(
-    group.pair.value,
+    sequence,
     String(target.serviceName || ''),
     Number(target.serviceIndex) || 0,
     'Service'
   );
-  return { group, service, services: group.pair.value };
+  return { service, services: sequence };
 }
 
 function requireName(value, label) {
@@ -607,10 +651,7 @@ function transformPreviewYaml({ files, operation }) {
       break;
     }
     case 'service.add': {
-      const group = getGroup(servicesDocument, target);
-      if (!YAML.isSeq(group.pair.value)) {
-        group.pair.value = servicesDocument.createNode([]);
-      }
+      const groupSequence = resolveServiceSequence(servicesDocument, target, { createIfMissing: true });
       const name = requireName(values.name, 'Service');
       if (Array.isArray(values.fields)) {
         const fields = normalizeEditableFields(values.fields).filter((field) => field.blankValue || field.value !== '');
@@ -618,20 +659,20 @@ function transformPreviewYaml({ files, operation }) {
         setMapFields(servicesDocument, serviceValue, fields);
         const serviceItem = servicesDocument.createNode({});
         serviceItem.set(name, serviceValue);
-        group.pair.value.items.push(serviceItem);
+        groupSequence.items.push(serviceItem);
       } else {
         const fields = {};
         for (const fieldName of ['href', 'description', 'icon']) {
           const value = String(values[fieldName] || '').trim();
           if (value) fields[fieldName] = value;
         }
-        group.pair.value.items.push(servicesDocument.createNode({ [name]: fields }));
+        groupSequence.items.push(servicesDocument.createNode({ [name]: fields }));
       }
       servicesChanged = true;
       break;
     }
     case 'service.edit': {
-      const { service, services: sourceServices } = getService(servicesDocument, target);
+      const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
       const name = requireName(values.name, 'Service');
       if (YAML.isScalar(service.pair.key)) service.pair.key.value = name;
       if (Array.isArray(values.fields)) {
@@ -641,37 +682,30 @@ function transformPreviewYaml({ files, operation }) {
         setServiceFields(servicesDocument, service.pair, values);
       }
       if (operation.destinationTarget) {
-        const destinationGroup = getGroup(servicesDocument, operation.destinationTarget);
-        if (!YAML.isSeq(destinationGroup.pair.value)) {
-          throw new YamlTransformError(`Service group "${operation.destinationTarget.groupName}" must be a YAML list of services`);
-        }
+        const destinationSequence = resolveServiceSequence(servicesDocument, operation.destinationTarget, { createIfMissing: true });
         const [item] = sourceServices.items.splice(service.index, 1);
-        destinationGroup.pair.value.items.push(item);
+        destinationSequence.items.push(item);
       }
       servicesChanged = true;
       break;
     }
     case 'service.remove': {
-      const { service, services } = getService(servicesDocument, target);
-      services.items.splice(service.index, 1);
+      const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
+      sourceServices.items.splice(service.index, 1);
       servicesChanged = true;
       break;
     }
     case 'service.move': {
-      const { service, services: sourceServices } = getService(servicesDocument, target);
+      const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
       const destinationTarget = operation.destinationTarget;
       if (destinationTarget) {
-        const destinationGroup = getGroup(servicesDocument, destinationTarget);
-        if (!YAML.isSeq(destinationGroup.pair.value)) {
-          throw new YamlTransformError(`Service group "${destinationTarget.groupName}" must be a YAML list of services`);
-        }
-        const destinationServices = destinationGroup.pair.value;
+        const destinationSequence = resolveServiceSequence(servicesDocument, destinationTarget, { createIfMissing: true });
         const destination = Number(operation.destinationIndex);
-        if (!Number.isInteger(destination) || destination < 0 || destination > destinationServices.items.length) {
+        if (!Number.isInteger(destination) || destination < 0 || destination > destinationSequence.items.length) {
           throw new YamlTransformError('Service move destination is outside the target group');
         }
         const [item] = sourceServices.items.splice(service.index, 1);
-        destinationServices.items.splice(destination, 0, item);
+        destinationSequence.items.splice(destination, 0, item);
       } else {
         const destination = getMoveDestination(service.index, sourceServices.items.length, operation, 'Service');
         if (destination < 0 || destination >= sourceServices.items.length) {
@@ -704,16 +738,21 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'group.edit':
     case 'group.rename': {
-      const group = getGroup(servicesDocument, target);
+      const found = findServiceGroupPair(servicesDocument, target);
       const name = requireName(values.name, 'Group');
-      const oldName = scalarValue(group.pair.key);
+      const oldName = scalarValue(found.pair.key);
       if (name !== oldName) {
-        assertUniqueGroupName(servicesSequence, name, group.index);
+        const siblingExists = found.parentSequence.items.some((item, index) => (
+          index !== found.index && scalarValue(getSinglePair(item, 'Service group').key) === name
+        ));
+        if (siblingExists) {
+          throw new YamlTransformError(`Group "${name}" already exists. Choose a different group name`);
+        }
         if (findLayoutPair(getLayoutMap(settingsDocument), name)) {
           throw new YamlTransformError(`Group "${name}" already exists. Choose a different group name`);
         }
       }
-      if (YAML.isScalar(group.pair.key)) group.pair.key.value = name;
+      if (YAML.isScalar(found.pair.key)) found.pair.key.value = name;
       servicesChanged = true;
       settingsChanged = syncLayoutRename(settingsDocument, oldName, name);
       if (operation.type === 'group.edit' && Array.isArray(values.fields)) {
@@ -742,26 +781,105 @@ function transformPreviewYaml({ files, operation }) {
       break;
     }
     case 'group.remove': {
-      const group = getGroup(servicesDocument, target);
-      const oldName = scalarValue(group.pair.key);
-      servicesSequence.items.splice(group.index, 1);
+      const found = findServiceGroupPair(servicesDocument, target);
+      const oldName = scalarValue(found.pair.key);
+      found.parentSequence.items.splice(found.index, 1);
       servicesChanged = true;
       settingsChanged = syncLayoutRemove(settingsDocument, oldName);
       break;
     }
     case 'group.move': {
-      const group = getGroup(servicesDocument, target);
-      const destination = getMoveDestination(group.index, servicesSequence.items.length, operation, 'Group');
-      if (destination < 0 || destination >= servicesSequence.items.length) {
-        throw new YamlTransformError(`Group "${target.groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
+      const found = findServiceGroupPair(servicesDocument, target);
+      const groupName = scalarValue(found.pair.key);
+      const destination = getMoveDestination(found.index, found.parentSequence.items.length, operation, 'Group');
+      if (destination < 0 || destination >= found.parentSequence.items.length) {
+        throw new YamlTransformError(`Group "${groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
       }
-      const step = destination > group.index ? 1 : -1;
-      for (let index = group.index + step; index !== destination + step; index += step) {
-        const adjacentPair = getSinglePair(servicesSequence.items[index], 'Service group');
-        settingsChanged = syncLayoutMove(settingsDocument, scalarValue(group.pair.key), scalarValue(adjacentPair.key)) || settingsChanged;
+      if (!found.isNested) {
+        const step = destination > found.index ? 1 : -1;
+        for (let index = found.index + step; index !== destination + step; index += step) {
+          const adjacentPair = getSinglePair(found.parentSequence.items[index], 'Service group');
+          settingsChanged = syncLayoutMove(settingsDocument, groupName, scalarValue(adjacentPair.key)) || settingsChanged;
+        }
       }
-      const [item] = servicesSequence.items.splice(group.index, 1);
-      servicesSequence.items.splice(destination, 0, item);
+      const [item] = found.parentSequence.items.splice(found.index, 1);
+      found.parentSequence.items.splice(destination, 0, item);
+      servicesChanged = true;
+      break;
+    }
+    case 'group.convert-to-nested': {
+      const sequence = resolveServiceSequence(servicesDocument, target, { createIfMissing: true });
+      const directServiceItems = [];
+      const existingNestedItems = [];
+      sequence.items.forEach((item) => {
+        const pair = getSinglePair(item, 'Service group');
+        if (YAML.isSeq(pair.value)) {
+          existingNestedItems.push(item);
+        } else {
+          directServiceItems.push(item);
+        }
+      });
+      const newNestedValue = servicesDocument.createNode(directServiceItems);
+      const newNestedItem = servicesDocument.createNode({});
+      newNestedItem.set('1', newNestedValue);
+      sequence.items = [...existingNestedItems, newNestedItem];
+      servicesChanged = true;
+      break;
+    }
+    case 'group.set-nested-count': {
+      const count = Math.max(1, Math.min(12, Number(values.count) || 1));
+      const sequence = resolveServiceSequence(servicesDocument, target, { createIfMissing: true });
+      const directServiceItems = [];
+      const nestedItems = [];
+      sequence.items.forEach((item) => {
+        const pair = getSinglePair(item, 'Service group');
+        if (YAML.isSeq(pair.value)) {
+          nestedItems.push(item);
+        } else {
+          directServiceItems.push(item);
+        }
+      });
+      const keepCount = Math.min(count, nestedItems.length);
+      for (let index = 0; index < keepCount; index++) {
+        const pair = getSinglePair(nestedItems[index], 'Service group');
+        if (YAML.isScalar(pair.key)) pair.key.value = String(index + 1);
+      }
+      if (nestedItems.length > count) {
+        const lastKept = nestedItems[count - 1];
+        const lastKeptPair = getSinglePair(lastKept, 'Service group');
+        const lastKeptSeq = lastKeptPair && YAML.isSeq(lastKeptPair.value) ? lastKeptPair.value : null;
+        if (lastKeptSeq) {
+          for (let index = count; index < nestedItems.length; index++) {
+            const removed = nestedItems[index];
+            const removedPair = getSinglePair(removed, 'Service group');
+            if (removedPair && YAML.isSeq(removedPair.value)) {
+              removedPair.value.items.forEach((item) => lastKeptSeq.items.push(item));
+            }
+          }
+        }
+      }
+      const newNestedItems = nestedItems.slice(0, count);
+      for (let index = nestedItems.length; index < count; index++) {
+        const newNested = servicesDocument.createNode({});
+        newNested.set(String(index + 1), servicesDocument.createNode([]));
+        newNestedItems.push(newNested);
+      }
+      sequence.items = [...directServiceItems, ...newNestedItems];
+      servicesChanged = true;
+      break;
+    }
+    case 'group.convert-from-nested': {
+      const sequence = resolveServiceSequence(servicesDocument, target, { createIfMissing: true });
+      const flatItems = [];
+      sequence.items.forEach((item) => {
+        const pair = getSinglePair(item, 'Service group');
+        if (YAML.isSeq(pair.value)) {
+          pair.value.items.forEach((nestedItem) => flatItems.push(nestedItem));
+        } else {
+          flatItems.push(item);
+        }
+      });
+      sequence.items = flatItems;
       servicesChanged = true;
       break;
     }
