@@ -5,6 +5,12 @@ This file records notable user-facing, security, deployment, and behavior change
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added a configurable Live Homepage URL in the Appearance settings tab that, when set, surfaces a header button linking to the live dashboard.
+
 ## [1.3.1] - 2026-07-18
 
 ### Added

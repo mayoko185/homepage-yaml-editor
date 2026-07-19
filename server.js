@@ -79,6 +79,7 @@ function getDefaultAppSettings() {
   return {
     theme: DEFAULT_THEME,
     customPageTitle: '',
+    liveHomepageUrl: '',
     autoIndent: true,
     previewAutoRefresh: true,
     editorVisible: true,
@@ -86,6 +87,18 @@ function getDefaultAppSettings() {
     visibleTabs: [...DEFAULT_CONFIG_TAB_ORDER],
     tabOrder: [...DEFAULT_CONFIG_TAB_ORDER]
   };
+}
+
+function normalizeLiveHomepageUrl(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return parsed.href;
+  } catch {
+    return '';
+  }
 }
 
 function normalizeTabOrder(value) {
@@ -265,6 +278,7 @@ function normalizeAppSettings(value) {
   return {
     theme: value.theme === 'light' ? 'light' : value.theme === 'dark' ? 'dark' : defaults.theme,
     customPageTitle: typeof value.customPageTitle === 'string' ? value.customPageTitle.trim() : defaults.customPageTitle,
+    liveHomepageUrl: normalizeLiveHomepageUrl(value.liveHomepageUrl),
     autoIndent: typeof value.autoIndent === 'boolean' ? value.autoIndent : defaults.autoIndent,
     previewAutoRefresh: typeof value.previewAutoRefresh === 'boolean'
       ? value.previewAutoRefresh : defaults.previewAutoRefresh,

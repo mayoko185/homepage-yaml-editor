@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css?v=5.65.16">
-    <link rel="stylesheet" href="styles.css?v=171">
+    <link rel="stylesheet" href="styles.css?v=192">
     <script src="runtime-config.js"></script>
     <script src="theme-bootstrap.js?v=1"></script>
 </head>
@@ -33,6 +33,12 @@
         <header class="page-header">
             <h1 id="app-title">Homepage YAML Editor</h1>
             <div class="header-actions">
+                <a class="live-homepage-link header-icon-control" id="live-homepage-link" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open live Homepage dashboard" hidden>
+                    <svg class="header-control-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M14 5h5v5M10 14 19 5M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    </svg>
+                    <span class="header-control-label" aria-hidden="true">Live Homepage</span>
+                </a>
                 <a class="docs-link header-icon-control" href="https://gethomepage.dev/configs/" target="_blank" rel="noopener noreferrer" aria-label="Open Homepage configuration documentation">
                     <svg class="header-control-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5v-16zM20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5v-16z"></path>
@@ -276,6 +282,11 @@
                                     <input type="text" id="settings-custom-page-title" maxlength="200" placeholder="Homepage YAML Editor">
                                     <small>Leave blank to use Homepage YAML Editor</small>
                                 </label>
+                                <label class="settings-text-field" for="settings-live-homepage-url">
+                                    <span>Live Homepage URL</span>
+                                    <input type="url" id="settings-live-homepage-url" maxlength="500" placeholder="https://homepage.example.com" inputmode="url" autocomplete="off" spellcheck="false">
+                                    <small>Leave blank to hide the Live Homepage button</small>
+                                </label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                             </div>
@@ -425,6 +436,6 @@
     <script src="vendor/js-yaml/js-yaml.min.js?v=4.3.0"></script>
     <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
     <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
-    <script src="app.js?v=147"></script>
+    <script src="app.js?v=148"></script>
 </body>
 </html>

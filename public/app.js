@@ -3264,6 +3264,7 @@
         let savedAppSettings = {
             theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
             customPageTitle: '',
+            liveHomepageUrl: '',
             autoIndent: autoIndentToggle.checked,
             previewAutoRefresh: previewAutoRefreshToggle.checked,
             editorVisible: editorVisibilityToggle.checked,
@@ -3282,6 +3283,29 @@
             const requestedTabs = Array.isArray(visibleTabs) ? visibleTabs : [];
             const normalizedTabs = tabOrder.filter((tabName) => requestedTabs.includes(tabName));
             return normalizedTabs.length > 0 ? normalizedTabs : [...tabOrder];
+        }
+        function normalizeLiveHomepageUrl(value) {
+            const raw = typeof value === 'string' ? value.trim() : '';
+            if (!raw) return '';
+            try {
+                const parsed = new URL(raw, window.location.origin);
+                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+                return parsed.href;
+            } catch {
+                return '';
+            }
+        }
+        function applyLiveHomepageLink(url) {
+            const link = document.getElementById('live-homepage-link');
+            if (!link) return;
+            const normalized = normalizeLiveHomepageUrl(url);
+            if (!normalized) {
+                link.hidden = true;
+                link.removeAttribute('href');
+                return;
+            }
+            link.hidden = false;
+            link.href = normalized;
         }
         function getFirstVisibleConfigTab() {
             return savedAppSettings.tabOrder.find((tabName) => savedAppSettings.visibleTabs.includes(tabName)) || 'services';
@@ -3350,6 +3374,7 @@
             savedAppSettings = {
                 theme: settings.theme === 'light' ? 'light' : 'dark',
                 customPageTitle: typeof settings.customPageTitle === 'string' ? settings.customPageTitle.trim() : '',
+                liveHomepageUrl: normalizeLiveHomepageUrl(settings.liveHomepageUrl),
                 autoIndent: settings.autoIndent !== false,
                 previewAutoRefresh: settings.previewAutoRefresh !== false,
                 editorVisible: settings.editorVisible !== false,
@@ -3362,6 +3387,7 @@
             document.title = pageTitle;
             document.getElementById('app-title').textContent = pageTitle;
             applyTheme(savedAppSettings.theme !== 'light');
+            applyLiveHomepageLink(savedAppSettings.liveHomepageUrl);
             autoIndentToggle.checked = savedAppSettings.autoIndent;
             previewAutoRefreshToggle.checked = savedAppSettings.previewAutoRefresh;
             editorVisibilityToggle.checked = savedAppSettings.editorVisible;
@@ -3412,6 +3438,10 @@
             document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
                 panel.hidden = panel.getAttribute('data-settings-panel') !== activeTabName;
             });
+            const settingsScrollContainer = document.querySelector('#settings-modal .settings-tabs');
+            if (settingsScrollContainer) {
+                settingsScrollContainer.scrollTop = 0;
+            }
             if (focus) {
                 tabList.querySelector(`[role="tab"][data-settings-tab="${activeTabName}"]`)?.focus();
             }
@@ -3440,6 +3470,7 @@
             const settings = getPersistentAppSettings();
             document.querySelector(`input[name="settings-theme"][value="${settings.theme}"]`).checked = true;
             document.getElementById('settings-custom-page-title').value = settings.customPageTitle;
+            document.getElementById('settings-live-homepage-url').value = settings.liveHomepageUrl || '';
             document.getElementById('settings-auto-indent').checked = settings.autoIndent;
             document.getElementById('settings-preview-auto-refresh').checked = settings.previewAutoRefresh;
             document.getElementById('settings-editor-visible').checked = settings.editorVisible;
@@ -3467,6 +3498,7 @@
             applyPersistentAppSettings({
                 theme,
                 customPageTitle: document.getElementById('settings-custom-page-title').value,
+                liveHomepageUrl: document.getElementById('settings-live-homepage-url').value,
                 autoIndent: document.getElementById('settings-auto-indent').checked,
                 previewAutoRefresh: document.getElementById('settings-preview-auto-refresh').checked,
                 editorVisible: document.getElementById('settings-editor-visible').checked,

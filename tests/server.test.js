@@ -120,6 +120,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.deepEqual(defaultAppSettings.settings, {
       theme: 'light',
       customPageTitle: '',
+      liveHomepageUrl: '',
       autoIndent: true,
       previewAutoRefresh: true,
       editorVisible: true,
@@ -134,6 +135,7 @@ test('serves optimized assets and supports the active configuration APIs', async
         settings: {
           theme: 'dark', autoIndent: false, previewAutoRefresh: false, editorVisible: false, interactiveEditor: true,
           customPageTitle: '  My YAML Dashboard  ',
+          liveHomepageUrl: '  https://homepage.example.com/  ',
           visibleTabs: ['kubernetes', 'services'], tabOrder: ['kubernetes', 'services'], ignored: 'value'
         }
       })
@@ -142,6 +144,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.deepEqual((await settingsSaveResponse.json()).settings, {
       theme: 'dark',
       customPageTitle: 'My YAML Dashboard',
+      liveHomepageUrl: 'https://homepage.example.com/',
       autoIndent: false,
       previewAutoRefresh: false,
       editorVisible: false,
@@ -152,6 +155,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'settings.json'), 'utf8')), {
       theme: 'dark',
       customPageTitle: 'My YAML Dashboard',
+      liveHomepageUrl: 'https://homepage.example.com/',
       autoIndent: false,
       previewAutoRefresh: false,
       editorVisible: false,
@@ -159,6 +163,19 @@ test('serves optimized assets and supports the active configuration APIs', async
       visibleTabs: ['kubernetes', 'services'],
       tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });
+
+    const invalidSettingsResponse = await fetch(`${baseUrl}/api/app-settings`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          theme: 'dark', autoIndent: true, previewAutoRefresh: true, editorVisible: true, interactiveEditor: false,
+          customPageTitle: '', liveHomepageUrl: 'javascript:alert(1)'
+        }
+      })
+    });
+    assert.equal(invalidSettingsResponse.status, 200);
+    assert.equal((await invalidSettingsResponse.json()).settings.liveHomepageUrl, '');
 
     const optionTypesResponse = await fetch(`${baseUrl}/api/option-types`);
     const optionTypes = await optionTypesResponse.json();

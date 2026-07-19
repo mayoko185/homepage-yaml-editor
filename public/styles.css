@@ -1887,7 +1887,11 @@
         .header-actions form[hidden] {
             display: none;
         }
+        .header-actions .header-icon-control[hidden] {
+            display: none;
+        }
         .docs-link,
+        .live-homepage-link,
         .theme-toggle,
         .settings-button,
         .logout-button {
@@ -1911,6 +1915,7 @@
             transition: background-color 0.18s ease, color 0.18s ease;
         }
         .docs-link:hover,
+        .live-homepage-link:hover,
         .theme-toggle:hover,
         .settings-button:hover,
         .logout-button:hover {
@@ -2971,19 +2976,34 @@
             flex-direction: column;
             overflow: hidden;
         }
+        .settings-modal-content .modal-header {
+            flex: 0 0 auto;
+        }
+        .settings-modal-content .modal-actions {
+            flex: 0 0 auto;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 14px;
+            padding: 12px 0 0;
+            background: var(--container-bg);
+            border-top: 1px solid var(--border-color);
+        }
         #settings-form {
-            display: grid;
-            grid-template-rows: minmax(0, 1fr) auto;
-            gap: 9px;
-            min-height: 0;
+            display: flex;
+            flex-direction: column;
             flex: 1;
+            min-height: 0;
         }
         .settings-tabs {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
             display: grid;
             grid-template-columns: 124px minmax(0, 1fr);
             align-items: start;
             gap: 10px;
-            min-height: 0;
+            padding-bottom: 10px;
         }
         .settings-tab-list {
             display: grid;
@@ -3029,9 +3049,6 @@
         .settings-tab-panel {
             display: grid;
             gap: 9px;
-            min-height: 0;
-            overflow-y: auto;
-            overscroll-behavior: contain;
         }
         .settings-tab-panel[hidden] {
             display: none;
