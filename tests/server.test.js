@@ -146,8 +146,8 @@ test('serves optimized assets and supports the active configuration APIs', async
       liveHomepageUrl: '',
       autoIndent: true,
       previewAutoRefresh: true,
-      editorVisible: true,
-      interactiveEditor: false,
+      editorVisible: false,
+      interactiveEditor: true,
       visibleTabs: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'],
       tabOrder: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes']
     });
