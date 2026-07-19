@@ -93,6 +93,14 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+Check dependencies for known vulnerabilities:
+
+```sh
+pnpm audit --audit-level=high
+# or
+pnpm run audit
+```
+
 The default Node integration suite does not require a browser. The optional real-browser suite uses Playwright Chromium:
 
 ```sh

@@ -41,6 +41,17 @@ test('Docker image copies every runtime server module', async () => {
   assert.match(dockerfile, /^COPY option-types\.default\.json \.\/$/m);
 });
 
+test('footer version in public/index.html matches package.json', async () => {
+  const pkg = JSON.parse(await fs.readFile(path.resolve(__dirname, '..', 'package.json'), 'utf8'));
+  const indexHtml = await fs.readFile(path.resolve(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const escapedVersion = pkg.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(
+    indexHtml,
+    new RegExp(`<span>v${escapedVersion}</span>`),
+    `public/index.html footer must show v${pkg.version}. Update the footer when bumping the package version.`
+  );
+});
+
 async function waitForServer(baseUrl, child) {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (child.exitCode !== null) {
@@ -570,7 +581,7 @@ test('optional login protects the editor and APIs with a form-based session', as
     });
     assert.match(secureLoginResponse.headers.get('set-cookie'), /; Secure/);
 
-    for (let attempt = 0; attempt < 10; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       const failedResponse = await fetch(`${baseUrl}/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },

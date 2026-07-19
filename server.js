@@ -29,7 +29,7 @@ const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
 const SESSION_COOKIE_NAME = 'homepage_editor_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-const MAX_LOGIN_ATTEMPTS = 10;
+const MAX_LOGIN_ATTEMPTS = 5;
 const MAX_AUTH_STATE_ENTRIES = 10_000;
 const AUTH_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const sessions = new Map();
@@ -172,8 +172,18 @@ function normalizeOptionDefinitions(value) {
 
 async function writeJsonAtomically(filePath, value) {
   const temporaryPath = `${filePath}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  await fs.rename(temporaryPath, filePath);
+  const payload = `${JSON.stringify(value, null, 2)}\n`;
+  let handle;
+  try {
+    handle = await fs.open(temporaryPath, 'wx', 0o600);
+    await handle.writeFile(payload, 'utf8');
+    await handle.close();
+    await fs.rename(temporaryPath, filePath);
+  } catch (error) {
+    if (handle) await handle.close().catch(() => undefined);
+    await fs.unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
 }
 
 async function loadOptionDefinitions() {

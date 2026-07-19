@@ -5,10 +5,11 @@ This file records notable user-facing, security, deployment, and behavior change
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.1] - 2026-07-18
 
 ### Added
 
+- Added an `pnpm audit --audit-level=high` script (`pnpm run audit`) and documented the dependency-audit expectation for lockfile and dependency changes.
 - Added a persistent custom page title setting that updates both the application heading and browser tab.
 - Added inline renaming for dashboard layout tabs in the tab manager.
 - Added a persistent security warning when editor authentication is disabled and optional Playwright browser coverage.

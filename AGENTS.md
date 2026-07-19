@@ -38,6 +38,7 @@ Use Node.js 20 or newer and pnpm 11.7.0.
 ```sh
 pnpm install --frozen-lockfile
 pnpm test
+pnpm audit --audit-level=high
 pnpm dev
 ```
 
@@ -72,6 +73,7 @@ node --check public/app.js
 ## Testing Expectations
 
 - Run `pnpm test` after server, API, caching, or file-handling changes.
+- Run `pnpm audit --audit-level=high` (or `pnpm run audit`) after dependency or lockfile changes; resolve high or critical advisories before merging.
 - Add or update tests for new API behavior, validation rules, or response headers.
 - For editor or preview changes, verify in a real browser that:
   - YAML editing updates the preview.
@@ -95,4 +97,5 @@ node --check public/app.js
 - Keep changelog entries concise and grouped by the final user-visible outcome. When a feature or design changes several times before it is finished, add one general entry rather than a play-by-play of each iteration.
 - Do not add separate entries for minor visual polish, wording or icon tweaks, routine bug fixes, internal refactors, or details already covered by a broader entry.
 - Update `README.md` when commands, environment variables, deployment behavior, or user-visible functionality changes.
+- When bumping the version in `package.json`, also update the footer version in `public/index.html`. A unit test in `tests/server.test.js` enforces this and will fail if the two drift apart.
 - Do not commit generated dependency directories such as `node_modules` or `.pnpm-store`.
