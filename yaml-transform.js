@@ -695,6 +695,18 @@ function transformPreviewYaml({ files, operation }) {
       servicesChanged = true;
       break;
     }
+    case 'service.duplicate': {
+      const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
+      const clonedItem = service.item.clone();
+      const clonedPair = getSinglePair(clonedItem, 'Cloned service');
+      const originalName = scalarValue(clonedPair.key);
+      if (YAML.isScalar(clonedPair.key)) {
+        clonedPair.key.value = originalName + ' (cloned)';
+      }
+      sourceServices.items.splice(service.index + 1, 0, clonedItem);
+      servicesChanged = true;
+      break;
+    }
     case 'service.move': {
       const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
       const destinationTarget = operation.destinationTarget;

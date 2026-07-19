@@ -2003,6 +2003,13 @@
                     openPreviewEditDialog(action, source);
                     return;
                 }
+                if (action === 'service.duplicate') {
+                    await applyPreviewEdit(
+                        { type: 'service.duplicate', target: source },
+                        `Duplicated service ${source.serviceName}.`
+                    );
+                    return;
+                }
                 if (action === 'service.move-up' || action === 'service.move-down') {
                     const direction = action.endsWith('up') ? 'up' : 'down';
                     await applyPreviewEdit(
@@ -3023,7 +3030,9 @@
                     ? ' preview-edit-move-up'
                     : action.endsWith('.move-down')
                         ? ' preview-edit-move-down'
-                        : '';
+                        : action.endsWith('.duplicate')
+                            ? ' preview-edit-duplicate'
+                            : '';
             return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}<span class="preview-control-label preview-edit-action-label" aria-hidden="true">${escapeHtml(label)}</span></button>`;
         }
 
@@ -3039,6 +3048,7 @@
         function getServiceEditControls(source, position, serviceCount) {
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('service.edit', source, 'Edit service', '&#9998;')}
+                ${getPreviewEditActionButton('service.duplicate', source, 'Duplicate service', '&#10697;')}
                 ${getPreviewEditActionButton('service.move-up', source, 'Move service up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('service.move-down', source, 'Move service down', '&darr;', { disabled: position === serviceCount - 1 })}
                 ${getPreviewEditActionButton('service.remove', source, 'Delete service', '&times;', { danger: true })}
