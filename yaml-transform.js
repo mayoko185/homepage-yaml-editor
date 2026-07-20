@@ -539,7 +539,7 @@ function moveLayoutTab(settingsDocument, tabName, operation) {
 }
 
 function serializeDocument(document, originalText) {
-  let output = document.toString({ indent: 2, lineWidth: 0 });
+  let output = document.toString({ indent: 2 });
   if (!String(originalText).endsWith('\n')) {
     output = output.replace(/\n$/, '');
   }

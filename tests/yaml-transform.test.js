@@ -905,3 +905,352 @@ test('round-trip convert to nested and back restores the original flat structure
   assert.equal(entries[0]['Service A'].href, 'https://a.example');
   assert.equal(entries[1]['Service B'].href, 'https://b.example');
 });
+
+// ── Serialization-formatting tests (service move vs group move) ──
+
+test('preserves service indentation after cross-group service move', () => {
+  const services = `# top comment
+- Group A:
+    - Service One:
+        href: https://one.example
+        description: First
+- Group B:
+    - Service Two:
+        href: https://two.example
+`;
+
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Service One', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Group B', groupIndex: 0 },
+    destinationIndex: 1
+  }, { services });
+
+  const parsed = YAML.parse(files.services);
+  assert.deepEqual(
+    parsed[0]['Group A'].map((entry) => Object.keys(entry)[0]),
+    []
+  );
+  assert.deepEqual(
+    parsed[1]['Group B'].map((entry) => Object.keys(entry)[0]),
+    ['Service Two', 'Service One']
+  );
+
+  // Top-level comment preserved
+  assert.match(files.services, /^# top comment\n/m);
+
+  // Service list items at correct indent (4 spaces for "- Service..." inside a group)
+  assert.match(files.services, /^    - Service One:$/m);
+  assert.match(files.services, /^    - Service Two:$/m);
+
+  // Service fields at correct indent (8 spaces for field keys inside a service)
+  // Service One's fields must remain at 8-space indent
+  assert.match(files.services, /^        href: https:\/\/one\.example$/m);
+  assert.match(files.services, /^        description: First$/m);
+
+  // Service Two's fields must remain at 8-space indent
+  assert.match(files.services, /^        href: https:\/\/two\.example$/m);
+
+  // Must NOT regress to 2-space or 4-space field indentation
+  const fieldLines = files.services.split('\n').filter((line) => line.startsWith('        href:') || line.startsWith('        description:'));
+  assert.equal(fieldLines.length, 3, 'Expected 3 field lines at 8-space indent');
+});
+
+test('preserves service indentation after same-group service move', () => {
+  const services = `# top
+- My Group:
+    - First:
+        href: https://first.example
+    - Second:
+        href: https://second.example
+    - Third:
+        href: https://third.example
+`;
+
+  // Move "Third" up one position
+  let files = transform({
+    type: 'service.move',
+    target: { groupName: 'My Group', groupIndex: 0, serviceName: 'Third', serviceIndex: 0 },
+    direction: 'up'
+  }, { services });
+
+  let parsed = YAML.parse(files.services);
+  assert.deepEqual(
+    parsed[0]['My Group'].map((entry) => Object.keys(entry)[0]),
+    ['First', 'Third', 'Second']
+  );
+
+  // Indentation must be preserved
+  assert.match(files.services, /^    - First:$/m);
+  assert.match(files.services, /^    - Third:$/m);
+  assert.match(files.services, /^    - Second:$/m);
+  assert.match(files.services, /^        href: https:\/\/first\.example$/m);
+  assert.match(files.services, /^        href: https:\/\/third\.example$/m);
+  assert.match(files.services, /^        href: https:\/\/second\.example$/m);
+
+  // Move "Third" to position 0 via destinationIndex via drag-drop path (same group)
+  files = transform({
+    type: 'service.move',
+    target: { groupName: 'My Group', groupIndex: 0, serviceName: 'Third', serviceIndex: 0 },
+    destinationIndex: 0,
+    destinationTarget: { groupName: 'My Group', groupIndex: 0 }
+  }, { services });
+
+  parsed = YAML.parse(files.services);
+  assert.deepEqual(
+    parsed[0]['My Group'].map((entry) => Object.keys(entry)[0]),
+    ['Third', 'First', 'Second']
+  );
+
+  // Indentation must still be correct
+  assert.match(files.services, /^        href: https:\/\/first\.example$/m);
+  assert.match(files.services, /^        href: https:\/\/third\.example$/m);
+  assert.match(files.services, /^        href: https:\/\/second\.example$/m);
+});
+
+test('preserves group indentation after group move (control)', () => {
+  const services = `# comment
+- Group A:
+    - Svc A:
+        href: https://a.example
+- Group B:
+    - Svc B:
+        href: https://b.example
+`;
+
+  const files = transform({
+    type: 'group.move',
+    target: { groupName: 'Group B', groupIndex: 0 },
+    direction: 'up'
+  }, { services });
+
+  const parsed = YAML.parse(files.services);
+  assert.deepEqual(
+    parsed.map((group) => Object.keys(group)[0]),
+    ['Group B', 'Group A']
+  );
+
+  // Groups at indent 0, services at indent 4, fields at indent 8
+  assert.match(files.services, /^- Group B:$/m);
+  assert.match(files.services, /^- Group A:$/m);
+  assert.match(files.services, /^    - Svc A:$/m);
+  assert.match(files.services, /^    - Svc B:$/m);
+  assert.match(files.services, /^        href: https:\/\/a\.example$/m);
+  assert.match(files.services, /^        href: https:\/\/b\.example$/m);
+});
+
+test('preserves comments around moved services', () => {
+  const services = `# file comment
+- Group A:
+    # before Svc One
+    - Service One:
+        href: https://one.example
+    # after Svc One
+- Group B:
+    # before Svc Two
+    - Service Two:
+        href: https://two.example
+    # after Svc Two
+`;
+
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Service One', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Group B', groupIndex: 0 },
+    destinationIndex: 1
+  }, { services });
+
+  // Top comment preserved
+  assert.match(files.services, /^# file comment$/m);
+
+  // Comments in Group A that were attached to Service One may or may not move —
+  // the key assertion is that Group B still has its comments
+  assert.match(files.services, /# before Svc Two/);
+  assert.match(files.services, /# after Svc Two/);
+
+  // Data integrity
+  const parsed = YAML.parse(files.services);
+  assert.equal(Object.keys(parsed[0]['Group A']).length, 0, 'Group A should be empty');
+  assert.deepEqual(
+    parsed[1]['Group B'].map((entry) => Object.keys(entry)[0]),
+    ['Service Two', 'Service One']
+  );
+});
+
+test('preserves service indentation with widget sub-maps and inline comments', () => {
+  const services = `# top
+- Group A:
+    - Svc One:
+        href: https://one
+        widget:
+          type: customapi
+          url: https://api.one
+          # inline widget comment
+- Group B:
+    - Svc Two:
+        href: https://two
+`;
+
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Svc One', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Group B', groupIndex: 0 },
+    destinationIndex: 1
+  }, { services });
+
+  const parsed = YAML.parse(files.services);
+  assert.deepEqual(
+    parsed[1]['Group B'].map((entry) => Object.keys(entry)[0]),
+    ['Svc Two', 'Svc One']
+  );
+  assert.equal(parsed[1]['Group B'][1]['Svc One'].href, 'https://one');
+  assert.equal(parsed[1]['Group B'][1]['Svc One'].widget.type, 'customapi');
+  assert.equal(parsed[1]['Group B'][1]['Svc One'].widget.url, 'https://api.one');
+
+  // Widget fields at 10-space indent
+  assert.match(files.services, /^          type: customapi$/m);
+  assert.match(files.services, /^          url: https:\/\/api\.one$/m);
+
+  // Inline widget comment preserved
+  assert.match(files.services, /# inline widget comment/);
+
+  // Top-level structure
+  assert.match(files.services, /^    - Svc One:$/m);
+  assert.match(files.services, /^    - Svc Two:$/m);
+  assert.match(files.services, /^        href: https:\/\/one$/m);
+  assert.match(files.services, /^        widget:$/m);
+});
+
+test('diagnostic: dump serialized output for cross-group, same-group, and drag-drop moves', () => {
+  const input = `# comment
+- Group A:
+    - Svc 1:
+        href: https://1
+        description: One
+    - Svc 2:
+        href: https://2
+- Group B:
+    - Svc 3:
+        href: https://3
+`;
+
+  // Cross-group (drag-drop path): move Svc 1 from Group A to Group B, position 1
+  const cross = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Svc 1', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Group B', groupIndex: 0 },
+    destinationIndex: 1
+  }, { services: input });
+
+  // Same-group via direction (button): move Svc 1 down
+  const sameDir = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Svc 1', serviceIndex: 0 },
+    direction: 'down'
+  }, { services: input });
+
+  // Same-group via destinationIndex with destinationTarget (drag-drop within same group)
+  const sameDrag = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Svc 1', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Group A', groupIndex: 0 },
+    destinationIndex: 1
+  }, { services: input });
+
+  // Group move (control): swap groups
+  const groupMove = transform({
+    type: 'group.move',
+    target: { groupName: 'Group B', groupIndex: 0 },
+    direction: 'up'
+  }, { services: input });
+
+  // All must parse
+  assert.doesNotThrow(() => YAML.parse(cross.services));
+  assert.doesNotThrow(() => YAML.parse(sameDir.services));
+  assert.doesNotThrow(() => YAML.parse(sameDrag.services));
+  assert.doesNotThrow(() => YAML.parse(groupMove.services));
+
+  // All must preserve the top comment
+  for (const name of ['cross-group', 'same-group direction', 'same-group drag', 'group move']) {
+    const result = name === 'cross-group' ? cross.services
+      : name === 'same-group direction' ? sameDir.services
+      : name === 'same-group drag' ? sameDrag.services
+      : groupMove.services;
+    assert.match(result, /^# comment$/m, `${name}: top comment preserved`);
+  }
+
+  // Structural assertions
+  const crossParsed = YAML.parse(cross.services);
+  assert.deepEqual(crossParsed[1]['Group B'].map((e) => Object.keys(e)[0]), ['Svc 3', 'Svc 1'], 'cross-group');
+  assert.deepEqual(crossParsed[0]['Group A'].map((e) => Object.keys(e)[0]), ['Svc 2'], 'cross-group source');
+
+  const sameDirParsed = YAML.parse(sameDir.services);
+  assert.deepEqual(sameDirParsed[0]['Group A'].map((e) => Object.keys(e)[0]), ['Svc 2', 'Svc 1'], 'same-group dir');
+
+  const sameDragParsed = YAML.parse(sameDrag.services);
+  assert.deepEqual(sameDragParsed[0]['Group A'].map((e) => Object.keys(e)[0]), ['Svc 2', 'Svc 1'], 'same-group drag');
+
+  const groupMoveParsed = YAML.parse(groupMove.services);
+  assert.deepEqual(groupMoveParsed.map((g) => Object.keys(g)[0]), ['Group B', 'Group A'], 'group move');
+});
+
+test('cross-group service move preserves block style for services with widgets', () => {
+  const embyYaml = `# comment
+- Media:
+    - Emby:
+        icon: emby.png
+        href: https://emby.mayoko.page
+        siteMonitor: https://emby.mayoko.page
+        statusStyle: basic
+        description: Movie/TV Show Media Server
+        widget:
+          type: emby
+          fields:
+            - movies
+            - series
+            - episodes
+          url: https://emby.lan.mayoko.page
+          key: removed
+          enableBlocks: true
+- Other:
+    - Service:
+        href: https://other
+`;
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Media', groupIndex: 0, serviceName: 'Emby', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Other', groupIndex: 0 },
+    destinationIndex: 1
+  }, { services: embyYaml });
+
+  // Structural integrity
+  const parsed = YAML.parse(files.services);
+  assert.equal(Object.keys(parsed[0]['Media']).length, 0, 'source group must be empty');
+  assert.equal(parsed[1]['Other'][1].Emby.href, 'https://emby.mayoko.page');
+  assert.equal(parsed[1]['Other'][1].Emby.widget.type, 'emby');
+  assert.deepEqual(parsed[1]['Other'][1].Emby.widget.fields, ['movies', 'series', 'episodes']);
+
+  // Block style assertions — the service must NOT be rendered as flow maps/sequences
+  // The service name must be a block mapping key: "- Emby:", not "- { Emby:"
+  assert.match(files.services, /^    - Emby:$/m, 'service name must be block-style YAML key');
+  assert.doesNotMatch(files.services, /Emby: \{/, 'must NOT become flow-style map');
+
+  // The widget sub-map must stay block-style (key: value on own line)
+  assert.match(files.services, /^        widget:$/m, 'widget key must be block-style');
+  assert.doesNotMatch(files.services, /widget: \{/, 'widget must NOT be flow-style map');
+
+  // The widget fields sequence must stay block-style
+  assert.match(files.services, /^            - movies$/m, 'field list items must be block-style');
+  assert.match(files.services, /^            - episodes$/m, 'field list items must be block-style');
+  assert.doesNotMatch(files.services, /fields: \[/, 'fields must NOT be flow-style sequence');
+
+  // Regular fields must stay block-style
+  assert.match(files.services, /^        icon: emby\.png$/m, 'simple fields must be block-style');
+  assert.doesNotMatch(files.services, /icon: emby\.png,/, 'simple fields must NOT be inline flow-style');
+
+  // Top comment preserved
+  assert.match(files.services, /^# comment$/m, 'top comment preserved');
+
+  // The destination group's existing service should not be affected
+  assert.match(files.services, /^    - Service:$/m, 'existing service in destination group preserved');
+});
