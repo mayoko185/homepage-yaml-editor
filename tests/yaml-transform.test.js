@@ -478,6 +478,56 @@ test('manages Homepage layout tabs and can create an initial service group', () 
       values: { name: 'Duplicate Group Tab', groupName: 'First Group', createGroup: true }
     }
   }), /already exists/);
+
+  // S4.1: new group with afterTab='Main' inserts right after the anchor pair
+  const s41Files = transform({
+    type: 'tab.add',
+    values: { name: 'Archive', groupName: 'New Group', createGroup: true, afterTab: 'Main' }
+  });
+  let s41Settings = YAML.parse(s41Files.settings);
+  assert.equal(s41Settings.layout['New Group'].tab, 'Archive');
+  assert.deepEqual(Object.keys(s41Settings.layout), ['First Group', 'New Group', 'Second Group']);
+  assert.deepEqual(
+    YAML.parse(s41Files.services).map((group) => Object.keys(group)[0]),
+    ['First Group', 'Second Group', 'New Group']
+  );
+  assert.match(s41Files.settings, /keep this settings comment/);
+  assert.match(s41Files.services, /keep this services comment/);
+
+  // S4.2: no afterTab preserves append-at-end semantics (backward compatible)
+  const s42Files = transform({
+    type: 'tab.add',
+    values: { name: 'Archive', groupName: 'Second Group' }
+  });
+  let s42Settings = YAML.parse(s42Files.settings);
+  assert.equal(s42Settings.layout['Second Group'].tab, 'Archive');
+  assert.deepEqual(Object.keys(s42Settings.layout), ['First Group', 'Second Group']);
+
+  const s42CleanFiles = transformPreviewYaml({
+    files: { services, settings: 'title: Test\n' },
+    operation: {
+      type: 'tab.add',
+      values: { name: 'Solo', groupName: 'Solo Group', createGroup: true }
+    }
+  }).files;
+  assert.deepEqual(Object.keys(YAML.parse(s42CleanFiles.settings).layout), ['Solo Group']);
+
+  // S4.3: existing group with afterTab only updates the tab field, pair is not relocated
+  const s43Files = transform({
+    type: 'tab.add',
+    values: { name: 'Reused Tab', groupName: 'Second Group', afterTab: 'Main' }
+  });
+  let s43Settings = YAML.parse(s43Files.settings);
+  assert.equal(s43Settings.layout['Second Group'].tab, 'Reused Tab');
+  assert.deepEqual(Object.keys(s43Settings.layout), ['First Group', 'Second Group']);
+
+  const s43ChainedFiles = transform({
+    type: 'tab.add',
+    values: { name: 'Another', groupName: 'First Group', afterTab: 'Reused Tab' }
+  }, s43Files);
+  let s43ChainedSettings = YAML.parse(s43ChainedFiles.settings);
+  assert.equal(s43ChainedSettings.layout['First Group'].tab, 'Another');
+  assert.deepEqual(Object.keys(s43ChainedSettings.layout), ['First Group', 'Second Group']);
 });
 
 test('rejects invalid YAML and invalid movement', () => {

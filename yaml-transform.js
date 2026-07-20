@@ -441,14 +441,25 @@ function getLayoutTabs(layoutMap) {
   return tabs;
 }
 
-function addLayoutTab(settingsDocument, tabName, groupName) {
+function findLastLayoutPairIndex(layoutMap, tabName) {
+  for (let i = layoutMap.items.length - 1; i >= 0; i--) {
+    if (getLayoutPairTab(layoutMap.items[i]) === tabName) return i;
+  }
+  return -1;
+}
+
+function addLayoutTab(settingsDocument, tabName, groupName, afterTab) {
   const layoutMap = getOrCreateLayoutMap(settingsDocument);
   if (getLayoutTabs(layoutMap).includes(tabName)) {
     throw new YamlTransformError(`Preview tab "${tabName}" already exists. Choose a different tab name`);
   }
   const layoutEntry = findLayoutPair(layoutMap, groupName);
   if (!layoutEntry) {
-    layoutMap.set(groupName, settingsDocument.createNode({ tab: tabName }));
+    const newPair = settingsDocument.createPair(groupName, settingsDocument.createNode({ tab: tabName }));
+    const insertAt = afterTab
+      ? (() => { const idx = findLastLayoutPairIndex(layoutMap, afterTab); return idx >= 0 ? idx + 1 : layoutMap.items.length; })()
+      : layoutMap.items.length;
+    layoutMap.items.splice(insertAt, 0, newPair);
     return;
   }
   if (layoutEntry.pair.value === null || YAML.isScalar(layoutEntry.pair.value) && layoutEntry.pair.value.value === null) {
@@ -999,7 +1010,7 @@ function transformPreviewYaml({ files, operation }) {
       } else if (!hasServiceGroup && !hasLayoutGroup) {
         throw new YamlTransformError(`Initial group "${groupName}" was not found. Choose an existing group or create a new one`);
       }
-      addLayoutTab(settingsDocument, tabName, groupName);
+      addLayoutTab(settingsDocument, tabName, groupName, values.afterTab);
       settingsChanged = true;
       break;
     }
