@@ -14,6 +14,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- Redesigned the preview tab strip: tabs now support drag-and-drop reordering with a visible drop line, a hover toolbar with rename, remove, and jump-to-source, and an inline "+ Add tab" control that drops into rename mode for the new tab. Removed the separate "Manage tabs" modal.
 - Extended the Interactive Editor to nested service groups: hover toolbars now support editing, moving, and deleting nested groups and the services inside them, each nested group has its own Add service button, and preview-to-source navigation jumps to the correct nested YAML line.
 - Added a Convert into a nested group control in the service group edit dialog that wraps a group's direct services into numbered nested sub-groups, with an adjustable count that auto-names sub-groups 1..N. A convert-back control flattens nested sub-groups into direct services with a collapse warning.
 

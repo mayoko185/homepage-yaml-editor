@@ -55,8 +55,12 @@
         let previewEditDialogState = null;
         let previewEditPreviousFocus = null;
         let previewEditPreviousFocusVisible = false;
-        let previewTabPreviousFocus = null;
-        let previewTabRenameName = null;
+        let pendingInlineRenameTab = null;
+        let pendingInlineRenameBackup = null;
+        let previewTabAddPopover = null;
+        let previewTabAddAnchor = null;
+        let previewTabAddInFlight = false;
+        let previewTabAddOutsideClickListener = null;
         let activePreviewDrag = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
             mode: 'yaml',
@@ -1048,7 +1052,7 @@
                         <button type="button" class="preview-edit-action preview-edit-delete" data-option-type-remove="${index}" aria-label="Remove ${escapeHtml(definition.name || 'option')}">&times;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Remove option type</span></button>
                     </span>
                 </div>`;
-            }).join('') || '<div class="preview-tab-manager-empty">No option types are configured.</div>';
+            }).join('') || '<div class="option-types-list-empty">No option types are configured.</div>';
             renderOptionDefaultsDraft();
         }
 
@@ -1500,7 +1504,7 @@
                 title.textContent = isNestedGroup ? 'Edit nested service group' : 'Edit service group';
                 submit.textContent = 'Save';
                 nameInput.value = group.groupName;
-                previewEditDialogState.availableTabs = getPreviewTabManagerData().tabs;
+                previewEditDialogState.availableTabs = getHomepageTabInfo(settings.data).tabs;
                 previewEditDialogState.originalTab = String(layout[group.groupName]?.tab || '').trim();
                 const groupFields = getPreviewOptionFields(layout[group.groupName]);
                 previewEditDialogState.groupTabFieldIndex = groupFields.findIndex((field) => field.key === 'tab');
@@ -1569,256 +1573,341 @@
             previewEditPreviousFocusVisible = false;
         }
 
-        function setPreviewTabModalStatus(message = '') {
-            const statusElement = document.getElementById('preview-tab-modal-status');
-            statusElement.textContent = message;
-            statusElement.hidden = !message;
+        function findPreviewTabButton(tabName) {
+            if (!tabName) return null;
+            return Array.from(document.querySelectorAll('.preview-tab-strip .preview-tab-btn[data-preview-tab]'))
+                .find((button) => button.getAttribute('data-preview-tab') === tabName) || null;
         }
 
-        function getPreviewTabManagerData() {
+        function enterTabRenameMode(tabName) {
+            if (!tabName) return;
+            const button = findPreviewTabButton(tabName);
+            if (!button) return;
+            const wrapper = button.closest('.preview-tab');
+            if (!wrapper) return;
+            if (wrapper.querySelector('[data-preview-tab-rename-input]')) return;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'modal-input preview-tab-rename-input';
+            input.setAttribute('data-preview-tab-rename-input', '');
+            input.setAttribute('data-preview-tab', tabName);
+            input.value = tabName;
+            input.setAttribute('aria-label', `Rename ${tabName} tab`);
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('required', '');
+
+            pendingInlineRenameBackup = button.cloneNode(true);
+            button.replaceWith(input);
+
+            input.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    exitTabRenameMode(true);
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (!input.disabled) {
+                        exitTabRenameMode(false);
+                    }
+                }
+            });
+
+            window.requestAnimationFrame(() => {
+                input.focus();
+                input.select();
+            });
+        }
+
+        async function exitTabRenameMode(save) {
+            const input = document.querySelector('[data-preview-tab-rename-input]');
+            if (!input) return;
+            const originalName = input.getAttribute('data-preview-tab');
+            const backup = pendingInlineRenameBackup;
+            pendingInlineRenameBackup = null;
+
+            if (!save) {
+                if (backup) input.replaceWith(backup);
+                return;
+            }
+
+            const newName = input.value.trim();
+            if (!newName) {
+                pendingInlineRenameBackup = backup;
+                input.focus();
+                input.select();
+                setSaveStatus('Enter a tab name to continue.', 'error');
+                return;
+            }
+            if (newName === originalName) {
+                if (backup) input.replaceWith(backup);
+                return;
+            }
+
+            input.disabled = true;
+            const wasActive = previewHomepageTab === originalName;
+            if (wasActive) {
+                previewHomepageTab = newName;
+            }
+            const applied = await applyPreviewEdit(
+                { type: 'tab.rename', target: { name: originalName }, values: { name: newName } },
+                `Renamed tab ${originalName} to ${newName}.`
+            );
+            if (applied) {
+                // The strip is rebuilt by updateVisualPreview() (called via replacePreviewEditedFiles),
+                // which already reflects the new name. No further action needed.
+                return;
+            }
+
+            if (wasActive) {
+                previewHomepageTab = originalName;
+            }
+            // The strip was not rebuilt on failure; restore the source button and re-enter rename mode.
+            if (backup) input.replaceWith(backup);
+            enterTabRenameMode(originalName);
+        }
+
+        function getTabEditControls(source) {
+            return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('tab.edit', source, 'Rename tab', '&#9998;')}
+                ${getPreviewEditActionButton('tab.remove', source, 'Remove tab', '&times;', { danger: true })}
+                ${getPreviewEditActionButton('tab.jump', source, 'Jump to tab in settings.yaml', '&#8597;')}
+            </span>`;
+        }
+
+        function buildInlineAddTabGroupOptions() {
             const settings = parseTabConfig('settings');
             const services = parseTabConfig('services');
             if (settings.error) {
-                throw new Error('Fix the settings.yaml error shown on the dashboard before managing tabs.');
+                throw new Error('Fix the settings.yaml error shown on the dashboard before adding a tab.');
             }
             if (services.error || !Array.isArray(services.data)) {
-                throw new Error('Fix the services.yaml error shown on the dashboard before managing tabs.');
+                throw new Error('Fix the services.yaml error shown on the dashboard before adding a tab.');
             }
-            const settingsData = settings.data && typeof settings.data === 'object' ? settings.data : {};
-            const layout = settingsData.layout;
-            if (layout !== undefined && (typeof layout !== 'object' || Array.isArray(layout) || layout === null)) {
-                throw new Error('Tab management requires settings.yaml layout to be a mapping of group names to options.');
-            }
-            const layoutGroups = layout || {};
-            const tabs = [];
-            const groupsByTab = {};
-            Object.entries(layoutGroups).forEach(([groupName, config]) => {
-                const tabName = config && typeof config === 'object' && typeof config.tab === 'string'
-                    ? config.tab.trim()
-                    : '';
-                if (!tabName) return;
-                if (!groupsByTab[tabName]) {
-                    tabs.push(tabName);
-                    groupsByTab[tabName] = [];
-                }
-                groupsByTab[tabName].push(groupName);
-            });
+            const tabInfo = getHomepageTabInfo(settings.data);
+            const layoutGroups = tabInfo.groupLayout || {};
+            const seen = new Set();
             const groupNames = [];
-            const seenGroups = new Set();
             services.data.forEach((group) => {
                 const groupName = Object.keys(group || {})[0];
-                if (groupName && !seenGroups.has(groupName)) {
-                    seenGroups.add(groupName);
+                if (groupName && !seen.has(groupName)) {
+                    seen.add(groupName);
                     groupNames.push(groupName);
                 }
             });
             Object.keys(layoutGroups).forEach((groupName) => {
-                if (!seenGroups.has(groupName)) {
-                    seenGroups.add(groupName);
+                if (!seen.has(groupName)) {
+                    seen.add(groupName);
                     groupNames.push(groupName);
                 }
             });
-            return { tabs, groupsByTab, groupNames, layoutGroups };
+            const existingOptions = groupNames.map((groupName) => {
+                const layoutConfig = layoutGroups[groupName];
+                const assignedTab = layoutConfig && typeof layoutConfig === 'object' ? layoutConfig.tab : '';
+                const suffix = assignedTab ? ` — currently ${assignedTab}` : ' — visible on all tabs';
+                return `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName + suffix)}</option>`;
+            }).join('');
+            return `<option value="" selected disabled>Select an initial group</option><option value="${createNewTabGroupValue}">+ Create a new service group</option>${existingOptions}`;
         }
 
-        function getTabManagerActionButton(action, tabName, label, icon, { disabled = false, danger = false } = {}) {
-            const dangerClass = danger ? ' preview-edit-delete' : '';
-            const actionClass = action === 'rename' || action === 'rename-save'
-                ? ' preview-edit-modify'
-                : action === 'move-up'
-                    ? ' preview-edit-move-up'
-                    : action === 'move-down'
-                        ? ' preview-edit-move-down'
-                        : '';
-            return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-tab-manager-action="${escapeHtml(action)}" data-tab-name="${escapeHtml(tabName)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}</button>`;
+        function setInlineAddTabStatus(message) {
+            if (!previewTabAddPopover) return;
+            const statusElement = previewTabAddPopover.querySelector('#inline-tab-status');
+            if (!statusElement) return;
+            statusElement.textContent = message || '';
+            statusElement.hidden = !message;
         }
 
-        function renderPreviewTabManager() {
-            const list = document.getElementById('preview-tab-manager-list');
-            const groupSelect = document.getElementById('preview-tab-group');
-            const submitButton = document.getElementById('preview-tab-add-submit');
-            try {
-                const data = getPreviewTabManagerData();
-                list.innerHTML = data.tabs.length > 0
-                    ? data.tabs.map((tabName, index) => {
-                        const groupCount = (data.groupsByTab[tabName] || []).length;
-                        const isRenaming = previewTabRenameName === tabName;
-                        const nameMarkup = isRenaming
-                            ? `<input type="text" class="modal-input preview-tab-manager-name-input" data-tab-manager-name-input data-tab-name="${escapeHtml(tabName)}" value="${escapeHtml(tabName)}" aria-label="New name for ${escapeHtml(tabName)}" autocomplete="off" required>`
-                            : `<span class="preview-tab-manager-name">${escapeHtml(tabName)}</span>`;
-                        const actionMarkup = isRenaming
-                            ? `${getTabManagerActionButton('rename-save', tabName, `Save renamed ${tabName} tab`, '&#10003;')}${getTabManagerActionButton('rename-cancel', tabName, 'Cancel rename', '&times;')}`
-                            : `${getTabManagerActionButton('rename', tabName, `Rename ${tabName}`, '&#9998;')}${getTabManagerActionButton('move-up', tabName, `Move ${tabName} up`, '&uarr;', { disabled: index === 0 })}${getTabManagerActionButton('move-down', tabName, `Move ${tabName} down`, '&darr;', { disabled: index === data.tabs.length - 1 })}${getTabManagerActionButton('remove', tabName, `Remove ${tabName}`, '&times;', { danger: true })}`;
-                        const tabDragAttributes = isRenaming ? '' : getDragItemAttributes('tab', { name: tabName }, index);
-                        return `<div class="preview-tab-manager-row" ${tabDragAttributes} data-preview-drop-kind="tab" data-preview-drop-index="${index}">
-                            ${nameMarkup}
-                            <span class="preview-tab-manager-count">${groupCount} group${groupCount === 1 ? '' : 's'}</span>
-                            <span class="preview-edit-actions">${actionMarkup}</span>
-                        </div>`;
-                    }).join('')
-                    : '<div class="preview-tab-manager-empty">No tabs are configured yet.</div>';
-                const existingGroupOptions = data.groupNames.map((groupName) => {
-                    const layoutConfig = data.layoutGroups[groupName];
-                    const assignedTab = layoutConfig && typeof layoutConfig === 'object' ? layoutConfig.tab : '';
-                    const suffix = assignedTab ? ` — currently ${assignedTab}` : ' — visible on all tabs';
-                    return `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName + suffix)}</option>`;
-                }).join('');
-                groupSelect.innerHTML = `<option value="" selected disabled>Select an initial group</option><option value="${createNewTabGroupValue}">+ Create a new service group</option>${existingGroupOptions}`;
-                groupSelect.value = '';
-                submitButton.disabled = false;
-                setPreviewTabModalStatus();
-                updatePreviewTabGroupMode();
-            } catch (error) {
-                list.innerHTML = `<div class="preview-tab-manager-empty">${escapeHtml(getSaveErrorSummary(error))}</div>`;
-                groupSelect.innerHTML = '';
-                submitButton.disabled = true;
-                setPreviewTabModalStatus(addErrorGuidance(error, 'Fix the YAML error and try again'));
+        function openInlineAddTabPanel(anchorButton) {
+            if (previewTabAddPopover) {
+                closeInlineAddTabPanel({ restoreFocus: true });
+                return;
             }
-        }
-
-        function updatePreviewTabGroupMode() {
-            const groupSelect = document.getElementById('preview-tab-group');
-            const newGroupField = document.getElementById('preview-tab-new-group-field');
-            const newGroupInput = document.getElementById('preview-tab-new-group');
-            const isCreatingGroup = groupSelect.value === createNewTabGroupValue;
-            newGroupField.hidden = !isCreatingGroup;
-            newGroupInput.setAttribute('aria-required', String(isCreatingGroup));
-        }
-
-        function openPreviewTabManager() {
             if (sampleModeEnabled) {
                 setSaveStatus('Load a configuration directory before managing tabs.', 'error');
                 return;
             }
-            const modal = document.getElementById('preview-tab-modal');
-            previewTabPreviousFocus = document.activeElement;
-            previewTabRenameName = null;
-            document.getElementById('preview-tab-name').value = '';
-            document.getElementById('preview-tab-new-group').value = '';
-            renderPreviewTabManager();
-            modal.hidden = false;
-            window.requestAnimationFrame(() => document.getElementById('preview-tab-name').focus());
-        }
-
-        function closePreviewTabManager() {
-            const modal = document.getElementById('preview-tab-modal');
-            if (modal.hidden) return;
-            modal.hidden = true;
-            previewTabRenameName = null;
-            setPreviewTabModalStatus();
-            if (previewTabPreviousFocus && typeof previewTabPreviousFocus.focus === 'function') {
-                previewTabPreviousFocus.focus();
+            let groupOptionsHtml;
+            try {
+                groupOptionsHtml = buildInlineAddTabGroupOptions();
+            } catch (error) {
+                setSaveStatus(addErrorGuidance(error, 'Fix the YAML error and try again.'), 'error');
+                return;
             }
-            previewTabPreviousFocus = null;
+
+            const popover = document.createElement('div');
+            popover.className = 'preview-add-tab-popover';
+            popover.setAttribute('role', 'dialog');
+            popover.setAttribute('aria-modal', 'false');
+            popover.setAttribute('aria-labelledby', 'inline-tab-title');
+            popover.innerHTML = `
+                <h4 id="inline-tab-title">Add tab</h4>
+                <div class="preview-edit-field">
+                    <label for="inline-tab-name">Tab name</label>
+                    <input type="text" id="inline-tab-name" class="modal-input" autocomplete="off" required>
+                </div>
+                <div class="preview-edit-field">
+                    <label for="inline-tab-group">Initial group</label>
+                    <select id="inline-tab-group" class="modal-input">${groupOptionsHtml}</select>
+                </div>
+                <div id="inline-tab-new-group-field" class="preview-edit-field preview-tab-new-group-field" hidden>
+                    <label for="inline-tab-new-group">New service group name</label>
+                    <input type="text" id="inline-tab-new-group" class="modal-input" autocomplete="off">
+                </div>
+                <p class="preview-edit-note">Move an existing group to the new tab or create an empty service group for it. Groups without a tab assignment remain visible everywhere.</p>
+                <p id="inline-tab-status" class="modal-status" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="inline-tab-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                    <button type="button" id="inline-tab-submit" class="modal-button">Add tab</button>
+                </div>
+            `;
+            document.body.appendChild(popover);
+            previewTabAddPopover = popover;
+            previewTabAddAnchor = anchorButton || null;
+            previewTabAddInFlight = false;
+
+            const nameInput = popover.querySelector('#inline-tab-name');
+            const groupSelect = popover.querySelector('#inline-tab-group');
+            const newGroupField = popover.querySelector('#inline-tab-new-group-field');
+            const newGroupInput = popover.querySelector('#inline-tab-new-group');
+            const submitButton = popover.querySelector('#inline-tab-submit');
+            const cancelButton = popover.querySelector('#inline-tab-cancel');
+
+            const updateGroupMode = function() {
+                const isCreatingGroup = groupSelect.value === createNewTabGroupValue;
+                newGroupField.hidden = !isCreatingGroup;
+                newGroupInput.setAttribute('aria-required', String(isCreatingGroup));
+            };
+
+            groupSelect.addEventListener('change', updateGroupMode);
+            submitButton.addEventListener('click', function(event) {
+                event.preventDefault();
+                if (previewTabAddInFlight) return;
+                submitInlineAddTab();
+            });
+            cancelButton.addEventListener('click', function(event) {
+                event.preventDefault();
+                if (previewTabAddInFlight) return;
+                closeInlineAddTabPanel({ restoreFocus: true });
+            });
+            nameInput.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (previewTabAddInFlight) return;
+                    submitInlineAddTab();
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    if (previewTabAddInFlight) return;
+                    closeInlineAddTabPanel({ restoreFocus: true });
+                }
+            });
+            newGroupInput.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (previewTabAddInFlight) return;
+                    submitInlineAddTab();
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    if (previewTabAddInFlight) return;
+                    closeInlineAddTabPanel({ restoreFocus: true });
+                }
+            });
+
+            if (anchorButton && document.body.contains(anchorButton)) {
+                const rect = anchorButton.getBoundingClientRect();
+                popover.style.minWidth = 'min(300px, 92vw)';
+                popover.style.visibility = 'hidden';
+                window.requestAnimationFrame(() => {
+                    const popoverRect = popover.getBoundingClientRect();
+                    let left = rect.left;
+                    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+                    if (left + popoverRect.width > viewportWidth - 8) {
+                        left = Math.max(8, viewportWidth - popoverRect.width - 8);
+                    }
+                    let top = rect.bottom + 6;
+                    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+                    if (top + popoverRect.height > viewportHeight - 8) {
+                        top = Math.max(8, rect.top - popoverRect.height - 6);
+                    }
+                    popover.style.left = `${left}px`;
+                    popover.style.top = `${top}px`;
+                    popover.style.visibility = '';
+                });
+            }
+
+            const outsideClick = function(event) {
+                if (!previewTabAddPopover) return;
+                if (previewTabAddPopover.contains(event.target)) return;
+                if (anchorButton && event.target === anchorButton) return;
+                closeInlineAddTabPanel({ restoreFocus: true });
+            };
+            previewTabAddOutsideClickListener = outsideClick;
+            document.addEventListener('click', outsideClick, true);
+
+            nameInput.focus();
         }
 
-        async function submitPreviewTabAdd(event) {
-            event.preventDefault();
-            const nameInput = document.getElementById('preview-tab-name');
-            const groupSelect = document.getElementById('preview-tab-group');
-            const newGroupInput = document.getElementById('preview-tab-new-group');
+        function closeInlineAddTabPanel(options = {}) {
+            const restoreFocus = options.restoreFocus !== false;
+            const popover = previewTabAddPopover;
+            const anchor = previewTabAddAnchor;
+            if (!popover) return;
+
+            if (previewTabAddOutsideClickListener) {
+                document.removeEventListener('click', previewTabAddOutsideClickListener, true);
+                previewTabAddOutsideClickListener = null;
+            }
+            previewTabAddPopover = null;
+            previewTabAddAnchor = null;
+            previewTabAddInFlight = false;
+            pendingInlineRenameTab = null;
+            popover.remove();
+
+            if (restoreFocus && anchor && document.body.contains(anchor) && typeof anchor.focus === 'function') {
+                anchor.focus();
+            }
+        }
+
+        async function submitInlineAddTab() {
+            const popover = previewTabAddPopover;
+            if (!popover || previewTabAddInFlight) return;
+            if (sampleModeEnabled) return;
+
+            const nameInput = popover.querySelector('#inline-tab-name');
+            const groupSelect = popover.querySelector('#inline-tab-group');
+            const newGroupInput = popover.querySelector('#inline-tab-new-group');
+            const submitButton = popover.querySelector('#inline-tab-submit');
+
             const name = nameInput.value.trim();
             const createGroup = groupSelect.value === createNewTabGroupValue;
             const groupName = createGroup ? newGroupInput.value.trim() : groupSelect.value;
             if (!name || !groupName) {
-                setPreviewTabModalStatus(createGroup
+                setInlineAddTabStatus(createGroup
                     ? 'Enter a tab name and a new service group name.'
                     : 'Enter a tab name and choose its initial group.');
                 return;
             }
-            const submitButton = document.getElementById('preview-tab-add-submit');
+
+            previewTabAddInFlight = true;
             submitButton.disabled = true;
+            pendingInlineRenameTab = name;
+
             const applied = await applyPreviewEdit({
                 type: 'tab.add',
                 values: { name, groupName, createGroup }
             }, createGroup ? `Added tab ${name} with group ${groupName}.` : `Added tab ${name}.`);
-            submitButton.disabled = false;
-            if (applied) {
-                nameInput.value = '';
-                newGroupInput.value = '';
-                renderPreviewTabManager();
-                nameInput.focus();
-            } else {
-                setPreviewTabModalStatus('Could not add the tab. See the application notification for the reason.');
-            }
-        }
 
-        async function handlePreviewTabManagerAction(action, tabName, actionButton = null) {
-            try {
-                if (action === 'rename') {
-                    previewTabRenameName = tabName;
-                    renderPreviewTabManager();
-                    window.requestAnimationFrame(() => {
-                        const input = document.querySelector('#preview-tab-manager-list [data-tab-manager-name-input]');
-                        input?.focus();
-                        input?.select();
-                    });
-                    return;
-                }
-                if (action === 'rename-cancel') {
-                    previewTabRenameName = null;
-                    setPreviewTabModalStatus();
-                    renderPreviewTabManager();
-                    return;
-                }
-                if (action === 'rename-save') {
-                    const row = actionButton?.closest('.preview-tab-manager-row');
-                    const nameInput = row?.querySelector('[data-tab-manager-name-input]');
-                    const newTabName = nameInput?.value.trim() || '';
-                    if (!newTabName) {
-                        setPreviewTabModalStatus('Enter a tab name to continue.');
-                        nameInput?.focus();
-                        return;
-                    }
-                    const wasActive = previewHomepageTab === tabName;
-                    row?.querySelectorAll('[data-tab-manager-action]').forEach((button) => { button.disabled = true; });
-                    const applied = await applyPreviewEdit(
-                        { type: 'tab.rename', target: { name: tabName }, values: { name: newTabName } },
-                        `Renamed tab ${tabName} to ${newTabName}.`
-                    );
-                    if (applied) {
-                        previewTabRenameName = null;
-                        if (wasActive) {
-                            previewHomepageTab = newTabName;
-                            updatePreview();
-                        }
-                        renderPreviewTabManager();
-                    } else {
-                        row?.querySelectorAll('[data-tab-manager-action]').forEach((button) => { button.disabled = false; });
-                        nameInput?.focus();
-                        nameInput?.select();
-                        setPreviewTabModalStatus('Could not rename the tab. See the application notification for the reason.');
-                    }
-                    return;
-                }
-                if (action === 'move-up' || action === 'move-down') {
-                    const direction = action === 'move-up' ? 'up' : 'down';
-                    const applied = await applyPreviewEdit(
-                        { type: 'tab.move', target: { name: tabName }, direction },
-                        `Moved tab ${tabName} ${direction}.`
-                    );
-                    if (applied) renderPreviewTabManager();
-                    return;
-                }
-                if (action === 'remove') {
-                    const data = getPreviewTabManagerData();
-                    const groupCount = (data.groupsByTab[tabName] || []).length;
-                    const confirmed = await showConfirmationDialog({
-                        title: 'Remove tab?',
-                        message: `Remove ${tabName}? ${groupCount} assigned group${groupCount === 1 ? '' : 's'} will become visible on every tab. No groups or services will be deleted.`,
-                        confirmText: 'Remove tab'
-                    });
-                    if (confirmed) {
-                        const applied = await applyPreviewEdit(
-                            { type: 'tab.remove', target: { name: tabName } },
-                            `Removed tab ${tabName}.`
-                        );
-                        if (applied) renderPreviewTabManager();
-                    }
-                }
-            } catch (error) {
-                actionButton?.closest('.preview-tab-manager-row')?.querySelectorAll('[data-tab-manager-action]').forEach((button) => { button.disabled = false; });
-                setPreviewTabModalStatus(`Could not update tabs. ${addErrorGuidance(error, 'Fix the YAML error and try again')}`);
+            previewTabAddInFlight = false;
+            if (applied) {
+                // updateVisualPreview() runs inside applyPreviewEdit's success path; the
+                // pendingInlineRenameTab hook at the end of updateVisualPreview will enter
+                // inline rename mode for the new tab. Close the popover without stealing focus.
+                closeInlineAddTabPanel({ restoreFocus: false });
+            } else {
+                pendingInlineRenameTab = null;
+                submitButton.disabled = false;
+                setInlineAddTabStatus('Could not add the tab. See the application notification for the reason.');
             }
         }
 
@@ -1846,7 +1935,6 @@
             }
             updateUnsavedIndicators();
             updatePreview({ force: true });
-            if (!document.getElementById('preview-tab-modal').hidden) renderPreviewTabManager();
         }
 
         function updatePreviewUndoButton() {
@@ -1995,8 +2083,12 @@
 
         async function handlePreviewEditAction(action, source) {
             try {
-                if (action === 'tabs.manage') {
-                    openPreviewTabManager();
+                if (action === 'tab.jump') {
+                    jumpToYamlSource(source);
+                    return;
+                }
+                if (action === 'tab.edit') {
+                    enterTabRenameMode(source && source.name);
                     return;
                 }
                 if (['group.add', 'group.edit', 'service.add', 'service.edit', 'bookmark-group.add', 'bookmark-group.edit', 'bookmark.add', 'bookmark.edit'].includes(action)) {
@@ -2106,6 +2198,24 @@
                         await applyPreviewEdit(
                             { type: 'bookmark-group.remove', target: source },
                             `Deleted bookmark group ${source.groupName}.`
+                        );
+                    }
+                    return;
+                }
+                if (action === 'tab.remove') {
+                    const settingsData = parseTabConfig('settings').data;
+                    const tabInfo = getHomepageTabInfo(settingsData);
+                    const tabName = source && source.name;
+                    const groupCount = tabInfo && tabInfo.groupsByTab ? (tabInfo.groupsByTab[tabName] || []).length : 0;
+                    const confirmed = await showConfirmationDialog({
+                        title: 'Remove tab?',
+                        message: `Remove ${tabName}? ${groupCount} assigned group${groupCount === 1 ? '' : 's'} will become visible on every tab. No groups or services will be deleted.`,
+                        confirmText: 'Remove tab'
+                    });
+                    if (confirmed) {
+                        await applyPreviewEdit(
+                            { type: 'tab.remove', target: { name: tabName } },
+                            `Removed tab ${tabName}.`
                         );
                     }
                 }
@@ -2313,13 +2423,6 @@
             }
             renderPreviewEditOptions();
         });
-        document.getElementById('preview-tab-modal').addEventListener('click', function(event) {
-            if (event.target === this) closePreviewTabManager();
-        });
-        document.getElementById('preview-tab-modal-close').addEventListener('click', closePreviewTabManager);
-        document.getElementById('preview-tab-modal-done').addEventListener('click', closePreviewTabManager);
-        document.getElementById('preview-tab-add-form').addEventListener('submit', submitPreviewTabAdd);
-        document.getElementById('preview-tab-group').addEventListener('change', updatePreviewTabGroupMode);
         document.getElementById('preview-option-types-button').addEventListener('click', openOptionTypesModal);
         document.getElementById('option-types-modal-close').addEventListener('click', closeOptionTypesModal);
         document.getElementById('option-types-cancel').addEventListener('click', closeOptionTypesModal);
@@ -2416,26 +2519,6 @@
             }
             renderOptionDefaultsDraft();
         });
-        document.getElementById('preview-tab-manager-list').addEventListener('click', function(event) {
-            const actionButton = event.target.closest('[data-tab-manager-action]');
-            if (!actionButton || !this.contains(actionButton)) return;
-            handlePreviewTabManagerAction(
-                actionButton.getAttribute('data-tab-manager-action'),
-                actionButton.getAttribute('data-tab-name'),
-                actionButton
-            );
-        });
-        document.getElementById('preview-tab-manager-list').addEventListener('keydown', function(event) {
-            const input = event.target.closest('[data-tab-manager-name-input]');
-            if (!input || !this.contains(input)) return;
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                handlePreviewTabManagerAction('rename-save', input.getAttribute('data-tab-name'), input.closest('.preview-tab-manager-row')?.querySelector('[data-tab-manager-action="rename-save"]'));
-            } else if (event.key === 'Escape') {
-                event.preventDefault();
-                handlePreviewTabManagerAction('rename-cancel', input.getAttribute('data-tab-name'));
-            }
-        });
         document.getElementById('serverPathInput').addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -2454,8 +2537,10 @@
                 closeOptionTypesModal();
             } else if (!document.getElementById('preview-edit-modal').hidden) {
                 closePreviewEditDialog();
-            } else if (!document.getElementById('preview-tab-modal').hidden) {
-                closePreviewTabManager();
+            } else if (previewTabAddPopover) {
+                closeInlineAddTabPanel({ restoreFocus: true });
+            } else if (document.querySelector('[data-preview-tab-rename-input]')) {
+                exitTabRenameMode(false);
             } else if (!document.getElementById('directoryModal').hidden) {
                 closeDirectoryModal();
             }
@@ -3424,22 +3509,23 @@
                 return `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData) })} ${widgetTooltip}>${escapeHtml(name)}</span>`;
             }).join('');
 
-            const manageTabsButton = previewEditMode
-                ? `<button type="button" id="preview-manage-tabs-button" class="preview-tab-manage-button toolbar-button toolbar-icon-control" aria-label="Manage tabs">
-                    <span class="toolbar-button-icon" aria-hidden="true">
-                        <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false"><path d="M7 4h13v13H7zM4 7v13h13"></path></svg>
-                    </span>
-                    <span class="preview-control-label" aria-hidden="true">Manage tabs</span>
-                </button>`
+            const addTabButton = previewEditMode
+                ? '<button type="button" class="preview-add-tab preview-add-button" data-preview-action="tab.add.open"><span aria-hidden="true">+</span> Add tab</button>'
                 : '';
-            const previewTabsHtml = homepageTabs.length > 0 || manageTabsButton
+            const previewTabsHtml = homepageTabs.length > 0 || previewEditMode
                 ? `<div class="preview-tab-navigation">
                     <span class="preview-tab-label">Tabs</span>
-                    <div class="preview-tab-strip" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name) => {
+                    <div class="preview-tab-strip" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name, index) => {
                         const isActive = name === previewHomepageTab;
-                        return `<button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes({ tab: 'settings', kind: 'settings-tab', name })}>${escapeHtml(name)}</button>`;
-                    }).join('')}</div>
-                    ${manageTabsButton}
+                        const tabSource = { tab: 'settings', kind: 'settings-tab', name };
+                        const dragAttributes = previewEditMode ? getDragItemAttributes('tab', tabSource, index) : '';
+                        const dropAttributes = previewEditMode ? ` data-preview-drop-kind="tab" data-preview-drop-index="${index}"` : '';
+                        const editControls = previewEditMode ? getTabEditControls(tabSource) : '';
+                        return `<span class="preview-tab" ${dragAttributes}${dropAttributes}>
+                            <button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes(tabSource)}>${escapeHtml(name)}</button>
+                            ${editControls}
+                        </span>`;
+                    }).join('')}${previewEditMode ? addTabButton : ''}</div>
                 </div>`
                 : '';
 
@@ -3455,6 +3541,16 @@
                     ${bookmarksHtml}
                 </div>`;
             setPreviewStatus(previewNotices);
+
+            if (pendingInlineRenameTab) {
+                const pendingName = pendingInlineRenameTab;
+                window.requestAnimationFrame(() => {
+                    if (pendingInlineRenameTab === pendingName && findPreviewTabButton(pendingName)) {
+                        enterTabRenameMode(pendingName);
+                        pendingInlineRenameTab = null;
+                    }
+                });
+            }
 
         }
 
@@ -3782,6 +3878,7 @@
             }
         }
         function syncPreviewEditModePresentation(isEnabled) {
+            if (!isEnabled) closeInlineAddTabPanel({ restoreFocus: false });
             previewEditLabel.textContent = `Interactive editor ${isEnabled ? 'on' : 'off'}`;
             document.getElementById('preview-title-label').textContent = isEnabled ? 'Interactive Editor' : 'Dashboard';
             document.getElementById('preview-title-icon').innerHTML = isEnabled
@@ -3939,11 +4036,10 @@
             }
             if (drag.kind === 'tab') {
                 if (drag.index === adjustedDestinationIndex) return;
-                const applied = await applyPreviewEdit(
+                await applyPreviewEdit(
                     { type: 'tab.move', target: drag.source, destinationIndex: adjustedDestinationIndex },
                     `Moved tab ${drag.source.name}.`
                 );
-                if (applied) renderPreviewTabManager();
                 return;
             }
             if (drag.kind === 'service') {
@@ -4049,6 +4145,10 @@
                 const fallback = zone || eventTarget.closest('[data-preview-bookmark-drop]');
                 return closest || (fallback ? { element: fallback, position: null } : null);
             }
+            if (drag.kind === 'tab') {
+                const item = eventTarget.closest('[data-preview-drop-kind="tab"]');
+                return item ? { element: item, position: null } : null;
+            }
             const element = eventTarget.closest('[data-preview-drop-kind]');
             return element ? { element, position: null } : null;
         }
@@ -4072,6 +4172,17 @@
 
             const rect = target.getBoundingClientRect();
             const verticalLine = drag.kind === 'service' && target.classList.contains('dashboard-card');
+            if (drag.kind === 'tab') {
+                const afterTab = forcedPosition
+                    ? forcedPosition === 'after'
+                    : event.clientX >= rect.left + (rect.width / 2);
+                return {
+                    destinationIndex: Number(target.dataset.previewDropIndex) + (afterTab ? 1 : 0),
+                    destinationTarget,
+                    position: afterTab ? 'right' : 'left',
+                    verticalLine: false
+                };
+            }
             const after = forcedPosition
                 ? forcedPosition === 'after'
                 : verticalLine
@@ -4116,7 +4227,7 @@
         document.addEventListener('dragstart', function(event) {
             const item = event.target.closest('[data-preview-drag-item]');
             if (!item) return;
-            if (item && event.target.closest('.preview-edit-actions, button, input, select, textarea')) {
+            if (item && event.target.closest('.preview-edit-actions, input, select, textarea, [data-preview-tab-rename-input]')) {
                 event.preventDefault();
                 return;
             }
@@ -4176,17 +4287,14 @@
         });
 
         document.getElementById('visual-preview').addEventListener('click', function(event) {
-            const manageTabsTarget = event.target.closest('#preview-manage-tabs-button');
-            if (manageTabsTarget && this.contains(manageTabsTarget)) {
-                event.preventDefault();
-                event.stopPropagation();
-                openPreviewTabManager();
-                return;
-            }
             const actionTarget = event.target.closest('[data-preview-action]');
             if (actionTarget && this.contains(actionTarget)) {
                 event.preventDefault();
                 event.stopPropagation();
+                if (actionTarget.getAttribute('data-preview-action') === 'tab.add.open') {
+                    openInlineAddTabPanel(actionTarget.closest('button') || actionTarget);
+                    return;
+                }
                 const source = JSON.parse(actionTarget.getAttribute('data-source') || '{}');
                 handlePreviewEditAction(actionTarget.getAttribute('data-preview-action'), source);
                 return;

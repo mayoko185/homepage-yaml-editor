@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css?v=5.65.16">
-    <link rel="stylesheet" href="styles.css?v=195">
+    <link rel="stylesheet" href="styles.css?v=196">
     <script src="runtime-config.js"></script>
     <script src="theme-bootstrap.js?v=1"></script>
 </head>
@@ -346,40 +346,6 @@
         </div>
     </div>
 
-    <div id="preview-tab-modal" class="modal-overlay" hidden>
-        <div class="modal-content preview-tab-modal-content" role="dialog" aria-modal="true" aria-labelledby="preview-tab-modal-title">
-            <div class="modal-header">
-                <h3 id="preview-tab-modal-title" class="modal-title">Manage tabs</h3>
-                <button type="button" class="modal-close" id="preview-tab-modal-close" aria-label="Close tab manager">&times;</button>
-            </div>
-            <p class="modal-body-text">Tabs come from group assignments in <code>settings.yaml</code>. Rename, reorder, or remove them here. Removing a tab makes its groups visible on every tab.</p>
-            <div id="preview-tab-manager-list" class="preview-tab-manager-list"></div>
-            <form id="preview-tab-add-form" class="preview-tab-add-form">
-                <h4>Add tab</h4>
-                <div class="preview-tab-add-fields">
-                    <div class="preview-edit-field">
-                        <label for="preview-tab-name">Tab name</label>
-                        <input type="text" id="preview-tab-name" class="modal-input" autocomplete="off" required>
-                    </div>
-                    <div class="preview-edit-field">
-                        <label for="preview-tab-group">Initial group</label>
-                        <select id="preview-tab-group" class="modal-input"></select>
-                    </div>
-                    <div id="preview-tab-new-group-field" class="preview-edit-field preview-tab-new-group-field" hidden>
-                        <label for="preview-tab-new-group">New service group name</label>
-                        <input type="text" id="preview-tab-new-group" class="modal-input" autocomplete="off">
-                    </div>
-                </div>
-                <p class="preview-edit-note">Move an existing group to the new tab or create an empty service group for it. Groups without a tab assignment remain visible everywhere.</p>
-                <p id="preview-tab-modal-status" class="modal-status" role="alert" hidden></p>
-                <div class="modal-actions">
-                    <button type="button" id="preview-tab-modal-done" class="modal-button modal-button-secondary">Done</button>
-                    <button type="submit" id="preview-tab-add-submit" class="modal-button">Add tab</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <div id="option-types-modal" class="modal-overlay" hidden>
         <div class="modal-content option-types-modal-content" role="dialog" aria-modal="true" aria-labelledby="option-types-modal-title">
             <div class="modal-header">
@@ -437,6 +403,6 @@
     <script src="vendor/js-yaml/js-yaml.min.js?v=4.3.0"></script>
     <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
     <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
-    <script src="app.js?v=154"></script>
+    <script src="app.js?v=156"></script>
 </body>
 </html>

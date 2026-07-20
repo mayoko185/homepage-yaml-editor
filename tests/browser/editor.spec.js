@@ -50,6 +50,8 @@ test('retains unsaved YAML while switching tabs and navigates preview items to s
   await page.locator('.tab[data-tab="services"]').click();
   expect(await getEditorValue(page)).toBe(changedServices);
 
+  await page.locator('#preview-edit-toggle').uncheck({ force: true });
+
   await page.locator('.dashboard-card', { hasText: 'Alpha' }).click();
   await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
 });
