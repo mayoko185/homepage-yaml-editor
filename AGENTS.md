@@ -70,7 +70,7 @@ node --check public/app.js
 - Keep preview indexing linear. Use occurrence counters rather than repeated `findIndex`, `slice`, or prefix scans inside render loops.
 - Put user-visible application notices and status messages in the notification area, not inside content panels; keep validation messages inside the dialog that needs the correction.
 - Preview-to-source navigation must place the cursor on and temporarily highlight only the target line. It must not select the complete document or flash the entire editor.
-- When changing cacheable CSS or JavaScript, increment the corresponding version query in `public/index.html`.
+- When changing cacheable CSS or JavaScript, increment the corresponding version query in `public/index.html` (and `public/login.html` for styles). A pre-commit hook (`.git/hooks/pre-commit`) blocks commits that stage these assets without a matching version-query increment.
 - Keep HTML responses revalidated while allowing versioned CSS, JavaScript, and icon assets to use longer cache lifetimes.
 
 ## Testing Expectations
@@ -84,6 +84,37 @@ node --check public/app.js
   - Preview items navigate to the correct source line.
   - No browser console errors are introduced.
 - Run `git diff --check` before handing off changes.
+
+## Post-Change Checklist Report
+
+After every code change (edits, writes, file creation), the agent must output an
+explicit checklist report before closing. Each item from [Testing Expectations](#testing-expectations)
+must be marked with one of:
+
+- ✅ — completed and passed
+- ⚠️ — requires manual verification by a human (explain why)
+- N/A — not applicable to this change
+
+The report format:
+
+```
+## Post-Change Checklist
+
+| Item | Status |
+|---|---|
+| `pnpm test` | ✅ / ⚠️ / N/A |
+| `pnpm audit` | ✅ / ⚠️ / N/A |
+| Tests added/updated | ✅ / ⚠️ / N/A |
+| Browser: preview updates | ✅ / ⚠️ / N/A |
+| Browser: tabs retain content | ✅ / ⚠️ / N/A |
+| Browser: source navigation | ✅ / ⚠️ / N/A |
+| Browser: no console errors | ✅ / ⚠️ / N/A |
+| `git diff --check` | ✅ / ⚠️ / N/A |
+| Cache version bump | ✅ / ⚠️ / N/A |
+```
+
+The work is not finished until every item is explicitly marked. An item marked
+⚠️ must include a brief reason (e.g., "requires a live browser").
 
 ## Docker and Shell Requirements
 

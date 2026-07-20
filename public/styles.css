@@ -1118,24 +1118,23 @@
             box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
             opacity: 0;
             pointer-events: none;
-            transform: translateY(-4px);
+            transform: translate(-50%, -4px);
             transition: opacity 0.15s ease, transform 0.15s ease;
             top: 100%;
-            right: -4px;
-            margin: 4px -4px 0 0;
+            left: 50%;
         }
         .preview-tab[data-toolbar-side="up"] > .preview-edit-actions {
             top: auto;
             bottom: 100%;
-            right: -4px;
-            margin: 0 -4px 4px 0;
-            transform: translateY(4px);
+            left: 50%;
+            margin: 0;
+            transform: translate(-50%, 4px);
         }
         .preview-tab:hover > .preview-edit-actions,
         .preview-tab > .preview-edit-actions:has(.preview-edit-action:focus-visible) {
             opacity: 1;
             pointer-events: auto;
-            transform: translateY(0);
+            transform: translate(-50%, 0);
         }
         .preview-tab-rename-input {
             align-self: center;
