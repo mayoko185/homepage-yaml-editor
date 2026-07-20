@@ -57,10 +57,10 @@
         let previewEditPreviousFocusVisible = false;
         let pendingInlineRenameTab = null;
         let pendingInlineRenameBackup = null;
-        let previewTabAddPopover = null;
+        const previewAddTabModal = document.getElementById('preview-add-tab-modal');
         let previewTabAddAnchor = null;
+        let previewTabAddAfterTab = null;
         let previewTabAddInFlight = false;
-        let previewTabAddOutsideClickListener = null;
         let activePreviewDrag = null;
         const yamlCodeEditor = CodeMirror.fromTextArea(document.getElementById('yaml-editor'), {
             mode: 'yaml',
@@ -1671,8 +1671,8 @@
         function getTabEditControls(source) {
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('tab.edit', source, 'Rename tab', '&#9998;')}
+                ${getPreviewEditActionButton('tab.add', source, 'Add tab to the right', '+')}
                 ${getPreviewEditActionButton('tab.remove', source, 'Remove tab', '&times;', { danger: true })}
-                ${getPreviewEditActionButton('tab.jump', source, 'Jump to tab in settings.yaml', '&#8597;')}
             </span>`;
         }
 
@@ -1712,15 +1712,42 @@
         }
 
         function setInlineAddTabStatus(message) {
-            if (!previewTabAddPopover) return;
-            const statusElement = previewTabAddPopover.querySelector('#inline-tab-status');
+            const statusElement = document.getElementById('preview-add-tab-status');
             if (!statusElement) return;
             statusElement.textContent = message || '';
             statusElement.hidden = !message;
         }
 
-        function openInlineAddTabPanel(anchorButton) {
-            if (previewTabAddPopover) {
+        function initInlineAddTabModal() {
+            const groupSelect = document.getElementById('preview-add-tab-group');
+            const newGroupField = document.getElementById('preview-add-tab-new-group-field');
+            const newGroupInput = document.getElementById('preview-add-tab-new-group');
+            const updateGroupMode = function() {
+                const isCreatingGroup = groupSelect.value === createNewTabGroupValue;
+                newGroupField.hidden = !isCreatingGroup;
+                newGroupInput.setAttribute('aria-required', String(isCreatingGroup));
+            };
+            groupSelect.addEventListener('change', updateGroupMode);
+            document.getElementById('preview-add-tab-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                if (previewTabAddInFlight) return;
+                submitInlineAddTab();
+            });
+            document.getElementById('preview-add-tab-close').addEventListener('click', function() {
+                closeInlineAddTabPanel({ restoreFocus: true });
+            });
+            document.getElementById('preview-add-tab-cancel').addEventListener('click', function() {
+                closeInlineAddTabPanel({ restoreFocus: true });
+            });
+            previewAddTabModal.addEventListener('click', function(event) {
+                if (event.target === previewAddTabModal) {
+                    closeInlineAddTabPanel({ restoreFocus: true });
+                }
+            });
+        }
+
+        function openInlineAddTabPanel(openedByButton, afterTab) {
+            if (!previewAddTabModal.hidden) {
                 closeInlineAddTabPanel({ restoreFocus: true });
                 return;
             }
@@ -1735,150 +1762,48 @@
                 setSaveStatus(addErrorGuidance(error, 'Fix the YAML error and try again.'), 'error');
                 return;
             }
-
-            const popover = document.createElement('div');
-            popover.className = 'preview-add-tab-popover';
-            popover.setAttribute('role', 'dialog');
-            popover.setAttribute('aria-modal', 'false');
-            popover.setAttribute('aria-labelledby', 'inline-tab-title');
-            popover.innerHTML = `
-                <h4 id="inline-tab-title">Add tab</h4>
-                <div class="preview-edit-field">
-                    <label for="inline-tab-name">Tab name</label>
-                    <input type="text" id="inline-tab-name" class="modal-input" autocomplete="off" required>
-                </div>
-                <div class="preview-edit-field">
-                    <label for="inline-tab-group">Initial group</label>
-                    <select id="inline-tab-group" class="modal-input">${groupOptionsHtml}</select>
-                </div>
-                <div id="inline-tab-new-group-field" class="preview-edit-field preview-tab-new-group-field" hidden>
-                    <label for="inline-tab-new-group">New service group name</label>
-                    <input type="text" id="inline-tab-new-group" class="modal-input" autocomplete="off">
-                </div>
-                <p class="preview-edit-note">Move an existing group to the new tab or create an empty service group for it. Groups without a tab assignment remain visible everywhere.</p>
-                <p id="inline-tab-status" class="modal-status" role="alert" hidden></p>
-                <div class="modal-actions">
-                    <button type="button" id="inline-tab-cancel" class="modal-button modal-button-secondary">Cancel</button>
-                    <button type="button" id="inline-tab-submit" class="modal-button">Add tab</button>
-                </div>
-            `;
-            document.body.appendChild(popover);
-            previewTabAddPopover = popover;
-            previewTabAddAnchor = anchorButton || null;
+            const nameInput = document.getElementById('preview-add-tab-name');
+            const groupSelect = document.getElementById('preview-add-tab-group');
+            const newGroupField = document.getElementById('preview-add-tab-new-group-field');
+            const newGroupInput = document.getElementById('preview-add-tab-new-group');
+            nameInput.value = '';
+            groupSelect.innerHTML = groupOptionsHtml;
+            newGroupField.hidden = true;
+            newGroupInput.value = '';
+            setInlineAddTabStatus('');
+            previewTabAddAnchor = openedByButton || null;
+            previewTabAddAfterTab = afterTab || null;
             previewTabAddInFlight = false;
-
-            const nameInput = popover.querySelector('#inline-tab-name');
-            const groupSelect = popover.querySelector('#inline-tab-group');
-            const newGroupField = popover.querySelector('#inline-tab-new-group-field');
-            const newGroupInput = popover.querySelector('#inline-tab-new-group');
-            const submitButton = popover.querySelector('#inline-tab-submit');
-            const cancelButton = popover.querySelector('#inline-tab-cancel');
-
-            const updateGroupMode = function() {
-                const isCreatingGroup = groupSelect.value === createNewTabGroupValue;
-                newGroupField.hidden = !isCreatingGroup;
-                newGroupInput.setAttribute('aria-required', String(isCreatingGroup));
-            };
-
-            groupSelect.addEventListener('change', updateGroupMode);
-            submitButton.addEventListener('click', function(event) {
-                event.preventDefault();
-                if (previewTabAddInFlight) return;
-                submitInlineAddTab();
-            });
-            cancelButton.addEventListener('click', function(event) {
-                event.preventDefault();
-                if (previewTabAddInFlight) return;
-                closeInlineAddTabPanel({ restoreFocus: true });
-            });
-            nameInput.addEventListener('keydown', function(event) {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    if (previewTabAddInFlight) return;
-                    submitInlineAddTab();
-                } else if (event.key === 'Escape') {
-                    event.preventDefault();
-                    if (previewTabAddInFlight) return;
-                    closeInlineAddTabPanel({ restoreFocus: true });
-                }
-            });
-            newGroupInput.addEventListener('keydown', function(event) {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    if (previewTabAddInFlight) return;
-                    submitInlineAddTab();
-                } else if (event.key === 'Escape') {
-                    event.preventDefault();
-                    if (previewTabAddInFlight) return;
-                    closeInlineAddTabPanel({ restoreFocus: true });
-                }
-            });
-
-            if (anchorButton && document.body.contains(anchorButton)) {
-                const rect = anchorButton.getBoundingClientRect();
-                popover.style.minWidth = 'min(300px, 92vw)';
-                popover.style.visibility = 'hidden';
-                window.requestAnimationFrame(() => {
-                    const popoverRect = popover.getBoundingClientRect();
-                    let left = rect.left;
-                    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-                    if (left + popoverRect.width > viewportWidth - 8) {
-                        left = Math.max(8, viewportWidth - popoverRect.width - 8);
-                    }
-                    let top = rect.bottom + 6;
-                    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
-                    if (top + popoverRect.height > viewportHeight - 8) {
-                        top = Math.max(8, rect.top - popoverRect.height - 6);
-                    }
-                    popover.style.left = `${left}px`;
-                    popover.style.top = `${top}px`;
-                    popover.style.visibility = '';
-                });
-            }
-
-            const outsideClick = function(event) {
-                if (!previewTabAddPopover) return;
-                if (previewTabAddPopover.contains(event.target)) return;
-                if (anchorButton && event.target === anchorButton) return;
-                closeInlineAddTabPanel({ restoreFocus: true });
-            };
-            previewTabAddOutsideClickListener = outsideClick;
-            document.addEventListener('click', outsideClick, true);
-
+            previewAddTabModal.hidden = false;
             nameInput.focus();
         }
 
-        function closeInlineAddTabPanel(options = {}) {
-            const restoreFocus = options.restoreFocus !== false;
-            const popover = previewTabAddPopover;
+        function closeInlineAddTabPanel({ restoreFocus } = {}) {
             const anchor = previewTabAddAnchor;
-            if (!popover) return;
-
-            if (previewTabAddOutsideClickListener) {
-                document.removeEventListener('click', previewTabAddOutsideClickListener, true);
-                previewTabAddOutsideClickListener = null;
-            }
-            previewTabAddPopover = null;
+            previewAddTabModal.hidden = true;
             previewTabAddAnchor = null;
+            previewTabAddAfterTab = null;
             previewTabAddInFlight = false;
             pendingInlineRenameTab = null;
-            popover.remove();
-
-            if (restoreFocus && anchor && document.body.contains(anchor) && typeof anchor.focus === 'function') {
+            if (restoreFocus !== false && anchor && document.body.contains(anchor) && anchor.offsetParent !== null && typeof anchor.focus === 'function') {
                 anchor.focus();
+            } else if (restoreFocus !== false) {
+                const visualPreview = document.getElementById('visual-preview');
+                if (visualPreview) {
+                    visualPreview.tabIndex = -1;
+                    visualPreview.focus();
+                    visualPreview.removeAttribute('tabindex');
+                }
             }
         }
 
         async function submitInlineAddTab() {
-            const popover = previewTabAddPopover;
-            if (!popover || previewTabAddInFlight) return;
+            if (previewAddTabModal.hidden || previewTabAddInFlight) return;
             if (sampleModeEnabled) return;
-
-            const nameInput = popover.querySelector('#inline-tab-name');
-            const groupSelect = popover.querySelector('#inline-tab-group');
-            const newGroupInput = popover.querySelector('#inline-tab-new-group');
-            const submitButton = popover.querySelector('#inline-tab-submit');
-
+            const nameInput = document.getElementById('preview-add-tab-name');
+            const groupSelect = document.getElementById('preview-add-tab-group');
+            const newGroupInput = document.getElementById('preview-add-tab-new-group');
+            const submitButton = document.getElementById('preview-add-tab-submit');
             const name = nameInput.value.trim();
             const createGroup = groupSelect.value === createNewTabGroupValue;
             const groupName = createGroup ? newGroupInput.value.trim() : groupSelect.value;
@@ -1888,28 +1813,27 @@
                     : 'Enter a tab name and choose its initial group.');
                 return;
             }
-
             previewTabAddInFlight = true;
             submitButton.disabled = true;
             pendingInlineRenameTab = name;
-
             const applied = await applyPreviewEdit({
                 type: 'tab.add',
-                values: { name, groupName, createGroup }
+                values: { name, groupName, createGroup, afterTab: previewTabAddAfterTab }
             }, createGroup ? `Added tab ${name} with group ${groupName}.` : `Added tab ${name}.`);
-
-            previewTabAddInFlight = false;
             if (applied) {
                 // updateVisualPreview() runs inside applyPreviewEdit's success path; the
                 // pendingInlineRenameTab hook at the end of updateVisualPreview will enter
-                // inline rename mode for the new tab. Close the popover without stealing focus.
+                // inline rename mode for the new tab. Close the modal without stealing focus.
                 closeInlineAddTabPanel({ restoreFocus: false });
             } else {
-                pendingInlineRenameTab = null;
+                previewTabAddInFlight = false;
                 submitButton.disabled = false;
+                pendingInlineRenameTab = null;
                 setInlineAddTabStatus('Could not add the tab. See the application notification for the reason.');
             }
         }
+
+        initInlineAddTabModal();
 
         function replacePreviewEditedFiles(files) {
             applyingPreviewFiles = true;
@@ -2083,11 +2007,7 @@
 
         async function handlePreviewEditAction(action, source) {
             try {
-                if (action === 'tab.jump') {
-                    jumpToYamlSource(source);
-                    return;
-                }
-                if (action === 'tab.edit') {
+            if (action === 'tab.edit') {
                     enterTabRenameMode(source && source.name);
                     return;
                 }
@@ -2537,7 +2457,7 @@
                 closeOptionTypesModal();
             } else if (!document.getElementById('preview-edit-modal').hidden) {
                 closePreviewEditDialog();
-            } else if (previewTabAddPopover) {
+            } else if (!previewAddTabModal.hidden) {
                 closeInlineAddTabPanel({ restoreFocus: true });
             } else if (document.querySelector('[data-preview-tab-rename-input]')) {
                 exitTabRenameMode(false);
@@ -3109,7 +3029,7 @@
 
         function getPreviewEditActionButton(action, source, label, icon, { disabled = false, danger = false } = {}) {
             const dangerClass = danger ? ' preview-edit-delete' : '';
-            const actionClass = action.endsWith('.edit')
+            const actionClass = (action.endsWith('.edit') || action.endsWith('.add'))
                 ? ' preview-edit-modify'
                 : action.endsWith('.move-up')
                     ? ' preview-edit-move-up'
@@ -3509,9 +3429,6 @@
                 return `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData) })} ${widgetTooltip}>${escapeHtml(name)}</span>`;
             }).join('');
 
-            const addTabButton = previewEditMode
-                ? '<button type="button" class="preview-add-tab preview-add-button" data-preview-action="tab.add.open"><span aria-hidden="true">+</span> Add tab</button>'
-                : '';
             const previewTabsHtml = homepageTabs.length > 0 || previewEditMode
                 ? `<div class="preview-tab-navigation">
                     <span class="preview-tab-label">Tabs</span>
@@ -3525,7 +3442,7 @@
                             <button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes(tabSource)}>${escapeHtml(name)}</button>
                             ${editControls}
                         </span>`;
-                    }).join('')}${previewEditMode ? addTabButton : ''}</div>
+                    }).join('')}</div>
                 </div>`
                 : '';
 
@@ -4286,13 +4203,33 @@
             scheduleVisualPreview();
         });
 
+        function updateTabToolbarPosition(tabEl) {
+            const strip = tabEl.closest('.preview-tab-strip');
+            if (!strip) return;
+            const myTop = tabEl.offsetTop;
+            const peers = strip.querySelectorAll('.preview-tab');
+            const hasRowBelow = Array.from(peers).some((p) => p.offsetTop > myTop + 1);
+            tabEl.setAttribute('data-toolbar-side', hasRowBelow ? 'up' : 'down');
+        }
+
+        const previewDiv = document.getElementById('visual-preview');
+        previewDiv.addEventListener('mouseover', function(event) {
+            const tab = event.target.closest('.preview-tab');
+            if (tab && this.contains(tab)) updateTabToolbarPosition(tab);
+        });
+        previewDiv.addEventListener('focusin', function(event) {
+            const tab = event.target.closest('.preview-tab');
+            if (tab && this.contains(tab)) updateTabToolbarPosition(tab);
+        });
+
         document.getElementById('visual-preview').addEventListener('click', function(event) {
             const actionTarget = event.target.closest('[data-preview-action]');
             if (actionTarget && this.contains(actionTarget)) {
                 event.preventDefault();
                 event.stopPropagation();
-                if (actionTarget.getAttribute('data-preview-action') === 'tab.add.open') {
-                    openInlineAddTabPanel(actionTarget.closest('button') || actionTarget);
+                if (actionTarget.getAttribute('data-preview-action') === 'tab.add') {
+                    const source = JSON.parse(actionTarget.getAttribute('data-source') || '{}');
+                    openInlineAddTabPanel(actionTarget.closest('button') || actionTarget, source.name || null);
                     return;
                 }
                 const source = JSON.parse(actionTarget.getAttribute('data-source') || '{}');

@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css?v=5.65.16">
-    <link rel="stylesheet" href="styles.css?v=196">
+    <link rel="stylesheet" href="styles.css?v=197">
     <script src="runtime-config.js"></script>
     <script src="theme-bootstrap.js?v=1"></script>
 </head>
@@ -346,6 +346,35 @@
         </div>
     </div>
 
+    <div id="preview-add-tab-modal" class="modal-overlay" hidden>
+        <div class="modal-content modal-content-compact" role="dialog" aria-modal="true" aria-labelledby="preview-add-tab-title">
+            <div class="modal-header">
+                <h3 id="preview-add-tab-title" class="modal-title">Add tab</h3>
+                <button type="button" class="modal-close" id="preview-add-tab-close" aria-label="Close">&times;</button>
+            </div>
+            <form id="preview-add-tab-form">
+                <div class="preview-edit-field">
+                    <label for="preview-add-tab-name">Tab name</label>
+                    <input type="text" id="preview-add-tab-name" class="modal-input" autocomplete="off" required>
+                </div>
+                <div class="preview-edit-field">
+                    <label for="preview-add-tab-group">Initial group</label>
+                    <select id="preview-add-tab-group" class="modal-input"></select>
+                </div>
+                <div id="preview-add-tab-new-group-field" class="preview-edit-field preview-tab-new-group-field" hidden>
+                    <label for="preview-add-tab-new-group">New service group name</label>
+                    <input type="text" id="preview-add-tab-new-group" class="modal-input" autocomplete="off">
+                </div>
+                <p class="preview-edit-note">Move an existing group to the new tab or create an empty service group for it. Groups without a tab assignment remain visible everywhere.</p>
+                <p id="preview-add-tab-status" class="modal-status" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="preview-add-tab-cancel" class="modal-button modal-button-secondary">Cancel</button>
+                    <button type="submit" id="preview-add-tab-submit" class="modal-button">Add tab</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="option-types-modal" class="modal-overlay" hidden>
         <div class="modal-content option-types-modal-content" role="dialog" aria-modal="true" aria-labelledby="option-types-modal-title">
             <div class="modal-header">
@@ -403,6 +432,6 @@
     <script src="vendor/js-yaml/js-yaml.min.js?v=4.3.0"></script>
     <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
     <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
-    <script src="app.js?v=156"></script>
+    <script src="app.js?v=157"></script>
 </body>
 </html>
