@@ -134,6 +134,10 @@
         return chunks;
     }
 
+    function isNestedGroupEntry(entry) {
+        return entry && Array.isArray(entry.data);
+    }
+
     function parseGroupEntries(groupRawLines, groupBaseIndent) {
         const entries = [];
         const lines = groupRawLines;
@@ -168,12 +172,21 @@
                     return ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l));
                 });
                 const name = getYamlKeyFromLine(line.replace(/^\s*#\s*/, ''));
+                let data = null;
+                try {
+                    const cleanText = entryChunk.rawLines.map((l) => l.replace(/^\s*#\s?/, '')).join('\n');
+                    const parsed = jsyaml.load(cleanText);
+                    if (parsed && typeof parsed === 'object' && name && parsed[name]) {
+                        data = parsed[name];
+                    }
+                } catch (e) { /* ignore */ }
                 entryChunk.rawLines.unshift(...pendingBlanks);
                 pendingBlanks = [];
                 entries.push({
-                    kind: 'commented-service',
+                    kind: data && Array.isArray(data) ? 'commented-nested-group' : 'commented-service',
                     name: name || '',
-                    rawLines: entryChunk.rawLines
+                    rawLines: entryChunk.rawLines,
+                    data
                 });
                 i = entryChunk.endIndex;
                 continue;
@@ -196,7 +209,7 @@
                 entryChunk.rawLines.unshift(...pendingBlanks);
                 pendingBlanks = [];
                 entries.push({
-                    kind: 'service',
+                    kind: data && Array.isArray(data) ? 'nested-group' : 'service',
                     name: name || '',
                     rawLines: entryChunk.rawLines,
                     data
@@ -443,6 +456,21 @@
         }
 
         const [entry] = fromGroup.entries.splice(fromEntryIdx, 1);
+
+        // Auto-comment entry if moving to a commented group
+        if (toGroup.kind === 'commented-group') {
+            if (entry.kind === 'service') {
+                entry.rawLines = toggleComment(entry.rawLines);
+                entry.kind = 'commented-service';
+            } else if (entry.kind === 'widget') {
+                entry.rawLines = toggleComment(entry.rawLines);
+                entry.kind = 'commented-widget';
+            } else if (entry.kind === 'nested-group') {
+                entry.rawLines = toggleComment(entry.rawLines);
+                entry.kind = 'commented-nested-group';
+            }
+        }
+
         rebuildGroupRawLines(fromGroup);
 
         // Reindent if crossing groups
@@ -494,6 +522,11 @@
                     } else if (e.kind === 'commented-service') {
                         // Already commented — just rename
                         e.rawLines[0] = e.rawLines[0].replace(/(-\s+)(.+?):\s*$/, `$1${e.name}:`);
+                    } else if (e.kind === 'nested-group') {
+                        e.kind = 'commented-nested-group';
+                        e.rawLines = toggleComment(e.rawLines);
+                    } else if (e.kind === 'commented-nested-group') {
+                        e.rawLines[0] = e.rawLines[0].replace(/(-\s+)(.+?):\s*$/, `$1${e.name}:`);
                     }
                 });
                 rebuildGroupRawLines(cloned);
@@ -523,7 +556,7 @@
 
     // ── Edit operations ──
 
-    function editServiceData(rawLines, newName, newData) {
+    function editServiceData(rawLines, newName, newData, { commentedKeys = [] } = {}) {
         // Serialize newData to YAML, indent properly, replace rawLines
         const baseIndent = getYamlIndent(rawLines[0]);
         const uncommentedFirstLine = rawLines[0].replace(/^\s*#\s?/, '');
@@ -538,6 +571,27 @@
         dumpedLines.forEach((l) => {
             lines.push(' '.repeat(fieldIndent) + l.trimStart());
         });
+
+        // Apply per-field commenting for active items
+        if (commentedKeys.length > 0) {
+            const commentSet = new Set(commentedKeys);
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmed = line.trim();
+                const keyMatch = trimmed.match(/^(\S[\S\s]*?):/);
+                if (keyMatch && commentSet.has(keyMatch[1])) {
+                    const lineIndent = getYamlIndent(line);
+                    lines[i] = line.slice(0, lineIndent) + '# ' + line.slice(lineIndent);
+                    // Comment all following indented lines (nested block)
+                    for (let j = i + 1; j < lines.length; j++) {
+                        const nextIndent = getYamlIndent(lines[j]);
+                        if (nextIndent <= lineIndent) break;
+                        lines[j] = lines[j].slice(0, nextIndent) + '# ' + lines[j].slice(nextIndent);
+                    }
+                }
+            }
+        }
+
         const isCommented = rawLines.every((l) => isBlankLine(l) || l.trim().startsWith('#'));
         if (isCommented) {
             return lines.map((l) => {
@@ -557,7 +611,7 @@
         });
     }
 
-    function editChunk(chunks, path, newName, newData) {
+    function editChunk(chunks, path, newName, newData, { commentedKeys = [] } = {}) {
         if (!path.entryName) {
             // Edit top-level chunk (group or widget)
             const idx = findChunkIndexByName(chunks, path.groupName, path.groupIndex || 0);
@@ -566,7 +620,7 @@
             chunk.name = newName;
             if (newData && typeof newData === 'object' && Object.keys(newData).length > 0) {
                 // Full block replacement with new data (widget edit)
-                chunk.rawLines = editServiceData(chunk.rawLines, newName, newData);
+                chunk.rawLines = editServiceData(chunk.rawLines, newName, newData, { commentedKeys });
                 chunk.data = newData;
             } else {
                 // Rename only (group edit)
@@ -582,7 +636,7 @@
         if (entryIdx < 0) return null;
         const entry = group.entries[entryIdx];
         entry.name = newName;
-        entry.rawLines = editServiceData(entry.rawLines, newName, newData);
+        entry.rawLines = editServiceData(entry.rawLines, newName, newData, { commentedKeys });
         entry.data = newData;
         rebuildGroupRawLines(group);
         return serializeDocument(chunks);
@@ -628,10 +682,12 @@
                     e.rawLines = toggleComment(e.rawLines);
                     if (wasCommented) {
                         if (e.kind === 'commented-service') e.kind = 'service';
-                        if (e.kind === 'commented-widget') e.kind = 'widget';
+                        else if (e.kind === 'commented-widget') e.kind = 'widget';
+                        else if (e.kind === 'commented-nested-group') e.kind = 'nested-group';
                     } else {
                         if (e.kind === 'service') e.kind = 'commented-service';
-                        if (e.kind === 'widget') e.kind = 'commented-widget';
+                        else if (e.kind === 'widget') e.kind = 'commented-widget';
+                        else if (e.kind === 'nested-group') e.kind = 'commented-nested-group';
                     }
                 });
                 rebuildGroupRawLines(chunk);
@@ -655,6 +711,8 @@
         else if (entry.kind === 'service') entry.kind = 'commented-service';
         else if (entry.kind === 'commented-widget') entry.kind = 'widget';
         else if (entry.kind === 'widget') entry.kind = 'commented-widget';
+        else if (entry.kind === 'commented-nested-group') entry.kind = 'nested-group';
+        else if (entry.kind === 'nested-group') entry.kind = 'commented-nested-group';
         rebuildGroupRawLines(group);
         return serializeDocument(chunks);
     }

@@ -558,25 +558,27 @@
             const isWidget = kind === 'widget';
             const isGroup = kind === 'services-group' || kind === 'bookmark-group';
             const isEntry = kind === 'service' || kind === 'bookmark';
+            const hasNestedPath = Array.isArray(target.nestedGroupPath) && target.nestedGroupPath.length > 0;
+            const nestedGroupInfo = hasNestedPath ? target.nestedGroupPath[target.nestedGroupPath.length - 1] : null;
 
             const path = {
                 groupName: isWidget ? target.name : (target.groupName || target.name),
                 groupIndex: isWidget ? (target.index || 0) : (target.groupIndex || 0),
-                entryName: isEntry ? (target.serviceName || target.bookmarkName) : undefined,
-                entryIndex: isEntry ? (target.serviceIndex || target.bookmarkIndex || 0) : undefined
+                entryName: isEntry ? (target.serviceName || target.bookmarkName) : (nestedGroupInfo ? nestedGroupInfo.name : undefined),
+                entryIndex: isEntry ? (target.serviceIndex || target.bookmarkIndex || 0) : (nestedGroupInfo ? nestedGroupInfo.index : undefined)
             };
 
             const opType = operation.type || '';
 
             if (opType.endsWith('.remove')) {
-                if (isEntry) {
+                if (isEntry || nestedGroupInfo) {
                     return ChunkTree.removeChunk(chunks, path);
                 }
                 return ChunkTree.removeChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex });
             }
 
             if (opType.endsWith('.duplicate')) {
-                if (isEntry) {
+                if (isEntry || nestedGroupInfo) {
                     return ChunkTree.duplicateChunk(chunks, path);
                 }
                 return ChunkTree.duplicateChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex });
@@ -584,7 +586,7 @@
 
             if (opType.endsWith('.move')) {
                 let toPath;
-                if (isEntry) {
+                if (isEntry || nestedGroupInfo) {
                     toPath = { groupName: path.groupName, groupIndex: path.groupIndex };
                     if (operation.destinationTarget) {
                         toPath.groupName = operation.destinationTarget.groupName;
@@ -611,11 +613,29 @@
                 const values = operation.values || {};
                 const newName = String(values.name || '').trim();
                 if (!newName) return null;
-                const data = values.fields
-                    ? Object.fromEntries(values.fields.filter((f) => f.blankValue || String(f.value || '').trim() !== '').map((f) => [f.key, f.value]))
-                    : {};
+                const fields = values.fields || [];
+                const buildDataFromFields = (fieldList) => {
+                    const data = {};
+                    for (const f of fieldList) {
+                        if (Array.isArray(f.fields)) {
+                            const nested = buildDataFromFields(f.fields);
+                            if (Object.keys(nested).length > 0) {
+                                data[f.key] = nested;
+                            }
+                        } else if (f.blankValue || String(f.value || '').trim() !== '') {
+                            data[f.key] = f.value;
+                        }
+                    }
+                    return data;
+                };
+                const data = buildDataFromFields(fields);
+                const commentedKeys = fields.filter((f) => f.commented).map((f) => f.key);
                 if (isEntry || isWidget) {
-                    return ChunkTree.editChunk(chunks, path, newName, data);
+                    return ChunkTree.editChunk(chunks, path, newName, data, { commentedKeys });
+                }
+                if (nestedGroupInfo) {
+                    // Nested groups: rename only, data is layout (stored in settings.yaml, not services.yaml)
+                    return ChunkTree.editChunk(chunks, path, newName, {});
                 }
                 return ChunkTree.editChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex }, newName);
             }
@@ -1787,6 +1807,70 @@
             throw new Error(`Service group "${source.groupName}" is no longer available. Refresh the dashboard and try again.`);
         }
 
+        function parseCommentedSubOptions(lines, startLine, endLine) {
+            const result = [];
+            if (startLine < 0 || endLine >= lines.length || endLine < startLine) return result;
+            const baseIndent = lines[startLine].search(/\S/);
+            let i = startLine + 1;
+            while (i <= endLine) {
+                const line = lines[i];
+                if (line.trim() === '') { i++; continue; }
+                const indent = line.search(/\S/);
+                if (indent <= baseIndent) break;
+                // Match a commented key-value or key-only line: optional ws, #, optional space, key, colon
+                const commentedMatch = line.match(/^(\s*)#\s+(\S[\S\s]*?):\s*(.*)$/);
+                if (!commentedMatch) { i++; continue; }
+                const keyIndent = commentedMatch[1].length;
+                const key = commentedMatch[2].trim();
+                const valuePart = commentedMatch[3].trim();
+                if (valuePart) {
+                    // Scalar or inline value
+                    result.push({ key, value: valuePart, commented: true, locked: true });
+                    i++;
+                } else {
+                    // Nested mapping — collect child lines
+                    let j = i + 1;
+                    const childLines = [];
+                    while (j <= endLine) {
+                        const childLine = lines[j];
+                        if (childLine.trim() === '') { j++; continue; }
+                        const childIndent = childLine.search(/\S/);
+                        if (childIndent <= keyIndent + 2) break;
+                        childLines.push(childLine);
+                        j++;
+                    }
+                    const subFields = [];
+                    for (const cl of childLines) {
+                        const cm = cl.match(/^(\s*)#\s+(\S[\S\s]*?):\s*(.*)$/);
+                        if (cm) {
+                            const subKey = cm[2].trim();
+                            const subVal = cm[3].trim();
+                            if (subVal) {
+                                subFields.push({ key: subKey, value: subVal, commented: true, locked: true });
+                            } else {
+                                subFields.push({ key: subKey, fields: [], commented: true, locked: true });
+                            }
+                        }
+                    }
+                    result.push({ key, fields: subFields, commented: true, locked: true });
+                    i = j;
+                }
+            }
+            return result;
+        }
+
+        function appendCommentedSubOptions(source, fields) {
+            const range = findBlockLineRange(source);
+            if (!range) return fields;
+            const lines = getTabYamlLines(source.tab);
+            const commentedFields = parseCommentedSubOptions(lines, range.startLine, range.endLine);
+            if (commentedFields.length === 0) return fields;
+            // Only append fields whose keys are not already present in the active fields
+            const existingKeys = new Set(fields.map((f) => f.key));
+            const toAppend = commentedFields.filter((f) => !existingKeys.has(f.key));
+            return fields.concat(toAppend);
+        }
+
         function findPreviewService(source) {
             const { services: entries, groupName } = findPreviewGroup(source);
             const sequence = resolvePreviewEntries(entries, source);
@@ -2156,20 +2240,31 @@
             }
         }
 
-        function getPreviewOptionFields(value) {
+        function getPreviewOptionFields(value, { commented = false } = {}) {
             if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
             return Object.entries(value).map(([key, optionValue]) => {
                 if (optionValue && typeof optionValue === 'object' && !Array.isArray(optionValue)) {
-                    return { key, fields: getPreviewOptionFields(optionValue), locked: true };
+                    return { key, fields: getPreviewOptionFields(optionValue, { commented }), locked: true, commented };
                 }
                 if (getOptionDefinition(key)?.type === 'select' && (optionValue === null || optionValue === '')) {
-                    return { key, value: '', blankValue: true, locked: true };
+                    return { key, value: '', blankValue: true, locked: true, commented };
                 }
                 return {
                     key,
                     value: Array.isArray(optionValue) ? JSON.stringify(optionValue) : optionValue === null ? 'null' : String(optionValue ?? ''),
-                    locked: true
+                    locked: true,
+                    commented
                 };
+            });
+        }
+
+        function markFieldsCommented(fields, commented) {
+            return fields.map((field) => {
+                const result = { ...field, commented };
+                if (Array.isArray(field.fields)) {
+                    result.fields = markFieldsCommented(field.fields, commented);
+                }
+                return result;
             });
         }
 
@@ -2198,17 +2293,18 @@
                     const key = keyControl instanceof HTMLInputElement || keyControl instanceof HTMLSelectElement
                         ? keyControl.value : keyControl.textContent;
                     const locked = row.dataset.previewOptionLocked === 'true';
+                    const commented = row.dataset.previewOptionCommented === 'true';
                     const nested = row.querySelector(':scope > [data-preview-nested-options]');
                     const booleanValue = row.querySelector(':scope > [data-preview-option-value] input:checked');
                     const valueControl = row.querySelector(':scope > [data-preview-option-value]');
                     const selectedChoice = valueControl instanceof HTMLSelectElement ? valueControl.selectedOptions[0] : null;
                     return nested
-                        ? { key, fields: readPreviewOptionRows(nested), locked }
+                        ? { key, fields: readPreviewOptionRows(nested), locked, commented }
                         : selectedChoice?.dataset.previewBlankChoice === 'true'
-                            ? { key, value: '', blankValue: true, locked }
+                            ? { key, value: '', blankValue: true, locked, commented }
                             : getOptionDefinition(key)?.type === 'select' && valueControl instanceof HTMLSelectElement
-                                ? { key, value: valueControl.value || '', ...(valueControl.value ? { textValue: true } : {}), locked }
-                                : { key, value: booleanValue ? booleanValue.value : valueControl.value || '', locked };
+                                ? { key, value: valueControl.value || '', ...(valueControl.value ? { textValue: true } : {}), locked, commented }
+                                : { key, value: booleanValue ? booleanValue.value : valueControl.value || '', locked, commented };
                 });
         }
 
@@ -2306,10 +2402,11 @@
                 const keyControl = field.locked
                     ? `<span class="preview-edit-option-key" data-preview-option-key>${escapeHtml(field.key)}</span>`
                     : `<select class="modal-input" data-preview-option-key aria-label="Option name"><option value="" disabled${field.key ? '' : ' selected'}>Choose an option</option>${knownOptionChoices}</select>`;
-                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}" ${getDragItemAttributes('edit-option', null, index, parentPath)} data-preview-drop-kind="edit-option" data-preview-drop-index="${index}">
+                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}${field.commented ? ' preview-edit-option-row--commented' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}" data-preview-option-commented="${field.commented ? 'true' : 'false'}" ${getDragItemAttributes('edit-option', null, index, parentPath)} data-preview-drop-kind="edit-option" data-preview-drop-index="${index}">
                 ${keyControl}
                 ${valueControl}
                 <span class="preview-edit-actions preview-edit-option-actions">
+                    <button type="button" class="preview-edit-action preview-edit-comment" data-preview-option-action="comment" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="${field.commented ? 'Uncomment' : 'Comment'} ${escapeHtml(field.key || 'option')}">#<span class="preview-control-label preview-edit-action-label" aria-hidden="true">${field.commented ? 'Uncomment' : 'Comment'} option</span></button>
                     <button type="button" class="preview-edit-action preview-edit-move-up" data-preview-option-action="up" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} up"${index === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option up</span></button>
                     <button type="button" class="preview-edit-action preview-edit-move-down" data-preview-option-action="down" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} down"${index === fields.length - 1 ? ' disabled' : ''}>&darr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option down</span></button>
                     <button type="button" class="preview-edit-action preview-edit-delete" data-preview-option-action="remove" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Remove ${escapeHtml(field.key || 'option')}">&times;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Remove option</span></button>
@@ -2464,6 +2561,7 @@
                     nameInput.value = parsed ? parsed.name : source.groupName;
                     previewEditDialogState.fields = [];
                     previewEditDialogState.originalTab = '';
+                    previewEditDialogState.isCommented = true;
                 } else {
                     const group = isNestedGroup ? findPreviewNestedGroup(source) : findPreviewGroup(source);
                     const settings = parseTabConfig('settings');
@@ -2472,8 +2570,18 @@
                         ? settings.data.layout : {};
                     nameInput.value = group.groupName;
                     previewEditDialogState.availableTabs = getHomepageTabInfo(settings.data).tabs;
-                    previewEditDialogState.originalTab = String(layout[group.groupName]?.tab || '').trim();
-                    const groupFields = getPreviewOptionFields(layout[group.groupName]);
+                    let groupLayout;
+                    if (isNestedGroup) {
+                        // For nested groups, look up layout from parent group's layout config
+                        const parentLayout = layout[source.groupName];
+                        groupLayout = parentLayout && typeof parentLayout === 'object' && !Array.isArray(parentLayout)
+                            ? parentLayout[group.groupName]
+                            : null;
+                    } else {
+                        groupLayout = layout[group.groupName];
+                    }
+                    previewEditDialogState.originalTab = String(groupLayout?.tab || '').trim();
+                    const groupFields = getPreviewOptionFields(groupLayout);
                     previewEditDialogState.groupTabFieldIndex = groupFields.findIndex((field) => field.key === 'tab');
                     previewEditDialogState.fields = previewEditDialogState.availableTabs.length > 0
                         ? groupFields.filter((field) => field.key !== 'tab')
@@ -2493,6 +2601,7 @@
                     const parsed = parseCommentedBlockData(source);
                     serviceName = parsed ? parsed.name : source.serviceName;
                     serviceData = parsed ? parsed.data : {};
+                    previewEditDialogState.isCommented = true;
                 } else {
                     const service = findPreviewService(source);
                     serviceName = service.serviceName;
@@ -2502,7 +2611,10 @@
                 title.textContent = 'Edit service';
                 submit.textContent = 'Save';
                 nameInput.value = serviceName;
-                previewEditDialogState.fields = getPreviewOptionFields(serviceData);
+                previewEditDialogState.fields = getPreviewOptionFields(serviceData, { commented: source.commented === true });
+                if (source.commented !== true) {
+                    previewEditDialogState.fields = appendCommentedSubOptions(source, previewEditDialogState.fields);
+                }
                 previewEditDialogState.availableTabs = groupMoveData.tabs;
                 previewEditDialogState.serviceGroupChoices = groupMoveData.choices;
             } else if (action === 'bookmark-group.add') {
@@ -2514,6 +2626,7 @@
                 if (source.commented === true) {
                     const parsed = parseCommentedBlockData(source);
                     nameInput.value = parsed ? parsed.name : source.groupName;
+                    previewEditDialogState.isCommented = true;
                 } else {
                     const group = findPreviewBookmarkGroup(source);
                     nameInput.value = group.groupName;
@@ -2529,6 +2642,7 @@
                     const parsed = parseCommentedBlockData(source);
                     bookmarkName = parsed ? parsed.name : source.bookmarkName;
                     bookmarkData = parsed ? parsed.data : {};
+                    previewEditDialogState.isCommented = true;
                 } else {
                     const bookmark = findPreviewBookmark(source);
                     bookmarkName = bookmark.bookmarkName;
@@ -2537,13 +2651,20 @@
                 title.textContent = 'Edit bookmark';
                 submit.textContent = 'Save';
                 nameInput.value = bookmarkName;
-                previewEditDialogState.fields = getPreviewOptionFields(bookmarkData);
+                previewEditDialogState.fields = getPreviewOptionFields(bookmarkData, { commented: source.commented === true });
+                if (source.commented !== true) {
+                    previewEditDialogState.fields = appendCommentedSubOptions(source, previewEditDialogState.fields);
+                }
             } else if (action === 'widget.edit') {
                 title.textContent = 'Edit widget';
                 submit.textContent = 'Save';
                 const parsed = parseCommentedBlockData(source);
                 nameInput.value = parsed ? parsed.name : source.name;
-                previewEditDialogState.fields = getPreviewOptionFields(parsed ? parsed.data : {});
+                previewEditDialogState.fields = getPreviewOptionFields(parsed ? parsed.data : {}, { commented: source.commented === true });
+                if (source.commented === true) previewEditDialogState.isCommented = true;
+                if (source.commented !== true) {
+                    previewEditDialogState.fields = appendCommentedSubOptions(source, previewEditDialogState.fields);
+                }
             }
 
             renderPreviewEditOptions();
@@ -2929,7 +3050,8 @@
                         value: field.value,
                         ...(field.textValue ? { textValue: true } : {}),
                         ...(field.blankValue ? { blankValue: true } : {})
-                    })
+                    }),
+                ...(field.commented ? { commented: true } : {})
             }));
             const fields = normalizeFields(previewEditDialogState.fields);
             const findInvalidField = (currentFields) => currentFields.find((field, index) => (
@@ -3375,7 +3497,7 @@
         document.getElementById('preview-edit-add-option').addEventListener('click', () => {
             syncPreviewEditOptionState();
             previewEditDialogState.hasAddedOption = true;
-            previewEditDialogState.fields.push({ key: '', value: '', locked: false });
+            previewEditDialogState.fields.push({ key: '', value: '', locked: false, commented: previewEditDialogState.isCommented === true });
             renderPreviewEditOptions();
             document.querySelector('[data-preview-option-row]:last-child [data-preview-option-key]')?.focus();
         });
@@ -3416,7 +3538,7 @@
                 const field = getPreviewEditFieldAtPath(path);
                 if (!field || !Array.isArray(field.fields)) return;
                 previewEditDialogState.hasAddedOption = true;
-                field.fields.push({ key: '', value: '', locked: false });
+                field.fields.push({ key: '', value: '', locked: false, commented: field.commented === true });
                 renderPreviewEditOptions();
                 return;
             }
@@ -3431,6 +3553,8 @@
                 : previewEditDialogState.fields;
             if (action === 'remove') {
                 fields.splice(index, 1);
+            } else if (action === 'comment') {
+                fields[index].commented = !fields[index].commented;
             } else {
                 const destination = index + (action === 'up' ? -1 : 1);
                 if (destination < 0 || destination >= fields.length) return;
@@ -4159,20 +4283,22 @@
             const dangerClass = danger ? ' preview-edit-delete' : '';
             const actionClass = (action.endsWith('.edit') || action.endsWith('.add'))
                 ? ' preview-edit-modify'
-                : action.endsWith('.move-up')
-                    ? ' preview-edit-move-up'
-                    : action.endsWith('.move-down')
-                        ? ' preview-edit-move-down'
-                        : action.endsWith('.duplicate')
-                            ? ' preview-edit-duplicate'
-                            : '';
+                : action.endsWith('.comment')
+                    ? ' preview-edit-comment'
+                    : action.endsWith('.move-up')
+                        ? ' preview-edit-move-up'
+                        : action.endsWith('.move-down')
+                            ? ' preview-edit-move-down'
+                            : action.endsWith('.duplicate')
+                                ? ' preview-edit-duplicate'
+                                : '';
             return `<button type="button" class="preview-edit-action${dangerClass}${actionClass}" data-preview-action="${escapeHtml(action)}" ${getSourceAttributes(source)} aria-label="${escapeHtml(label)}"${disabled ? ' disabled' : ''}>${icon}<span class="preview-control-label preview-edit-action-label" aria-hidden="true">${escapeHtml(label)}</span></button>`;
         }
 
         function getGroupEditControls(source, position, groupCount) {
             return `<span class="preview-edit-actions">
-                ${getPreviewEditActionButton('group.comment', source, 'Comment/uncomment group', '#')}
                 ${getPreviewEditActionButton('group.edit', source, 'Edit group', '&#9998;')}
+                ${getPreviewEditActionButton('group.comment', source, 'Comment/uncomment group', '#')}
                 ${getPreviewEditActionButton('group.move-up', source, 'Move group up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('group.move-down', source, 'Move group down', '&darr;', { disabled: position === groupCount - 1 })}
                 ${getPreviewEditActionButton('group.remove', source, 'Delete group', '&times;', { danger: true })}
@@ -4181,8 +4307,8 @@
 
         function getServiceEditControls(source, position, serviceCount) {
             return `<span class="preview-edit-actions">
-                ${getPreviewEditActionButton('service.comment', source, 'Comment/uncomment service', '#')}
                 ${getPreviewEditActionButton('service.edit', source, 'Edit service', '&#9998;')}
+                ${getPreviewEditActionButton('service.comment', source, 'Comment/uncomment service', '#')}
                 ${getPreviewEditActionButton('service.duplicate', source, 'Duplicate service', '&#10697;')}
                 ${getPreviewEditActionButton('service.move-up', source, 'Move service up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('service.move-down', source, 'Move service down', '&darr;', { disabled: position === serviceCount - 1 })}
@@ -4192,8 +4318,8 @@
 
         function getBookmarkGroupEditControls(source, position, groupCount) {
             return `<span class="preview-edit-actions">
-                ${getPreviewEditActionButton('bookmark-group.comment', source, 'Comment/uncomment bookmark group', '#')}
                 ${getPreviewEditActionButton('bookmark-group.edit', source, 'Edit bookmark group', '&#9998;')}
+                ${getPreviewEditActionButton('bookmark-group.comment', source, 'Comment/uncomment bookmark group', '#')}
                 ${getPreviewEditActionButton('bookmark-group.move-up', source, 'Move bookmark group up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('bookmark-group.move-down', source, 'Move bookmark group down', '&darr;', { disabled: position === groupCount - 1 })}
                 ${getPreviewEditActionButton('bookmark-group.remove', source, 'Delete bookmark group', '&times;', { danger: true })}
@@ -4202,8 +4328,8 @@
 
         function getBookmarkEditControls(source, position, bookmarkCount) {
             return `<span class="preview-edit-actions">
-                ${getPreviewEditActionButton('bookmark.comment', source, 'Comment/uncomment bookmark', '#')}
                 ${getPreviewEditActionButton('bookmark.edit', source, 'Edit bookmark', '&#9998;')}
+                ${getPreviewEditActionButton('bookmark.comment', source, 'Comment/uncomment bookmark', '#')}
                 ${getPreviewEditActionButton('bookmark.move-up', source, 'Move bookmark up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('bookmark.move-down', source, 'Move bookmark down', '&darr;', { disabled: position === bookmarkCount - 1 })}
                 ${getPreviewEditActionButton('bookmark.remove', source, 'Delete bookmark', '&times;', { danger: true })}
@@ -4346,13 +4472,19 @@
                             }
                         }
 
+                        // Detect if this is a nested group (value is an array)
+                        const innerValue = entry[entryName];
+                        const isNestedGroup = Array.isArray(innerValue);
+
                         // Match to the correct active group occurrence
                         const matchedIdx = activeGroupInfo.findIndex((gi) => gi.name === parentName && gi.idx === parentOccurrence - 1);
                         if (matchedIdx >= 0) {
                             if (!commentedServicesMap.has(matchedIdx)) {
                                 commentedServicesMap.set(matchedIdx, []);
                             }
-                            const commentedEntry = { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                            const commentedEntry = isNestedGroup
+                                ? { [entryName]: innerValue.map((svc) => svc && typeof svc === 'object' ? { ...svc, __commented: true } : svc), __commented: true, ...lineInfo }
+                                : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
                             commentedServicesMap.get(matchedIdx).push(commentedEntry);
                         } else {
                             // Parent is a commented-out group — add service there
@@ -4362,7 +4494,9 @@
                                 if (!Array.isArray(parentEntries)) {
                                     parentGroup[parentName] = [];
                                 }
-                                const commentedEntry = { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                                const commentedEntry = isNestedGroup
+                                    ? { [entryName]: innerValue.map((svc) => svc && typeof svc === 'object' ? { ...svc, __commented: true } : svc), __commented: true, ...lineInfo }
+                                    : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
                                 parentGroup[parentName].push(commentedEntry);
                             }
                         }
@@ -4666,6 +4800,7 @@
                     const nestedName = Object.keys(entry)[0];
                     const nestedOccurrenceIndex = takeOccurrence(nestedGroupOccurrenceCounter, nestedName);
                     const nestedEntries = entry[nestedName];
+                    const nestedIsCommented = entry.__commented === true;
                     const nestedLayout = layoutConfig && typeof layoutConfig === 'object' && !Array.isArray(layoutConfig)
                         ? layoutConfig[nestedName]
                         : null;
@@ -4699,7 +4834,9 @@
                     const serviceCardsGrid = nestedCards || addServiceButton
                         ? `<div class="dashboard-cards"${previewEditMode ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(nestedEntries) ? nestedEntries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"` : ''}>${nestedCards}${addServiceButton}</div>`
                         : '';
-                    return `<section class="dashboard-nested-group"${getPreviewLayoutAttributes(nestedLayout)}><div class="dashboard-nested-group-title">${nestedIcon}<span class="preview-jump-target" ${getSourceAttributes(nestedGroupSource)} ${nestedGroupTooltip}>${escapeHtml(nestedName)}</span>${nestedGroupEditControls}</div>${serviceCardsGrid}${nestedChildren}</section>`;
+                    const isCollapsed = isInitiallyCollapsed(nestedLayout);
+                    const nestedGroupClass = 'dashboard-nested-group' + (nestedIsCommented ? ' dashboard-nested-group--commented' : '');
+                    return `<details class="${nestedGroupClass}" ${getPreviewLayoutAttributes(nestedLayout)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-nested-group-title">${nestedIcon}<span class="preview-jump-target" ${getSourceAttributes(nestedGroupSource)} ${nestedGroupTooltip}>${escapeHtml(nestedName)}</span>${nestedGroupEditControls}</summary>${serviceCardsGrid}${nestedChildren}</details>`;
                 }).join('');
             }
 
@@ -4853,16 +4990,16 @@
                 ]);
                 const widgetLineInfo = isCommented ? commentedWidgetInfo.get(widgetIdentifier) : null;
                 const widgetSource = { tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData), ...(isCommented ? { commented: true, startLine: widgetLineInfo.startLine, endLine: widgetLineInfo.endLine } : {}) };
-                const widgetCommentButton = previewEditMode
-                    ? getPreviewEditActionButton('widget.comment', widgetSource, 'Comment/uncomment widget', '#')
-                    : '';
                 const widgetEditButton = previewEditMode && isCommented
                     ? getPreviewEditActionButton('widget.edit', widgetSource, 'Edit widget', '&#9998;')
+                    : '';
+                const widgetCommentButton = previewEditMode
+                    ? getPreviewEditActionButton('widget.comment', widgetSource, 'Comment/uncomment widget', '#')
                     : '';
                 const widgetRemoveButton = previewEditMode && isCommented
                     ? getPreviewEditActionButton('widget.remove', widgetSource, 'Delete widget', '&times;', { danger: true })
                     : '';
-                return `<span class="widget-block preview-jump-target${isCommented ? ' widget-block--commented' : ''}" ${getSourceAttributes(widgetSource)} ${widgetTooltip}>${escapeHtml(name)}${widgetCommentButton}${widgetEditButton}${widgetRemoveButton}</span>`;
+                return `<span class="widget-block preview-jump-target${isCommented ? ' widget-block--commented' : ''}" ${getSourceAttributes(widgetSource)} ${widgetTooltip}>${escapeHtml(name)}${widgetEditButton}${widgetCommentButton}${widgetRemoveButton}</span>`;
             }).join('');
 
             const previewTabsHtml = homepageTabs.length > 0 || previewEditMode

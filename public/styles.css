@@ -1539,6 +1539,31 @@
             border: 1px solid var(--border-color);
             border-radius: 8px;
         }
+        details.dashboard-nested-group > summary.dashboard-nested-group-title {
+            cursor: pointer;
+            list-style: none;
+        }
+        details.dashboard-nested-group > summary.dashboard-nested-group-title::-webkit-details-marker {
+            display: none;
+        }
+        details.dashboard-nested-group > summary.dashboard-nested-group-title::after {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            opacity: 0.75;
+            transform: rotate(45deg);
+            transition: transform 0.15s ease;
+            margin-left: auto;
+            flex: 0 0 auto;
+        }
+        details.dashboard-nested-group[open] > summary.dashboard-nested-group-title {
+            margin-bottom: 9px;
+        }
+        details.dashboard-nested-group[open] > summary.dashboard-nested-group-title::after {
+            transform: rotate(225deg);
+        }
         .dashboard-group-nested-root {
             padding: 12px;
             border: 1px solid var(--border-color);
@@ -1758,6 +1783,16 @@
             background: #4f9ff7;
             color: white;
         }
+        .preview-edit-action.preview-edit-comment {
+            border-color: color-mix(in srgb, #9b7fd4 55%, var(--border-color));
+            color: #9b7fd4;
+        }
+        .preview-edit-action.preview-edit-comment:hover,
+        .preview-edit-action.preview-edit-comment:focus-visible {
+            border-color: #9b7fd4;
+            background: #9b7fd4;
+            color: white;
+        }
         .preview-edit-action.preview-edit-move-up {
             border-color: color-mix(in srgb, var(--notice-success-color) 58%, var(--border-color));
             color: var(--notice-success-color);
@@ -1928,6 +1963,9 @@
             transform: translateY(0);
         }
         details.dashboard-group > .dashboard-group-title > .preview-edit-actions {
+            right: 34px;
+        }
+        details.dashboard-nested-group > summary.dashboard-nested-group-title > .preview-edit-actions {
             right: 34px;
         }
         .preview-add-button {
@@ -2587,6 +2625,12 @@
             opacity: 1;
             pointer-events: auto;
             transform: translateY(0);
+        }
+        .preview-edit-option-row--commented {
+            background: var(--commented-card-bg);
+        }
+        .preview-edit-nested-options .preview-edit-option-row--commented {
+            background: var(--commented-nested-bg);
         }
         .preview-add-option {
             margin-top: 10px;
