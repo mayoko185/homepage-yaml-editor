@@ -1254,3 +1254,102 @@ test('cross-group service move preserves block style for services with widgets',
   // The destination group's existing service should not be affected
   assert.match(files.services, /^    - Service:$/m, 'existing service in destination group preserved');
 });
+
+test('preserves commented-out services when moving an active service', () => {
+  const services = `# top
+- Group A:
+    - Active One:
+        href: /one
+    # - Commented One:
+    #     href: /commented
+    - Active Two:
+        href: /two
+`;
+
+  // Move Active Two up one position (before Commented One)
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Active Two', serviceIndex: 0 },
+    direction: 'up'
+  }, { services });
+
+  // Both commented-out services must still be present
+  assert.match(files.services, /# - Commented One:/);
+  assert.match(files.services, /#     href: \/commented/);
+
+  // Active Two must have moved before the comment
+  assert.match(files.services, /^    - Active Two:\s*$/m);
+  assert.match(files.services, /^    - Active One:\s*$/m);
+});
+
+test('preserves commented-out services when moving an active service across groups', () => {
+  const services = `# top
+- Group A:
+    - Active One:
+        href: /one
+    # - Commented One:
+    #     href: /commented
+- Group B:
+    - Active Two:
+        href: /two
+`;
+
+  // Move Active One from Group A to Group B
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Active One', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Group B', groupIndex: 0 },
+    destinationIndex: 0
+  }, { services });
+
+  // Commented service must stay in Group A
+  assert.match(files.services, /# - Commented One:/);
+  assert.match(files.services, /#     href: \/commented/);
+
+  // Active One must be in Group B
+  assert.match(files.services, /^    - Active One:\s*$/m);
+});
+
+test('preserves commented-out services when removing an active service', () => {
+  const services = `# top
+- Group A:
+    - Active One:
+        href: /one
+    # - Commented One:
+    #     href: /commented
+    - Active Two:
+        href: /two
+`;
+
+  const files = transform({
+    type: 'service.remove',
+    target: { groupName: 'Group A', groupIndex: 0, serviceName: 'Active Two', serviceIndex: 0 }
+  }, { services });
+
+  assert.match(files.services, /# - Commented One:/);
+  assert.match(files.services, /#     href: \/commented/);
+  assert.doesNotMatch(files.services, /^    - Active Two:\s*$/m);
+});
+
+test('preserves commented-out groups when moving an active group', () => {
+  const services = `# top
+# - Commented Group:
+#     - Service:
+#         href: /
+- Active Group:
+    - Service One:
+        href: /one
+- Other Group:
+    - Service Two:
+        href: /two
+`;
+
+  const files = transform({
+    type: 'group.move',
+    target: { groupName: 'Active Group', groupIndex: 0 },
+    direction: 'down'
+  }, { services });
+
+  assert.match(files.services, /# - Commented Group:/);
+  assert.match(files.services, /#     - Service:/);
+});

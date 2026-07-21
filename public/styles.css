@@ -9,6 +9,9 @@
             --preview-bg: #3a3a3a;
             --config-item-bg: #404040;
             --group-title-color: #ffffff;
+            --commented-card-bg: #4a423d;
+            --commented-group-bg: #3f3a35;
+            --commented-nested-bg: #423d38;
             --error-color: #ff6b6b;
             --warning-color: #fbbf24;
             --notice-info-color: #60a5fa;
@@ -46,6 +49,9 @@
             --preview-bg: #f9f9f9;
             --config-item-bg: white;
             --group-title-color: #333;
+            --commented-card-bg: #e6e1dc;
+            --commented-group-bg: #dbd6d1;
+            --commented-nested-bg: #dfdad5;
             --error-color: #c62828;
             --warning-color: #a16207;
             --notice-info-color: #2563eb;
@@ -949,6 +955,9 @@
             padding-left: 10px;
         }
         .widget-block {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             background-color: rgba(76, 175, 80, 0.1);
             border: 1px solid rgba(76, 175, 80, 0.3);
             border-radius: 4px;
@@ -956,6 +965,16 @@
             font-size: 0.8em;
             color: var(--tab-active-bg);
             font-weight: 500;
+        }
+        .widget-block .preview-edit-action {
+            width: 20px;
+            height: 20px;
+            min-width: 20px;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        .widget-block .preview-edit-action-label {
+            display: none;
         }
         .settings-layout {
             display: grid;
@@ -1374,6 +1393,15 @@
             background: color-mix(in srgb, var(--tab-active-bg) 10%, var(--config-item-bg));
             transform: translateY(-1px);
         }
+        .bookmark-card--commented {
+            background: var(--commented-card-bg);
+        }
+        .bookmark-group--commented {
+            background: var(--commented-group-bg);
+        }
+        .widget-block--commented {
+            background: var(--commented-card-bg);
+        }
         .bookmark-card-link {
             display: flex;
             align-items: center;
@@ -1558,6 +1586,15 @@
             border-radius: 8px;
             padding: 10px;
             background: var(--preview-bg);
+        }
+        .dashboard-card--commented {
+            background: var(--commented-card-bg);
+        }
+        .dashboard-group--commented {
+            background: var(--commented-group-bg);
+        }
+        .dashboard-nested-group--commented {
+            background: var(--commented-nested-bg);
         }
         .preview-jump-target {
             cursor: pointer;

@@ -87,6 +87,7 @@ function getDefaultAppSettings() {
     previewAutoRefresh: template.previewAutoRefresh,
     editorVisible: template.editorVisible,
     interactiveEditor: template.interactiveEditor,
+    showComments: template.showComments === true,
     visibleTabs: Array.isArray(template.visibleTabs) ? [...template.visibleTabs] : [...DEFAULT_CONFIG_TAB_ORDER],
     tabOrder: Array.isArray(template.tabOrder) ? [...template.tabOrder] : [...DEFAULT_CONFIG_TAB_ORDER]
   };
@@ -288,6 +289,8 @@ function normalizeAppSettings(value) {
     editorVisible: typeof value.editorVisible === 'boolean' ? value.editorVisible : defaults.editorVisible,
     interactiveEditor: typeof value.interactiveEditor === 'boolean'
       ? value.interactiveEditor : defaults.interactiveEditor,
+    showComments: typeof value.showComments === 'boolean'
+      ? value.showComments : defaults.showComments,
     visibleTabs: normalizeVisibleTabs(value.visibleTabs, tabOrder),
     tabOrder
   };

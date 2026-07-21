@@ -51,6 +51,34 @@ function scalarValue(node) {
   return ['string', 'number', 'boolean'].includes(typeof node) ? String(node) : '';
 }
 
+function preserveCommentBefore(sequence, index) {
+  const item = sequence.items[index];
+  if (!item) return null;
+  const comment = item.commentBefore;
+  if (comment) {
+    item.commentBefore = undefined;
+  }
+  return comment || null;
+}
+
+function restoreCommentBefore(sequence, index, comment) {
+  if (!comment) return;
+  if (index < sequence.items.length) {
+    const target = sequence.items[index];
+    if (target.commentBefore) {
+      target.commentBefore = comment + '\n' + target.commentBefore;
+    } else {
+      target.commentBefore = comment;
+    }
+  } else {
+    if (sequence.comment) {
+      sequence.comment = sequence.comment + '\n' + comment;
+    } else {
+      sequence.comment = comment;
+    }
+  }
+}
+
 function getMoveDestination(currentIndex, itemCount, operation, label) {
   if (Number.isInteger(operation.destinationIndex)) {
     if (operation.destinationIndex < 0 || operation.destinationIndex >= itemCount) {
@@ -693,16 +721,20 @@ function transformPreviewYaml({ files, operation }) {
         setServiceFields(servicesDocument, service.pair, values);
       }
       if (operation.destinationTarget) {
+        const savedComment = preserveCommentBefore(sourceServices, service.index);
         const destinationSequence = resolveServiceSequence(servicesDocument, operation.destinationTarget, { createIfMissing: true });
         const [item] = sourceServices.items.splice(service.index, 1);
         destinationSequence.items.push(item);
+        restoreCommentBefore(sourceServices, service.index, savedComment);
       }
       servicesChanged = true;
       break;
     }
     case 'service.remove': {
       const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
+      const savedComment = preserveCommentBefore(sourceServices, service.index);
       sourceServices.items.splice(service.index, 1);
+      restoreCommentBefore(sourceServices, service.index, savedComment);
       servicesChanged = true;
       break;
     }
@@ -720,6 +752,7 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'service.move': {
       const { service, services: sourceServices } = getServiceInPath(servicesDocument, target);
+      const savedComment = preserveCommentBefore(sourceServices, service.index);
       const destinationTarget = operation.destinationTarget;
       if (destinationTarget) {
         const destinationSequence = resolveServiceSequence(servicesDocument, destinationTarget, { createIfMissing: true });
@@ -737,6 +770,7 @@ function transformPreviewYaml({ files, operation }) {
         const [item] = sourceServices.items.splice(service.index, 1);
         sourceServices.items.splice(destination, 0, item);
       }
+      restoreCommentBefore(sourceServices, service.index, savedComment);
       servicesChanged = true;
       break;
     }
@@ -806,7 +840,9 @@ function transformPreviewYaml({ files, operation }) {
     case 'group.remove': {
       const found = findServiceGroupPair(servicesDocument, target);
       const oldName = scalarValue(found.pair.key);
+      const savedComment = preserveCommentBefore(found.parentSequence, found.index);
       found.parentSequence.items.splice(found.index, 1);
+      restoreCommentBefore(found.parentSequence, found.index, savedComment);
       servicesChanged = true;
       settingsChanged = syncLayoutRemove(settingsDocument, oldName);
       break;
@@ -814,6 +850,7 @@ function transformPreviewYaml({ files, operation }) {
     case 'group.move': {
       const found = findServiceGroupPair(servicesDocument, target);
       const groupName = scalarValue(found.pair.key);
+      const savedComment = preserveCommentBefore(found.parentSequence, found.index);
       const destination = getMoveDestination(found.index, found.parentSequence.items.length, operation, 'Group');
       if (destination < 0 || destination >= found.parentSequence.items.length) {
         throw new YamlTransformError(`Group "${groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
@@ -827,6 +864,7 @@ function transformPreviewYaml({ files, operation }) {
       }
       const [item] = found.parentSequence.items.splice(found.index, 1);
       found.parentSequence.items.splice(destination, 0, item);
+      restoreCommentBefore(found.parentSequence, found.index, savedComment);
       servicesChanged = true;
       break;
     }
@@ -926,18 +964,22 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'bookmark-group.remove': {
       const group = getBookmarkGroup(bookmarksDocument, target);
+      const savedComment = preserveCommentBefore(bookmarksSequence, group.index);
       bookmarksSequence.items.splice(group.index, 1);
+      restoreCommentBefore(bookmarksSequence, group.index, savedComment);
       bookmarksChanged = true;
       break;
     }
     case 'bookmark-group.move': {
       const group = getBookmarkGroup(bookmarksDocument, target);
+      const savedComment = preserveCommentBefore(bookmarksSequence, group.index);
       const destination = getMoveDestination(group.index, bookmarksSequence.items.length, operation, 'Bookmark group');
       if (destination < 0 || destination >= bookmarksSequence.items.length) {
         throw new YamlTransformError(`Bookmark group "${target.groupName}" is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} and cannot be moved farther`);
       }
       const [item] = bookmarksSequence.items.splice(group.index, 1);
       bookmarksSequence.items.splice(destination, 0, item);
+      restoreCommentBefore(bookmarksSequence, group.index, savedComment);
       bookmarksChanged = true;
       break;
     }
@@ -967,12 +1009,15 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'bookmark.remove': {
       const { bookmark, bookmarks } = getBookmark(bookmarksDocument, target);
+      const savedComment = preserveCommentBefore(bookmarks, bookmark.index);
       bookmarks.items.splice(bookmark.index, 1);
+      restoreCommentBefore(bookmarks, bookmark.index, savedComment);
       bookmarksChanged = true;
       break;
     }
     case 'bookmark.move': {
       const { bookmark, bookmarks: sourceBookmarks } = getBookmark(bookmarksDocument, target);
+      const savedComment = preserveCommentBefore(sourceBookmarks, bookmark.index);
       const destinationTarget = operation.destinationTarget;
       if (destinationTarget) {
         const destinationGroup = getBookmarkGroup(bookmarksDocument, destinationTarget);
@@ -991,6 +1036,7 @@ function transformPreviewYaml({ files, operation }) {
         const [item] = sourceBookmarks.items.splice(bookmark.index, 1);
         sourceBookmarks.items.splice(destination, 0, item);
       }
+      restoreCommentBefore(sourceBookmarks, bookmark.index, savedComment);
       bookmarksChanged = true;
       break;
     }

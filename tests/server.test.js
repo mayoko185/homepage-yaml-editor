@@ -49,7 +49,7 @@ test('app-settings.default.json ships well-formed editor setting defaults', asyn
   for (const key of ['customPageTitle', 'liveHomepageUrl']) {
     assert.equal(typeof defaults[key], 'string', `app-settings.default.json "${key}" must be a string`);
   }
-  for (const key of ['autoIndent', 'previewAutoRefresh', 'editorVisible', 'interactiveEditor']) {
+  for (const key of ['autoIndent', 'previewAutoRefresh', 'editorVisible', 'interactiveEditor', 'showComments']) {
     assert.equal(typeof defaults[key], 'boolean', `app-settings.default.json "${key}" must be a boolean`);
   }
   assert.ok(['light', 'dark'].includes(defaults.theme), 'app-settings.default.json "theme" must be "light" or "dark"');
@@ -148,6 +148,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       previewAutoRefresh: true,
       editorVisible: false,
       interactiveEditor: true,
+      showComments: false,
       visibleTabs: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'],
       tabOrder: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes']
     });
@@ -172,6 +173,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       previewAutoRefresh: false,
       editorVisible: false,
       interactiveEditor: true,
+      showComments: false,
       visibleTabs: ['kubernetes', 'services'],
       tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });
@@ -183,6 +185,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       previewAutoRefresh: false,
       editorVisible: false,
       interactiveEditor: true,
+      showComments: false,
       visibleTabs: ['kubernetes', 'services'],
       tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });

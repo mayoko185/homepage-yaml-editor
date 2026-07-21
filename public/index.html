@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css?v=5.65.16">
-    <link rel="stylesheet" href="styles.css?v=198">
+    <link rel="stylesheet" href="styles.css?v=200">
     <script src="runtime-config.js"></script>
     <script src="theme-bootstrap.js?v=1"></script>
 </head>
@@ -155,6 +155,15 @@
                     <span id="preview-title-label">Dashboard</span>
                 </div>
                 <div class="preview-refresh-controls">
+                    <label class="preview-refresh-toggle preview-toolbar-control" id="preview-comments-toggle-container" hidden>
+                        <input type="checkbox" id="preview-comments-toggle" aria-label="Show commented lines">
+                        <span class="preview-refresh-toggle-icon" aria-hidden="true">
+                            <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
+                                <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/>
+                            </svg>
+                        </span>
+                        <span id="preview-comments-label" class="preview-control-label" aria-hidden="true">Show comments</span>
+                    </label>
                     <button type="button" id="preview-option-types-button" class="toolbar-button toolbar-icon-control" aria-label="Manage option types" hidden>
                         <span class="toolbar-button-icon" aria-hidden="true">
                             <svg class="refresh-icon" viewBox="0 0 24 24" focusable="false">
@@ -289,6 +298,7 @@
                                 </label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-show-comments"><span class="settings-control-icon" aria-hidden="true">#</span><span class="settings-toggle-copy"><strong>Show Comments</strong><small>Display commented-out items in the Interactive Editor</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                             </div>
                         </section>
                     </section>
@@ -432,6 +442,7 @@
     <script src="vendor/js-yaml/js-yaml.min.js?v=4.3.0"></script>
     <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
     <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
-    <script src="app.js?v=157"></script>
+    <script src="chunk-tree.js?v=2"></script>
+    <script src="app.js?v=170"></script>
 </body>
 </html>

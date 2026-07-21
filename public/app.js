@@ -52,6 +52,7 @@
         let sampleModeEnabled = true;
         let previewUndoState = null;
         let applyingPreviewFiles = false;
+        let previewShowCommentsState = false;
         let previewEditDialogState = null;
         let previewEditPreviousFocus = null;
         let previewEditPreviousFocusVisible = false;
@@ -136,6 +137,966 @@
                 });
             });
             editor.focus();
+        }
+
+        function toggleLineRangeComments(editor, startLine, endLine, forceUncomment) {
+            const lines = [];
+            for (let i = startLine; i <= endLine; i++) {
+                lines.push(editor.getLine(i) || '');
+            }
+            const nonBlankLines = lines.filter((line) => line.trim().length > 0);
+            const shouldUncomment = forceUncomment || (nonBlankLines.length > 0 && nonBlankLines.every((line) => /^\s*#/.test(line)));
+
+            editor.operation(() => {
+                lines.forEach((currentLine, offset) => {
+                    const lineNumber = startLine + offset;
+                    const nextLine = shouldUncomment
+                        ? currentLine.replace(/^(\s*)# ?/, '$1')
+                        : currentLine.replace(/^(\s*)/, '$1# ');
+                    if (nextLine !== currentLine) {
+                        editor.replaceRange(
+                            nextLine,
+                            { line: lineNumber, ch: 0 },
+                            { line: lineNumber, ch: currentLine.length },
+                            '+toggleCommentBlock'
+                        );
+                    }
+                });
+            });
+        }
+
+        function toggleCommentBlock(source) {
+            const resolvedSource = getCurrentTabSource(source);
+            const tabName = resolvedSource && resolvedSource.tab ? resolvedSource.tab : currentTab;
+            const range = findBlockLineRange(resolvedSource);
+            if (!range || range.startLine < 0 || range.endLine < range.startLine) {
+                setSaveStatus('Could not locate the YAML block to comment/uncomment.', 'error');
+                return;
+            }
+            if (tabName !== currentTab) {
+                switchTab(tabName, null);
+            }
+            const isCommented = resolvedSource && resolvedSource.commented === true;
+            toggleLineRangeComments(yamlCodeEditor, range.startLine, range.endLine, isCommented);
+            updateUnsavedIndicators();
+            updatePreview({ force: true });
+            setSaveStatus(isCommented ? 'Item uncommented.' : 'Item commented out.', 'success');
+        }
+
+        // --- Commented-item text transforms for Preview edit operations ---
+
+        function getTabYamlLines(tabName) {
+            return getTabYamlText(tabName).split('\n');
+        }
+
+        function replaceTabYamlText(tabName, newText) {
+            loadedFiles[tabName] = newText;
+            if (tabName === currentTab) {
+                yamlCodeEditor.operation(() => {
+                    const lastLine = Math.max(0, yamlCodeEditor.lineCount() - 1);
+                    const lastCharacter = (yamlCodeEditor.getLine(lastLine) || '').length;
+                    yamlCodeEditor.replaceRange(newText, { line: 0, ch: 0 }, { line: lastLine, ch: lastCharacter }, '+commentedPreviewEdit');
+                });
+            }
+            updateUnsavedIndicators();
+            updatePreview({ force: true });
+        }
+
+        function parseCommentedBlockData(source) {
+            const range = findBlockLineRange(source);
+            if (!range) return null;
+            const lines = getTabYamlLines(source.tab);
+            const uncommentedLines = lines.slice(range.startLine, range.endLine + 1).map((line) => {
+                const match = line.match(/^(\s*)# ?(.*)$/);
+                if (!match) return line;
+                return match[1] + match[2];
+            });
+            try {
+                const parsed = jsyaml.load(uncommentedLines.join('\n'));
+                if (parsed === null || parsed === undefined || parsed === '') return null;
+                const entry = Array.isArray(parsed) ? parsed[0] : parsed;
+                if (!entry || typeof entry !== 'object') return null;
+                const name = Object.keys(entry)[0];
+                return name ? { name, data: entry[name] } : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function serializeCommentedBlock(name, data, baseIndent) {
+            const indent = ' '.repeat(baseIndent);
+            const childIndent = ' '.repeat(baseIndent + 2);
+            const lines = [`${indent}- ${name}:`];
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+                Object.entries(data).forEach(([key, value]) => {
+                    if (value === undefined || value === null) return;
+                    if (typeof value === 'object') {
+                        lines.push(`${childIndent}${key}:`);
+                        const grandChildIndent = ' '.repeat(baseIndent + 4);
+                        Object.entries(value).forEach(([subKey, subValue]) => {
+                            if (subValue === undefined || subValue === null) return;
+                            lines.push(`${grandChildIndent}${subKey}: ${subValue}`);
+                        });
+                    } else {
+                        lines.push(`${childIndent}${key}: ${value}`);
+                    }
+                });
+            }
+            return lines;
+        }
+
+        function commentBlockLines(lines, baseIndent) {
+            return lines.map((line) => {
+                if (line.trim() === '') return line;
+                return line.slice(0, baseIndent) + '# ' + line.slice(baseIndent);
+            });
+        }
+
+        function serializeCommentedObjectBlock(name, data, baseIndent) {
+            const indent = ' '.repeat(baseIndent);
+            const childIndent = ' '.repeat(baseIndent + 2);
+            const lines = [`${indent}${name}:`];
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+                Object.entries(data).forEach(([key, value]) => {
+                    if (value === undefined || value === null) return;
+                    if (typeof value === 'object') {
+                        lines.push(`${childIndent}${key}:`);
+                        const grandChildIndent = ' '.repeat(baseIndent + 4);
+                        Object.entries(value).forEach(([subKey, subValue]) => {
+                            if (subValue === undefined || subValue === null) return;
+                            lines.push(`${grandChildIndent}${subKey}: ${subValue}`);
+                        });
+                    } else {
+                        lines.push(`${childIndent}${key}: ${value}`);
+                    }
+                });
+            }
+            return lines;
+        }
+
+        function applyCommentedServiceOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate commented service');
+
+            if (operation.type === 'service.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'service.duplicate') {
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                const parsed = parseCommentedBlockData(target);
+                const originalName = parsed ? parsed.name : '';
+                const renamedFirstLine = blockLines[0].replace(/(-\s+)(.+?):\s*$/, `$1${originalName ? originalName + ' (cloned)' : 'Cloned'}:`);
+                const newBlock = [renamedFirstLine, ...blockLines.slice(1)];
+                lines.splice(range.endLine + 1, 0, '', ...newBlock);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'service.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                let blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (operation.destinationTarget) {
+                    const destGroupRange = findBlockLineRange({
+                        tab: tabName,
+                        kind: 'services-group',
+                        groupName: operation.destinationTarget.groupName,
+                        groupIndex: operation.destinationTarget.groupIndex || 0,
+                        ...(operation.destinationTarget.nestedGroupPath ? { nestedGroupPath: operation.destinationTarget.nestedGroupPath } : {})
+                    });
+                    if (!destGroupRange) throw new Error('Could not locate destination group');
+                    const destEntryIndent = detectEntryIndent(lines, destGroupRange.startLine, destGroupRange.endLine);
+                    blockLines = reindentCommentedBlockLines(blockLines, destEntryIndent);
+                    if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                        insertAt = findServiceInsertLine(lines, destGroupRange, operation.destinationIndex);
+                    } else {
+                        insertAt = destGroupRange.endLine + 1;
+                    }
+                } else {
+                    const groupRange = findBlockLineRange({ tab: tabName, kind: 'services-group', groupName: target.groupName, groupIndex: target.groupIndex || 0 });
+                    if (!groupRange) throw new Error('Could not locate service group');
+                    const sibling = findSiblingServiceLineRange(yamlText, groupRange.startLine, groupRange.endLine, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Service is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'service.edit') {
+                const values = operation.values || {};
+                const newName = String(values.name || '').trim();
+                if (!newName) throw new Error('Service name is required');
+                const baseIndent = lines[range.startLine].search(/\S/);
+                const data = values.fields ? Object.fromEntries(values.fields.filter((f) => f.blankValue || String(f.value || '').trim() !== '').map((f) => [f.key, f.value])) : {};
+                const commentedBlock = commentBlockLines(serializeCommentedBlock(newName, data, baseIndent), baseIndent);
+                lines.splice(range.startLine, range.endLine - range.startLine + 1, ...commentedBlock);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported commented service operation "${operation.type}"`);
+        }
+
+        function applyCommentedGroupOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate commented group');
+
+            if (operation.type === 'group.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'group.duplicate') {
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                const parsed = parseCommentedBlockData(target);
+                const originalName = parsed ? parsed.name : '';
+                const renamedFirstLine = blockLines[0].replace(/(-\s+)(.+?):\s*$/, `$1${originalName ? originalName + ' (cloned)' : 'Cloned'}:`);
+                const newBlock = [renamedFirstLine, ...blockLines.slice(1)];
+                lines.splice(range.endLine + 1, 0, '', ...newBlock);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'group.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                    insertAt = findGroupInsertLine(lines, operation.destinationIndex);
+                } else {
+                    const sibling = findSiblingGroupLineRange(yamlText, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Group is already at the ${operation.direction === 'up' ? 'top' : 'bottom'}`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'group.edit' || operation.type === 'group.rename') {
+                const values = operation.values || {};
+                const newName = String(values.name || '').trim();
+                if (!newName) throw new Error('Group name is required');
+                lines[range.startLine] = lines[range.startLine].replace(/(-\s+)(.+?):\s*$/, `$1${newName}:`);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported commented group operation "${operation.type}"`);
+        }
+
+        function applyCommentedBookmarkOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate commented bookmark');
+
+            if (operation.type === 'bookmark.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark.duplicate') {
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                const parsed = parseCommentedBlockData(target);
+                const originalName = parsed ? parsed.name : '';
+                const renamedFirstLine = blockLines[0].replace(/(-\s+)(.+?):\s*$/, `$1${originalName ? originalName + ' (cloned)' : 'Cloned'}:`);
+                const newBlock = [renamedFirstLine, ...blockLines.slice(1)];
+                lines.splice(range.endLine + 1, 0, '', ...newBlock);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                let blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (operation.destinationTarget) {
+                    const destGroupRange = findBlockLineRange({
+                        tab: tabName,
+                        kind: 'bookmark-group',
+                        groupName: operation.destinationTarget.groupName,
+                        groupIndex: operation.destinationTarget.groupIndex || 0,
+                        ...(operation.destinationTarget.nestedGroupPath ? { nestedGroupPath: operation.destinationTarget.nestedGroupPath } : {})
+                    });
+                    if (!destGroupRange) throw new Error('Could not locate destination bookmark group');
+                    const destEntryIndent = detectEntryIndent(lines, destGroupRange.startLine, destGroupRange.endLine);
+                    blockLines = reindentCommentedBlockLines(blockLines, destEntryIndent);
+                    if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                        insertAt = findServiceInsertLine(lines, destGroupRange, operation.destinationIndex);
+                    } else {
+                        insertAt = destGroupRange.endLine + 1;
+                    }
+                } else {
+                    const groupRange = findBlockLineRange({ tab: tabName, kind: 'bookmark-group', groupName: target.groupName, groupIndex: target.groupIndex || 0 });
+                    if (!groupRange) throw new Error('Could not locate bookmark group');
+                    const sibling = findSiblingServiceLineRange(yamlText, groupRange.startLine, groupRange.endLine, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Bookmark is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark.edit') {
+                const values = operation.values || {};
+                const newName = String(values.name || '').trim();
+                if (!newName) throw new Error('Bookmark name is required');
+                const baseIndent = lines[range.startLine].search(/\S/);
+                const data = values.fields ? Object.fromEntries(values.fields.filter((f) => f.blankValue || String(f.value || '').trim() !== '').map((f) => [f.key, f.value])) : {};
+                const commentedBlock = commentBlockLines(serializeCommentedBlock(newName, data, baseIndent), baseIndent);
+                lines.splice(range.startLine, range.endLine - range.startLine + 1, ...commentedBlock);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported commented bookmark operation "${operation.type}"`);
+        }
+
+        function applyCommentedBookmarkGroupOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate commented bookmark group');
+
+            if (operation.type === 'bookmark-group.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark-group.duplicate') {
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                const parsed = parseCommentedBlockData(target);
+                const originalName = parsed ? parsed.name : '';
+                const renamedFirstLine = blockLines[0].replace(/(-\s+)(.+?):\s*$/, `$1${originalName ? originalName + ' (cloned)' : 'Cloned'}:`);
+                const newBlock = [renamedFirstLine, ...blockLines.slice(1)];
+                lines.splice(range.endLine + 1, 0, '', ...newBlock);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark-group.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                    insertAt = findGroupInsertLine(lines, operation.destinationIndex);
+                } else {
+                    const sibling = findSiblingGroupLineRange(yamlText, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Bookmark group is already at the ${operation.direction === 'up' ? 'top' : 'bottom'}`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark-group.edit') {
+                const values = operation.values || {};
+                const newName = String(values.name || '').trim();
+                if (!newName) throw new Error('Bookmark group name is required');
+                lines[range.startLine] = lines[range.startLine].replace(/(-\s+)(.+?):\s*$/, `$1${newName}:`);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported commented bookmark group operation "${operation.type}"`);
+        }
+
+        function applyCommentedWidgetOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate commented widget');
+
+            if (operation.type === 'widget.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'widget.edit') {
+                const values = operation.values || {};
+                const newName = String(values.name || '').trim();
+                if (!newName) throw new Error('Widget name is required');
+                const baseIndent = lines[range.startLine].search(/\S/);
+                const data = values.fields ? Object.fromEntries(values.fields.filter((f) => f.blankValue || String(f.value || '').trim() !== '').map((f) => [f.key, f.value])) : {};
+                const blockLines = target.isList
+                    ? serializeCommentedBlock(newName, data, baseIndent)
+                    : serializeCommentedObjectBlock(newName, data, baseIndent);
+                const commentedBlock = commentBlockLines(blockLines, baseIndent);
+                lines.splice(range.startLine, range.endLine - range.startLine + 1, ...commentedBlock);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported commented widget operation "${operation.type}"`);
+        }
+
+        function applyChunkTreeOperation(tabName, operation) {
+            if (typeof ChunkTree === 'undefined') return null;
+            const target = operation.target || {};
+            const yamlText = getTabYamlText(tabName);
+            let chunks = null;
+            if (tabName === 'services') {
+                chunks = ChunkTree.parseServicesDocument(yamlText);
+            } else if (tabName === 'bookmarks') {
+                chunks = ChunkTree.parseBookmarksDocument(yamlText);
+            } else if (tabName === 'widgets') {
+                chunks = ChunkTree.parseWidgetsDocument(yamlText);
+            }
+            if (!chunks || chunks.length === 0) return null;
+
+            const kind = target.kind || '';
+            const isWidget = kind === 'widget';
+            const isGroup = kind === 'services-group' || kind === 'bookmark-group';
+            const isEntry = kind === 'service' || kind === 'bookmark';
+
+            const path = {
+                groupName: isWidget ? target.name : (target.groupName || target.name),
+                groupIndex: isWidget ? (target.index || 0) : (target.groupIndex || 0),
+                entryName: isEntry ? (target.serviceName || target.bookmarkName) : undefined,
+                entryIndex: isEntry ? (target.serviceIndex || target.bookmarkIndex || 0) : undefined
+            };
+
+            const opType = operation.type || '';
+
+            if (opType.endsWith('.remove')) {
+                if (isEntry) {
+                    return ChunkTree.removeChunk(chunks, path);
+                }
+                return ChunkTree.removeChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex });
+            }
+
+            if (opType.endsWith('.duplicate')) {
+                if (isEntry) {
+                    return ChunkTree.duplicateChunk(chunks, path);
+                }
+                return ChunkTree.duplicateChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex });
+            }
+
+            if (opType.endsWith('.move')) {
+                let toPath;
+                if (isEntry) {
+                    toPath = { groupName: path.groupName, groupIndex: path.groupIndex };
+                    if (operation.destinationTarget) {
+                        toPath.groupName = operation.destinationTarget.groupName;
+                        toPath.groupIndex = operation.destinationTarget.groupIndex || 0;
+                        if (Number.isInteger(operation.destinationIndex)) {
+                            toPath.destinationIndex = operation.destinationIndex;
+                        }
+                    } else if (operation.direction) {
+                        toPath.direction = operation.direction;
+                    }
+                    return ChunkTree.moveChunk(chunks, path, toPath);
+                }
+                // Group or top-level move
+                toPath = { groupName: path.groupName, groupIndex: path.groupIndex };
+                if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                    toPath.destinationIndex = operation.destinationIndex;
+                } else if (operation.direction) {
+                    toPath.direction = operation.direction;
+                }
+                return ChunkTree.moveChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex }, toPath);
+            }
+
+            if (opType.endsWith('.edit') || opType.endsWith('.rename')) {
+                const values = operation.values || {};
+                const newName = String(values.name || '').trim();
+                if (!newName) return null;
+                const data = values.fields
+                    ? Object.fromEntries(values.fields.filter((f) => f.blankValue || String(f.value || '').trim() !== '').map((f) => [f.key, f.value]))
+                    : {};
+                if (isEntry || isWidget) {
+                    return ChunkTree.editChunk(chunks, path, newName, data);
+                }
+                return ChunkTree.editChunk(chunks, { groupName: path.groupName, groupIndex: path.groupIndex }, newName);
+            }
+
+            if (opType.endsWith('.comment')) {
+                return ChunkTree.toggleChunkComment(chunks, path);
+            }
+
+            return null;
+        }
+
+        async function applyCommentedPreviewEdit(operation, successMessage) {
+            if (sampleModeEnabled) return false;
+            const beforeFiles = {
+                services: getTabYamlText('services'),
+                settings: getTabYamlText('settings'),
+                bookmarks: getTabYamlText('bookmarks')
+            };
+            try {
+                const target = operation.target || {};
+                const tabName = target.tab || 'services';
+                let newText = applyChunkTreeOperation(tabName, operation);
+                if (newText === null) {
+                    if (target.kind === 'service') {
+                        newText = applyCommentedServiceOperation(tabName, operation);
+                    } else if (target.kind === 'services-group') {
+                        newText = applyCommentedGroupOperation(tabName, operation);
+                    } else if (target.kind === 'bookmark') {
+                        newText = applyCommentedBookmarkOperation(tabName, operation);
+                    } else if (target.kind === 'bookmark-group') {
+                        newText = applyCommentedBookmarkGroupOperation(tabName, operation);
+                    } else if (target.kind === 'widget') {
+                        newText = applyCommentedWidgetOperation(tabName, operation);
+                    } else {
+                        throw new Error(`Unsupported commented item kind "${target.kind}"`);
+                    }
+                }
+                try {
+                    jsyaml.load(newText);
+                } catch (yamlErr) {
+                    throw new Error(`Transformed ${tabName}.yaml is invalid: ${yamlErr.message || yamlErr}`);
+                }
+                previewUndoState = { files: beforeFiles, message: successMessage };
+                replaceTabYamlText(tabName, newText);
+                updatePreviewUndoButton();
+                setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
+                return true;
+            } catch (error) {
+                setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
+                return false;
+            }
+        }
+
+        function reindentBlockLines(blockLines, newFirstLineIndent) {
+            if (blockLines.length === 0) return blockLines;
+            const oldFirstLineIndent = blockLines[0].search(/\S/);
+            if (oldFirstLineIndent < 0) return blockLines;
+            const delta = newFirstLineIndent - oldFirstLineIndent;
+            if (delta === 0) return blockLines;
+            return blockLines.map((line) => {
+                if (line.trim() === '') return line;
+                const currentIndent = line.search(/\S/);
+                if (currentIndent < 0) return line;
+                const newIndent = Math.max(0, currentIndent + delta);
+                return ' '.repeat(newIndent) + line.trimStart();
+            });
+        }
+
+        function applyNormalServiceOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate service');
+
+            if (operation.type === 'service.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'service.duplicate') {
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                const firstLine = blockLines[0];
+                const nameMatch = firstLine.match(/(-\s+)(.+?):\s*$/);
+                const originalName = nameMatch ? nameMatch[2].trim() : '';
+                const renamedFirstLine = firstLine.replace(/(-\s+)(.+?):\s*$/, `$1${originalName ? originalName + ' (cloned)' : 'Cloned'}:`);
+                const newBlock = [renamedFirstLine, ...blockLines.slice(1)];
+                lines.splice(range.endLine + 1, 0, '', ...newBlock);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'service.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                let blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (operation.destinationTarget) {
+                    const destGroupRange = findBlockLineRange({ tab: tabName, kind: 'services-group', groupName: operation.destinationTarget.groupName, groupIndex: operation.destinationTarget.groupIndex || 0 });
+                    if (!destGroupRange) throw new Error('Could not locate destination group');
+                    const destEntryIndent = detectEntryIndent(lines, destGroupRange.startLine, destGroupRange.endLine);
+                    blockLines = reindentBlockLines(blockLines, destEntryIndent);
+                    if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                        insertAt = findServiceInsertLine(lines, destGroupRange, operation.destinationIndex);
+                    } else {
+                        insertAt = destGroupRange.endLine + 1;
+                    }
+                } else {
+                    const groupRange = findBlockLineRange({ tab: tabName, kind: 'services-group', groupName: target.groupName, groupIndex: target.groupIndex || 0 });
+                    if (!groupRange) throw new Error('Could not locate service group');
+                    const sibling = findSiblingServiceLineRange(yamlText, groupRange.startLine, groupRange.endLine, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Service is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported normal service operation "${operation.type}"`);
+        }
+
+        function applyNormalBookmarkOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate bookmark');
+
+            if (operation.type === 'bookmark.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark.duplicate') {
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                const firstLine = blockLines[0];
+                const nameMatch = firstLine.match(/(-\s+)(.+?):\s*$/);
+                const originalName = nameMatch ? nameMatch[2].trim() : '';
+                const renamedFirstLine = firstLine.replace(/(-\s+)(.+?):\s*$/, `$1${originalName ? originalName + ' (cloned)' : 'Cloned'}:`);
+                const newBlock = [renamedFirstLine, ...blockLines.slice(1)];
+                lines.splice(range.endLine + 1, 0, '', ...newBlock);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                let blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (operation.destinationTarget) {
+                    const destGroupRange = findBlockLineRange({ tab: tabName, kind: 'bookmark-group', groupName: operation.destinationTarget.groupName, groupIndex: operation.destinationTarget.groupIndex || 0 });
+                    if (!destGroupRange) throw new Error('Could not locate destination bookmark group');
+                    const destEntryIndent = detectEntryIndent(lines, destGroupRange.startLine, destGroupRange.endLine);
+                    blockLines = reindentBlockLines(blockLines, destEntryIndent);
+                    if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                        insertAt = findServiceInsertLine(lines, destGroupRange, operation.destinationIndex);
+                    } else {
+                        insertAt = destGroupRange.endLine + 1;
+                    }
+                } else {
+                    const groupRange = findBlockLineRange({ tab: tabName, kind: 'bookmark-group', groupName: target.groupName, groupIndex: target.groupIndex || 0 });
+                    if (!groupRange) throw new Error('Could not locate bookmark group');
+                    const sibling = findSiblingServiceLineRange(yamlText, groupRange.startLine, groupRange.endLine, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Bookmark is already at the ${operation.direction === 'up' ? 'top' : 'bottom'} of the group`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported normal bookmark operation "${operation.type}"`);
+        }
+
+        function applyNormalGroupOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate service group');
+
+            if (operation.type === 'group.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'group.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                    insertAt = findGroupInsertLine(lines, operation.destinationIndex);
+                } else {
+                    const sibling = findSiblingGroupLineRange(yamlText, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Group is already at the ${operation.direction === 'up' ? 'top' : 'bottom'}`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported normal group operation "${operation.type}"`);
+        }
+
+        function applyNormalBookmarkGroupOperation(tabName, operation) {
+            const target = operation.target;
+            const lines = getTabYamlLines(tabName);
+            const yamlText = lines.join('\n');
+            const range = findBlockLineRange(target);
+            if (!range) throw new Error('Could not locate bookmark group');
+
+            if (operation.type === 'bookmark-group.remove') {
+                lines.splice(range.startLine, range.endLine - range.startLine + 1);
+                return lines.join('\n');
+            }
+
+            if (operation.type === 'bookmark-group.move') {
+                const blockLength = range.endLine - range.startLine + 1;
+                let insertAt;
+                if (Number.isInteger(operation.destinationIndex) && operation.destinationIndex >= 0) {
+                    insertAt = findGroupInsertLine(lines, operation.destinationIndex);
+                } else {
+                    const sibling = findSiblingGroupLineRange(yamlText, range.startLine, operation.direction);
+                    if (!sibling) throw new Error(`Bookmark group is already at the ${operation.direction === 'up' ? 'top' : 'bottom'}`);
+                    insertAt = operation.direction === 'up' ? sibling.startLine : sibling.endLine + 1;
+                }
+                const blockLines = lines.slice(range.startLine, range.endLine + 1);
+                if (insertAt > range.endLine) insertAt -= blockLength;
+                lines.splice(range.startLine, blockLength);
+                lines.splice(insertAt, 0, ...blockLines);
+                return lines.join('\n');
+            }
+
+            throw new Error(`Unsupported normal bookmark group operation "${operation.type}"`);
+        }
+
+        async function applyClientSidePreviewEdit(operation, successMessage) {
+            if (sampleModeEnabled) return false;
+            const beforeFiles = {
+                services: getTabYamlText('services'),
+                settings: getTabYamlText('settings'),
+                bookmarks: getTabYamlText('bookmarks')
+            };
+            try {
+                const target = operation.target || {};
+                const tabName = target.tab || 'services';
+                let newText = applyChunkTreeOperation(tabName, operation);
+                if (newText === null) {
+                    if (target.kind === 'service') {
+                        newText = applyNormalServiceOperation(tabName, operation);
+                    } else if (target.kind === 'services-group') {
+                        newText = applyNormalGroupOperation(tabName, operation);
+                    } else if (target.kind === 'bookmark') {
+                        newText = applyNormalBookmarkOperation(tabName, operation);
+                    } else if (target.kind === 'bookmark-group') {
+                        newText = applyNormalBookmarkGroupOperation(tabName, operation);
+                    } else {
+                        throw new Error(`Unsupported client-side item kind "${target.kind}"`);
+                    }
+                }
+                try {
+                    jsyaml.load(newText);
+                } catch (yamlErr) {
+                    throw new Error(`Transformed ${tabName}.yaml is invalid: ${yamlErr.message || yamlErr}`);
+                }
+                previewUndoState = { files: beforeFiles, message: successMessage };
+                replaceTabYamlText(tabName, newText);
+                updatePreviewUndoButton();
+                setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
+                return true;
+            } catch (error) {
+                console.error('[applyClientSidePreviewEdit] failed:', error);
+                setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
+                return false;
+            }
+        }
+
+        function findBlockEndLine(lines, startLine) {
+            const startIndent = getYamlIndent(lines[startLine]);
+            for (let i = startLine + 1; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim() === '') continue;
+                const indent = getYamlIndent(line);
+                if (indent <= startIndent && line.trim().startsWith('- ')) {
+                    return i - 1;
+                }
+            }
+            return lines.length - 1;
+        }
+
+        function getGroupPositions(yamlText) {
+            const lines = yamlText.split('\n');
+            const positions = [];
+            const nameCounters = new Map();
+            lines.forEach((line, index) => {
+                if (getYamlIndent(line) === 0 && line.trim().startsWith('- ')) {
+                    const name = getYamlKeyFromLine(line);
+                    const occurrenceIndex = nameCounters.get(name) || 0;
+                    nameCounters.set(name, occurrenceIndex + 1);
+                    positions.push({ name, occurrenceIndex, startLine: index });
+                }
+            });
+            return positions;
+        }
+
+        function reindentCommentedBlockLines(blockLines, newServiceIndent) {
+            if (blockLines.length === 0) return blockLines;
+            const firstLine = blockLines[0];
+            const firstHashPos = firstLine.indexOf('#');
+            if (firstHashPos < 0) return blockLines;
+            const firstLineAfterHash = firstLine.slice(firstHashPos + 1);
+            const firstLineAfterHashStripped = firstLineAfterHash.startsWith(' ') ? firstLineAfterHash.slice(1) : firstLineAfterHash;
+            const oldServiceContentLeadingSpaces = firstLineAfterHashStripped.search(/\S/);
+            if (oldServiceContentLeadingSpaces < 0) return blockLines;
+
+            return blockLines.map((line) => {
+                if (line.trim() === '') return line;
+                const hashPos = line.indexOf('#');
+                if (hashPos < 0) return line;
+                const afterHash = line.slice(hashPos + 1);
+                const afterHashStripped = afterHash.startsWith(' ') ? afterHash.slice(1) : afterHash;
+                const oldContentLeadingSpaces = afterHashStripped.search(/\S/);
+                const content = afterHashStripped.trimStart();
+                const newContentLeadingSpaces = Math.max(0, oldContentLeadingSpaces - oldServiceContentLeadingSpaces);
+                return ' '.repeat(newServiceIndent) + '# ' + ' '.repeat(newContentLeadingSpaces) + content;
+            });
+        }
+
+        function detectEntryIndent(lines, groupStartLine, groupEndLine) {
+            const groupIndent = getYamlIndent(lines[groupStartLine]);
+            for (let i = groupStartLine + 1; i <= groupEndLine; i++) {
+                const line = lines[i];
+                if (line.trim() === '') continue;
+                const indent = getYamlIndent(line);
+                const trimmed = line.trim();
+                if (indent <= groupIndent) break;
+                if (/^#\s*-\s+\S/.test(trimmed) || /^-\s+\S/.test(trimmed)) {
+                    return indent;
+                }
+            }
+            return groupIndent + 2;
+        }
+
+        function mergeGroupEntries(activeEntries, commentedEntries, groupStartLine, yamlText) {
+            if (!Array.isArray(activeEntries) || commentedEntries.length === 0) return activeEntries;
+            const lines = yamlText.split('\n');
+            const groupEndLine = findBlockEndLine(lines, groupStartLine);
+            const groupIndent = getYamlIndent(lines[groupStartLine]);
+            const entryIndent = detectEntryIndent(lines, groupStartLine, groupEndLine);
+            const merged = [];
+            let activeIndex = 0;
+            const remainingCommented = new Map(commentedEntries.map((entry) => [entry.__commentedStartLine, entry]));
+
+            for (let i = groupStartLine + 1; i <= groupEndLine; i++) {
+                const line = lines[i];
+                if (line.trim() === '') continue;
+                const indent = getYamlIndent(line);
+                if (indent <= groupIndent && line.trim().startsWith('- ')) break;
+                if (indent !== entryIndent) continue;
+                const trimmed = line.trim();
+                if (!(/^#\s*-\s+\S/.test(trimmed) || /^-\s+\S/.test(trimmed))) continue;
+                if (remainingCommented.has(i)) {
+                    merged.push(remainingCommented.get(i));
+                    remainingCommented.delete(i);
+                } else if (activeIndex < activeEntries.length) {
+                    merged.push(activeEntries[activeIndex++]);
+                }
+            }
+            while (activeIndex < activeEntries.length) {
+                merged.push(activeEntries[activeIndex++]);
+            }
+            remainingCommented.forEach((entry) => merged.push(entry));
+            return merged;
+        }
+
+        function mergeGroupsByLine(activeGroups, commentedGroups, yamlText) {
+            if (commentedGroups.length === 0) return activeGroups;
+            const positions = getGroupPositions(yamlText);
+            const merged = [];
+            let activeIndex = 0;
+            let commentedIndex = 0;
+
+            while (activeIndex < activeGroups.length || commentedIndex < commentedGroups.length) {
+                if (activeIndex >= activeGroups.length) {
+                    merged.push(commentedGroups[commentedIndex++]);
+                } else if (commentedIndex >= commentedGroups.length) {
+                    merged.push(activeGroups[activeIndex++]);
+                } else {
+                    const activeStartLine = positions[activeIndex]?.startLine ?? Infinity;
+                    const commentedStartLine = commentedGroups[commentedIndex].__commentedStartLine;
+                    if (commentedStartLine < activeStartLine) {
+                        merged.push(commentedGroups[commentedIndex++]);
+                    } else {
+                        merged.push(activeGroups[activeIndex++]);
+                    }
+                }
+            }
+            return merged;
+        }
+
+        function findSiblingServiceLineRange(yamlText, groupStartLine, groupEndLine, startLine, direction) {
+            const lines = yamlText.split('\n');
+            const entryIndent = detectEntryIndent(lines, groupStartLine, groupEndLine);
+            if (direction === 'up') {
+                for (let i = startLine - 1; i > groupStartLine; i--) {
+                    const line = lines[i];
+                    if (line.trim() === '') continue;
+                    const indent = getYamlIndent(line);
+                    const trimmed = line.trim();
+                    if (indent === entryIndent && (/^#\s*-\s+\S/.test(trimmed) || /^-\s+\S/.test(trimmed))) {
+                        return { startLine: i, endLine: findBlockEndLine(lines, i) };
+                    }
+                }
+            } else {
+                const currentEnd = findBlockEndLine(lines, startLine);
+                for (let i = currentEnd + 1; i <= groupEndLine; i++) {
+                    const line = lines[i];
+                    if (line.trim() === '') continue;
+                    const indent = getYamlIndent(line);
+                    const trimmed = line.trim();
+                    if (indent === entryIndent && (/^#\s*-\s+\S/.test(trimmed) || /^-\s+\S/.test(trimmed))) {
+                        return { startLine: i, endLine: findBlockEndLine(lines, i) };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function findSiblingGroupLineRange(yamlText, startLine, direction) {
+            const lines = yamlText.split('\n');
+            if (direction === 'up') {
+                for (let i = startLine - 1; i >= 0; i--) {
+                    const line = lines[i];
+                    if (line.trim() === '') continue;
+                    const indent = getYamlIndent(line);
+                    if (indent === 0 && line.trim().startsWith('- ')) {
+                        return { startLine: i, endLine: findBlockEndLine(lines, i) };
+                    }
+                }
+            } else {
+                const currentEnd = findBlockEndLine(lines, startLine);
+                for (let i = currentEnd + 1; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.trim() === '') continue;
+                    const indent = getYamlIndent(line);
+                    if (indent === 0 && line.trim().startsWith('- ')) {
+                        return { startLine: i, endLine: findBlockEndLine(lines, i) };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function findServiceInsertLine(lines, groupRange, destinationIndex) {
+            const serviceIndent = detectEntryIndent(lines, groupRange.startLine, groupRange.endLine);
+            let serviceCount = 0;
+            let lastServiceEndLine = groupRange.startLine;
+            for (let i = groupRange.startLine + 1; i <= groupRange.endLine; i++) {
+                const line = lines[i];
+                const trimmed = line.trim();
+                if ((/^#\s*-\s+\S/.test(trimmed) || /^-\s+\S/.test(trimmed)) && getYamlIndent(line) === serviceIndent) {
+                    if (serviceCount === destinationIndex) return i;
+                    serviceCount++;
+                    lastServiceEndLine = findBlockEndLine(lines, i);
+                }
+            }
+            return lastServiceEndLine + 1;
+        }
+
+        function findGroupInsertLine(lines, destinationIndex) {
+            let groupCount = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim().startsWith('- ') && getYamlIndent(line) === 0) {
+                    if (groupCount === destinationIndex) return i;
+                    groupCount++;
+                }
+            }
+            return lines.length;
         }
 
         function scheduleVisualPreview() {
@@ -1496,21 +2457,28 @@
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('group', { availableTabs: previewEditDialogState.availableTabs });
             } else if (action === 'group.edit') {
                 const isNestedGroup = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0;
-                const group = isNestedGroup ? findPreviewNestedGroup(source) : findPreviewGroup(source);
-                const settings = parseTabConfig('settings');
-                if (settings.error) throw new Error('Fix the settings.yaml error shown on the dashboard before editing this group.');
-                const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
-                    ? settings.data.layout : {};
                 title.textContent = isNestedGroup ? 'Edit nested service group' : 'Edit service group';
                 submit.textContent = 'Save';
-                nameInput.value = group.groupName;
-                previewEditDialogState.availableTabs = getHomepageTabInfo(settings.data).tabs;
-                previewEditDialogState.originalTab = String(layout[group.groupName]?.tab || '').trim();
-                const groupFields = getPreviewOptionFields(layout[group.groupName]);
-                previewEditDialogState.groupTabFieldIndex = groupFields.findIndex((field) => field.key === 'tab');
-                previewEditDialogState.fields = previewEditDialogState.availableTabs.length > 0
-                    ? groupFields.filter((field) => field.key !== 'tab')
-                    : groupFields;
+                if (source.commented === true) {
+                    const parsed = parseCommentedBlockData(source);
+                    nameInput.value = parsed ? parsed.name : source.groupName;
+                    previewEditDialogState.fields = [];
+                    previewEditDialogState.originalTab = '';
+                } else {
+                    const group = isNestedGroup ? findPreviewNestedGroup(source) : findPreviewGroup(source);
+                    const settings = parseTabConfig('settings');
+                    if (settings.error) throw new Error('Fix the settings.yaml error shown on the dashboard before editing this group.');
+                    const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
+                        ? settings.data.layout : {};
+                    nameInput.value = group.groupName;
+                    previewEditDialogState.availableTabs = getHomepageTabInfo(settings.data).tabs;
+                    previewEditDialogState.originalTab = String(layout[group.groupName]?.tab || '').trim();
+                    const groupFields = getPreviewOptionFields(layout[group.groupName]);
+                    previewEditDialogState.groupTabFieldIndex = groupFields.findIndex((field) => field.key === 'tab');
+                    previewEditDialogState.fields = previewEditDialogState.availableTabs.length > 0
+                        ? groupFields.filter((field) => field.key !== 'tab')
+                        : groupFields;
+                }
             } else if (action === 'service.add') {
                 const targetGroupName = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0
                     ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name
@@ -1519,32 +2487,63 @@
                 submit.textContent = 'Add service';
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('service');
             } else if (action === 'service.edit') {
-                const service = findPreviewService(source);
+                let serviceName;
+                let serviceData;
+                if (source.commented === true) {
+                    const parsed = parseCommentedBlockData(source);
+                    serviceName = parsed ? parsed.name : source.serviceName;
+                    serviceData = parsed ? parsed.data : {};
+                } else {
+                    const service = findPreviewService(source);
+                    serviceName = service.serviceName;
+                    serviceData = service.data;
+                }
                 const groupMoveData = getServiceGroupMoveChoices(source);
                 title.textContent = 'Edit service';
                 submit.textContent = 'Save';
-                nameInput.value = service.serviceName;
-                previewEditDialogState.fields = getPreviewOptionFields(service.data);
+                nameInput.value = serviceName;
+                previewEditDialogState.fields = getPreviewOptionFields(serviceData);
                 previewEditDialogState.availableTabs = groupMoveData.tabs;
                 previewEditDialogState.serviceGroupChoices = groupMoveData.choices;
             } else if (action === 'bookmark-group.add') {
                 title.textContent = 'Add bookmark group';
                 submit.textContent = 'Add group';
             } else if (action === 'bookmark-group.edit') {
-                const group = findPreviewBookmarkGroup(source);
                 title.textContent = 'Edit bookmark group';
                 submit.textContent = 'Save';
-                nameInput.value = group.groupName;
+                if (source.commented === true) {
+                    const parsed = parseCommentedBlockData(source);
+                    nameInput.value = parsed ? parsed.name : source.groupName;
+                } else {
+                    const group = findPreviewBookmarkGroup(source);
+                    nameInput.value = group.groupName;
+                }
             } else if (action === 'bookmark.add') {
                 title.textContent = `Add bookmark to ${source.groupName}`;
                 submit.textContent = 'Add bookmark';
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('bookmark');
             } else if (action === 'bookmark.edit') {
-                const bookmark = findPreviewBookmark(source);
+                let bookmarkName;
+                let bookmarkData;
+                if (source.commented === true) {
+                    const parsed = parseCommentedBlockData(source);
+                    bookmarkName = parsed ? parsed.name : source.bookmarkName;
+                    bookmarkData = parsed ? parsed.data : {};
+                } else {
+                    const bookmark = findPreviewBookmark(source);
+                    bookmarkName = bookmark.bookmarkName;
+                    bookmarkData = bookmark.data;
+                }
                 title.textContent = 'Edit bookmark';
                 submit.textContent = 'Save';
-                nameInput.value = bookmark.bookmarkName;
-                previewEditDialogState.fields = getPreviewOptionFields(bookmark.data);
+                nameInput.value = bookmarkName;
+                previewEditDialogState.fields = getPreviewOptionFields(bookmarkData);
+            } else if (action === 'widget.edit') {
+                title.textContent = 'Edit widget';
+                submit.textContent = 'Save';
+                const parsed = parseCommentedBlockData(source);
+                nameInput.value = parsed ? parsed.name : source.name;
+                previewEditDialogState.fields = getPreviewOptionFields(parsed ? parsed.data : {});
             }
 
             renderPreviewEditOptions();
@@ -1903,6 +2902,7 @@
                 return;
             }
             const { action, source } = previewEditDialogState;
+            const isCommented = source && source.commented === true;
             syncPreviewEditOptionState();
             let selectedGroupTab = '';
             let groupTabChanged = false;
@@ -1989,8 +2989,12 @@
                                     ? `Updated bookmark group ${name}.`
                                     : action === 'bookmark.add'
                                         ? `Added bookmark ${name}.`
-                                        : `Updated bookmark ${name}.`;
-            const applied = await applyPreviewEdit(operation, message);
+                                        : action === 'bookmark.edit'
+                                            ? `Updated bookmark ${name}.`
+                                            : `Updated widget ${name}.`;
+            const applied = isCommented
+                ? await applyCommentedPreviewEdit(operation, message)
+                : await applyPreviewEdit(operation, message);
             submitButton.disabled = false;
             if (applied) closePreviewEditDialog();
             else setPreviewEditModalStatus('Could not apply the edit. See the application notification for the reason.');
@@ -2007,6 +3011,71 @@
 
         async function handlePreviewEditAction(action, source) {
             try {
+            if (action === 'service.comment' || action === 'group.comment' || action === 'bookmark.comment' || action === 'bookmark-group.comment' || action === 'widget.comment') {
+                    toggleCommentBlock(source);
+                    return;
+                }
+                if (source && source.commented === true) {
+                    if (['service.edit', 'group.edit', 'bookmark.edit', 'bookmark-group.edit', 'widget.edit'].includes(action)) {
+                        openPreviewEditDialog(action, source);
+                        return;
+                    }
+                    if (action === 'widget.remove') {
+                        const confirmed = await showConfirmationDialog({
+                            title: 'Delete widget?',
+                            message: `Delete commented widget ${source.name}? Its complete YAML block will be removed.`,
+                            confirmText: 'Delete widget'
+                        });
+                        if (confirmed) {
+                            await applyCommentedPreviewEdit(
+                                { type: 'widget.remove', target: source },
+                                `Deleted commented widget ${source.name}.`
+                            );
+                        }
+                        return;
+                    }
+                    const operationMap = {
+                        'service.remove': { type: 'service.remove', label: 'service' },
+                        'service.duplicate': { type: 'service.duplicate', label: 'service' },
+                        'service.move-up': { type: 'service.move', label: 'service', direction: 'up' },
+                        'service.move-down': { type: 'service.move', label: 'service', direction: 'down' },
+                        'group.remove': { type: 'group.remove', label: 'group' },
+                        'group.duplicate': { type: 'group.duplicate', label: 'group' },
+                        'group.move-up': { type: 'group.move', label: 'group', direction: 'up' },
+                        'group.move-down': { type: 'group.move', label: 'group', direction: 'down' },
+                        'bookmark.remove': { type: 'bookmark.remove', label: 'bookmark' },
+                        'bookmark.duplicate': { type: 'bookmark.duplicate', label: 'bookmark' },
+                        'bookmark.move-up': { type: 'bookmark.move', label: 'bookmark', direction: 'up' },
+                        'bookmark.move-down': { type: 'bookmark.move', label: 'bookmark', direction: 'down' },
+                        'bookmark-group.remove': { type: 'bookmark-group.remove', label: 'bookmark group' },
+                        'bookmark-group.duplicate': { type: 'bookmark-group.duplicate', label: 'bookmark group' },
+                        'bookmark-group.move-up': { type: 'bookmark-group.move', label: 'bookmark group', direction: 'up' },
+                        'bookmark-group.move-down': { type: 'bookmark-group.move', label: 'bookmark group', direction: 'down' }
+                    };
+                    const mapped = operationMap[action];
+                    if (!mapped) {
+                        setSaveStatus('This action is not supported for commented items yet.', 'error');
+                        return;
+                    }
+                    const itemName = source.serviceName || source.groupName || 'item';
+                    const isRemove = mapped.type.endsWith('.remove');
+                    if (isRemove) {
+                        const confirmed = await showConfirmationDialog({
+                            title: `Delete commented ${mapped.label}?`,
+                            message: `Delete commented ${mapped.label} ${itemName}? Its complete YAML block will be removed.`,
+                            confirmText: `Delete ${mapped.label}`
+                        });
+                        if (!confirmed) return;
+                    }
+                    const operation = { type: mapped.type, target: source };
+                    if (mapped.direction) operation.direction = mapped.direction;
+                    const [itemType, opType] = mapped.type.split('.');
+                    const actionLabel = opType === 'remove' ? 'Deleted' : opType === 'duplicate' ? 'Duplicated' : 'Moved';
+                    const directionPart = mapped.direction ? ` ${mapped.direction}` : '';
+                    const message = `${actionLabel} commented ${itemType.replace('-', ' ')} ${itemName}${directionPart}.`;
+                    await applyCommentedPreviewEdit(operation, message);
+                    return;
+                }
             if (action === 'tab.edit') {
                     enterTabRenameMode(source && source.name);
                     return;
@@ -2016,18 +3085,24 @@
                     return;
                 }
                 if (action === 'service.duplicate') {
-                    await applyPreviewEdit(
-                        { type: 'service.duplicate', target: source },
-                        `Duplicated service ${source.serviceName}.`
-                    );
+                    const operation = { type: 'service.duplicate', target: source };
+                    const message = `Duplicated service ${source.serviceName}.`;
+                    if (previewShowCommentsState) {
+                        await applyClientSidePreviewEdit(operation, message);
+                    } else {
+                        await applyPreviewEdit(operation, message);
+                    }
                     return;
                 }
                 if (action === 'service.move-up' || action === 'service.move-down') {
                     const direction = action.endsWith('up') ? 'up' : 'down';
-                    await applyPreviewEdit(
-                        { type: 'service.move', target: source, direction },
-                        `Moved service ${source.serviceName} ${direction}.`
-                    );
+                    const operation = { type: 'service.move', target: source, direction };
+                    const message = `Moved service ${source.serviceName} ${direction}.`;
+                    if (previewShowCommentsState) {
+                        await applyClientSidePreviewEdit(operation, message);
+                    } else {
+                        await applyPreviewEdit(operation, message);
+                    }
                     return;
                 }
                 if (action === 'group.move-up' || action === 'group.move-down') {
@@ -2035,26 +3110,35 @@
                     const displayName = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0
                         ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name
                         : source.groupName;
-                    await applyPreviewEdit(
-                        { type: 'group.move', target: source, direction },
-                        `Moved group ${displayName} ${direction}.`
-                    );
+                    const operation = { type: 'group.move', target: source, direction };
+                    const message = `Moved group ${displayName} ${direction}.`;
+                    if (previewShowCommentsState) {
+                        await applyClientSidePreviewEdit(operation, message);
+                    } else {
+                        await applyPreviewEdit(operation, message);
+                    }
                     return;
                 }
                 if (action === 'bookmark-group.move-up' || action === 'bookmark-group.move-down') {
                     const direction = action.endsWith('up') ? 'up' : 'down';
-                    await applyPreviewEdit(
-                        { type: 'bookmark-group.move', target: source, direction },
-                        `Moved bookmark group ${source.groupName} ${direction}.`
-                    );
+                    const operation = { type: 'bookmark-group.move', target: source, direction };
+                    const message = `Moved bookmark group ${source.groupName} ${direction}.`;
+                    if (previewShowCommentsState) {
+                        await applyClientSidePreviewEdit(operation, message);
+                    } else {
+                        await applyPreviewEdit(operation, message);
+                    }
                     return;
                 }
                 if (action === 'bookmark.move-up' || action === 'bookmark.move-down') {
                     const direction = action.endsWith('up') ? 'up' : 'down';
-                    await applyPreviewEdit(
-                        { type: 'bookmark.move', target: source, direction },
-                        `Moved bookmark ${source.bookmarkName} ${direction}.`
-                    );
+                    const operation = { type: 'bookmark.move', target: source, direction };
+                    const message = `Moved bookmark ${source.bookmarkName} ${direction}.`;
+                    if (previewShowCommentsState) {
+                        await applyClientSidePreviewEdit(operation, message);
+                    } else {
+                        await applyPreviewEdit(operation, message);
+                    }
                     return;
                 }
                 if (action === 'service.remove') {
@@ -2067,10 +3151,13 @@
                         confirmText: 'Delete service'
                     });
                     if (confirmed) {
-                        await applyPreviewEdit(
-                            { type: 'service.remove', target: source },
-                            `Deleted service ${source.serviceName}.`
-                        );
+                        const operation = { type: 'service.remove', target: source };
+                        const message = `Deleted service ${source.serviceName}.`;
+                        if (previewShowCommentsState) {
+                            await applyClientSidePreviewEdit(operation, message);
+                        } else {
+                            await applyPreviewEdit(operation, message);
+                        }
                     }
                     return;
                 }
@@ -2085,10 +3172,13 @@
                         confirmText: 'Delete group'
                     });
                     if (confirmed) {
-                        await applyPreviewEdit(
-                            { type: 'group.remove', target: source },
-                            `Deleted group ${displayName}.`
-                        );
+                        const operation = { type: 'group.remove', target: source };
+                        const message = `Deleted group ${displayName}.`;
+                        if (previewShowCommentsState) {
+                            await applyClientSidePreviewEdit(operation, message);
+                        } else {
+                            await applyPreviewEdit(operation, message);
+                        }
                     }
                     return;
                 }
@@ -2099,10 +3189,13 @@
                         confirmText: 'Delete bookmark'
                     });
                     if (confirmed) {
-                        await applyPreviewEdit(
-                            { type: 'bookmark.remove', target: source },
-                            `Deleted bookmark ${source.bookmarkName}.`
-                        );
+                        const operation = { type: 'bookmark.remove', target: source };
+                        const message = `Deleted bookmark ${source.bookmarkName}.`;
+                        if (previewShowCommentsState) {
+                            await applyClientSidePreviewEdit(operation, message);
+                        } else {
+                            await applyPreviewEdit(operation, message);
+                        }
                     }
                     return;
                 }
@@ -2115,10 +3208,13 @@
                         confirmText: 'Delete group'
                     });
                     if (confirmed) {
-                        await applyPreviewEdit(
-                            { type: 'bookmark-group.remove', target: source },
-                            `Deleted bookmark group ${source.groupName}.`
-                        );
+                        const operation = { type: 'bookmark-group.remove', target: source };
+                        const message = `Deleted bookmark group ${source.groupName}.`;
+                        if (previewShowCommentsState) {
+                            await applyClientSidePreviewEdit(operation, message);
+                        } else {
+                            await applyPreviewEdit(operation, message);
+                        }
                     }
                     return;
                 }
@@ -2854,6 +3950,10 @@
                 return 1;
             }
 
+            if (source.commented === true && Number.isInteger(source.startLine)) {
+                return source.startLine + 1;
+            }
+
             if (source.kind === 'services-group') {
                 if (Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0) {
                     return findNestedGroupPathRange('services', source).startLine;
@@ -2901,6 +4001,34 @@
                 });
             }
             return source.line || 1;
+        }
+
+        function findBlockLineRange(source) {
+            if (!source || !source.tab) return null;
+            if (source.commented === true && Number.isInteger(source.startLine) && Number.isInteger(source.endLine)) {
+                return { startLine: source.startLine, endLine: source.endLine };
+            }
+            const yamlText = getTabYamlText(source.tab);
+            if (!yamlText) return null;
+            const startLine1Based = findSourceLine(source);
+            if (!startLine1Based || startLine1Based < 1) return null;
+            const lines = yamlText.split('\n');
+            const startIdx = startLine1Based - 1;
+            if (startIdx < 0 || startIdx >= lines.length) return null;
+            const startIndent = lines[startIdx].search(/\S/);
+            if (startIndent < 0) return { startLine: startIdx, endLine: startIdx };
+
+            for (let i = startIdx + 1; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim() === '') continue;
+                const indent = line.search(/\S/);
+                if (source.kind === 'widget' && !source.isList) {
+                    if (indent <= startIndent) return { startLine: startIdx, endLine: i - 1 };
+                } else if (indent <= startIndent && (line.trim().startsWith('- ') || line.trim().startsWith('#'))) {
+                    return { startLine: startIdx, endLine: i - 1 };
+                }
+            }
+            return { startLine: startIdx, endLine: lines.length - 1 };
         }
 
         function getSourceAttributes(source) {
@@ -3043,6 +4171,7 @@
 
         function getGroupEditControls(source, position, groupCount) {
             return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('group.comment', source, 'Comment/uncomment group', '#')}
                 ${getPreviewEditActionButton('group.edit', source, 'Edit group', '&#9998;')}
                 ${getPreviewEditActionButton('group.move-up', source, 'Move group up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('group.move-down', source, 'Move group down', '&darr;', { disabled: position === groupCount - 1 })}
@@ -3052,6 +4181,7 @@
 
         function getServiceEditControls(source, position, serviceCount) {
             return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('service.comment', source, 'Comment/uncomment service', '#')}
                 ${getPreviewEditActionButton('service.edit', source, 'Edit service', '&#9998;')}
                 ${getPreviewEditActionButton('service.duplicate', source, 'Duplicate service', '&#10697;')}
                 ${getPreviewEditActionButton('service.move-up', source, 'Move service up', '&uarr;', { disabled: position === 0 })}
@@ -3062,6 +4192,7 @@
 
         function getBookmarkGroupEditControls(source, position, groupCount) {
             return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('bookmark-group.comment', source, 'Comment/uncomment bookmark group', '#')}
                 ${getPreviewEditActionButton('bookmark-group.edit', source, 'Edit bookmark group', '&#9998;')}
                 ${getPreviewEditActionButton('bookmark-group.move-up', source, 'Move bookmark group up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('bookmark-group.move-down', source, 'Move bookmark group down', '&darr;', { disabled: position === groupCount - 1 })}
@@ -3071,11 +4202,191 @@
 
         function getBookmarkEditControls(source, position, bookmarkCount) {
             return `<span class="preview-edit-actions">
+                ${getPreviewEditActionButton('bookmark.comment', source, 'Comment/uncomment bookmark', '#')}
                 ${getPreviewEditActionButton('bookmark.edit', source, 'Edit bookmark', '&#9998;')}
                 ${getPreviewEditActionButton('bookmark.move-up', source, 'Move bookmark up', '&uarr;', { disabled: position === 0 })}
                 ${getPreviewEditActionButton('bookmark.move-down', source, 'Move bookmark down', '&darr;', { disabled: position === bookmarkCount - 1 })}
                 ${getPreviewEditActionButton('bookmark.remove', source, 'Delete bookmark', '&times;', { danger: true })}
             </span>`;
+        }
+
+        // --- Commented-item detection for Preview ---
+
+        function extractCommentedLines(yamlText) {
+            if (!yamlText || typeof yamlText !== 'string') return [];
+            const lines = yamlText.split('\n');
+            const blocks = [];
+            let i = 0;
+
+            while (i < lines.length) {
+                const line = lines[i];
+                // Match commented-out YAML list item: optional ws, #, optional space, dash, space, name, colon
+                let match = line.match(/^(\s*)#\s*(-\s+\S[\S\s]*?:)\s*$/);
+                // Also match commented-out mapping keys (non-list widgets): # key:
+                if (!match) {
+                    const mapMatch = line.match(/^(\s*)#\s*(\S[\S\s]*?:)\s*$/);
+                    if (mapMatch) {
+                        const contentAfterHash = line.slice(line.indexOf('#') + 1).trimStart();
+                        if (!contentAfterHash.startsWith('- ')) {
+                            match = mapMatch;
+                        }
+                    }
+                }
+
+                if (match) {
+                    const indent = match[1].length;
+                    const blockStart = i;
+                    const isListItem = /^\s*#\s*-\s+\S/.test(line);
+                    const uncommentedLines = [match[1] + match[2]];
+                    i++;
+
+                    // Collect continuation lines (commented lines at same or deeper indent)
+                    while (i < lines.length) {
+                        const next = lines[i];
+                        const hashPos = next.indexOf('#');
+                        if (hashPos < 0 || hashPos < indent) break;
+                        // Stop at a sibling commented list item at the same base indent
+                        if (i > blockStart && hashPos === indent) {
+                            const afterHash = next.slice(hashPos + 1);
+                            const stripped = afterHash.startsWith(' ') ? afterHash.slice(1) : afterHash;
+                            if (stripped.startsWith('- ')) break;
+                        }
+                        // Strip '# ' (hash + at most one space), preserve the rest
+                        const beforeHash = next.slice(0, hashPos);
+                        let afterHash = next.slice(hashPos + 1);
+                        if (afterHash.startsWith(' ')) afterHash = afterHash.slice(1);
+                        uncommentedLines.push(beforeHash + afterHash);
+                        i++;
+                    }
+
+                    // Try to parse the uncommented block as valid YAML
+                    try {
+                        const blockText = uncommentedLines.join('\n');
+                        const parsed = jsyaml.load(blockText);
+                        if (parsed !== null && parsed !== undefined && parsed !== '') {
+                        blocks.push({
+                            parsed,
+                            startLine: blockStart,
+                            endLine: i - 1,
+                            indent,
+                            isListItem
+                        });
+                        }
+                    } catch (e) {
+                        // Not a structured YAML entry; skip (filters header notes)
+                    }
+                } else {
+                    i++;
+                }
+            }
+
+            return blocks;
+        }
+
+        function buildCommentedServicesData(yamlText, activeServices) {
+            const blocks = extractCommentedLines(yamlText);
+            if (blocks.length === 0) return { groups: [], servicesMap: new Map() };
+
+            // Index active groups by occurrence
+            const groupOccurrenceCounter = new Map();
+            const activeGroupInfo = activeServices.map((group) => {
+                const name = Object.keys(group || {})[0] || '';
+                const idx = groupOccurrenceCounter.get(name) || 0;
+                groupOccurrenceCounter.set(name, idx + 1);
+                return { name, idx };
+            });
+
+            const commentedGroups = [];
+            const commentedServicesMap = new Map();
+
+            blocks.forEach((block) => {
+                if (block.isListItem !== true) return;
+                const entry = Array.isArray(block.parsed) ? block.parsed[0] : block.parsed;
+                if (!entry || typeof entry !== 'object') return;
+                const entryName = Object.keys(entry)[0];
+                if (!entryName) return;
+
+                    if (block.indent === 0) {
+                        // Commented-out top-level group
+                        const groupEntry = {};
+                        const innerData = entry[entryName];
+                        if (Array.isArray(innerData)) {
+                            // Mark services inside commented group as commented
+                            groupEntry[entryName] = innerData.map((svc) =>
+                                svc && typeof svc === 'object' ? { ...svc, __commented: true } : svc
+                            );
+                        } else {
+                            groupEntry[entryName] = innerData;
+                        }
+                        groupEntry.__commented = true;
+                        groupEntry.__commentedStartLine = block.startLine;
+                        groupEntry.__commentedEndLine = block.endLine;
+                        commentedGroups.push(groupEntry);
+                    } else if (block.indent > 0) {
+                        // Commented-out service/bookmark — find parent by scanning backwards in text
+                        const lines = yamlText.split('\n');
+                        let parentName = null;
+                        for (let j = block.startLine - 1; j >= 0; j--) {
+                            const m = lines[j].match(/^(\s*)-\s+(\S.*?):\s*$/);
+                            if (m && m[1].length < block.indent && m[2].trim()) {
+                                parentName = m[2].trim();
+                                break;
+                            }
+                        }
+                        if (!parentName) return;
+
+                        const lineInfo = { __commentedStartLine: block.startLine, __commentedEndLine: block.endLine };
+
+                        // Count how many top-level groups with this name appear before the block
+                        let parentOccurrence = 0;
+                        for (let j = block.startLine - 1; j >= 0; j--) {
+                            const m = lines[j].match(/^(\s*)-\s+(\S.*?):\s*$/);
+                            if (m && m[1].length === 0 && m[2].trim() === parentName) {
+                                parentOccurrence++;
+                            }
+                        }
+
+                        // Match to the correct active group occurrence
+                        const matchedIdx = activeGroupInfo.findIndex((gi) => gi.name === parentName && gi.idx === parentOccurrence - 1);
+                        if (matchedIdx >= 0) {
+                            if (!commentedServicesMap.has(matchedIdx)) {
+                                commentedServicesMap.set(matchedIdx, []);
+                            }
+                            const commentedEntry = { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                            commentedServicesMap.get(matchedIdx).push(commentedEntry);
+                        } else {
+                            // Parent is a commented-out group — add service there
+                            const parentGroup = commentedGroups.find((g) => Object.keys(g)[0] === parentName);
+                            if (parentGroup) {
+                                const parentEntries = parentGroup[parentName];
+                                if (!Array.isArray(parentEntries)) {
+                                    parentGroup[parentName] = [];
+                                }
+                                const commentedEntry = { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                                parentGroup[parentName].push(commentedEntry);
+                            }
+                        }
+                    }
+            });
+
+            return { groups: commentedGroups, servicesMap: commentedServicesMap };
+        }
+
+        function buildCommentedWidgetsData(yamlText) {
+            const blocks = extractCommentedLines(yamlText);
+            if (blocks.length === 0) return [];
+
+            const result = [];
+            blocks.forEach((block) => {
+                if (block.indent !== 0) return;
+                const entry = Array.isArray(block.parsed) ? block.parsed[0] : block.parsed;
+                if (!entry || typeof entry !== 'object') return;
+                const name = Object.keys(entry)[0];
+                if (!name) return;
+                const widgetEntry = { [name]: entry[name], __commented: true, __commentedStartLine: block.startLine, __commentedEndLine: block.endLine };
+                result.push(widgetEntry);
+            });
+            return result;
         }
 
         function updateVisualPreview() {
@@ -3093,8 +4404,8 @@
                 addPreviewNotice('Dashboard editing is on. Changes update the YAML editor and remain pending until Save is clicked.');
             }
 
-            const services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
-            const bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
+            let services = Array.isArray(parsed.services.data) ? parsed.services.data : [];
+            let bookmarks = Array.isArray(parsed.bookmarks.data) ? parsed.bookmarks.data : [];
             const widgetsData = parsed.widgets.data;
             const widgetDataOccurrences = new Map();
             if (Array.isArray(widgetsData)) {
@@ -3111,6 +4422,110 @@
                     ? Object.keys(widgetsData)
                     : [];
             const previewWidgets = widgets.filter((name) => !['search', 'resources'].includes(String(name).trim().toLowerCase()));
+
+            // Merge commented-out items when showComments is enabled (Interactive Editor only)
+            if (previewShowCommentsState && previewEditMode && !parsed.services.error) {
+                try {
+                // Clone services to avoid mutating the parsed-config cache
+                services = services.map((group) => {
+                    const name = Object.keys(group || {})[0];
+                    if (!name) return group;
+                    const value = group[name];
+                    return Array.isArray(value) ? { [name]: [...value] } : { [name]: value };
+                });
+                const servicesYamlText = getTabYamlText('services');
+                const commentedServicesData = buildCommentedServicesData(servicesYamlText, services);
+                const serviceGroupPositions = getGroupPositions(servicesYamlText);
+                // Merge commented services into their active groups in YAML order
+                commentedServicesData.servicesMap.forEach((commentEntries, groupIdx) => {
+                    try {
+                        const group = services[groupIdx];
+                        if (!group) return;
+                        const groupName = Object.keys(group)[0];
+                        if (!groupName || !Array.isArray(group[groupName])) return;
+                        const groupPos = serviceGroupPositions[groupIdx];
+                        if (!groupPos) return;
+                        group[groupName] = mergeGroupEntries(group[groupName], commentEntries, groupPos.startLine, servicesYamlText);
+                    } catch (groupErr) {
+                        console.error('[showComments] mergeGroupEntries failed for services group', groupIdx, groupErr);
+                        // Fallback: append commented entries at the end of the group
+                        const group = services[groupIdx];
+                        if (group) {
+                            const groupName = Object.keys(group)[0];
+                            if (groupName && Array.isArray(group[groupName])) {
+                                group[groupName] = group[groupName].concat(commentEntries);
+                            }
+                        }
+                    }
+                });
+                // Merge commented groups into the services list in YAML order
+                try {
+                    services = mergeGroupsByLine(services, commentedServicesData.groups, servicesYamlText);
+                } catch (mergeErr) {
+                    console.error('[showComments] mergeGroupsByLine failed for services:', mergeErr);
+                    // Fallback: append commented groups at the end
+                    services = services.concat(commentedServicesData.groups);
+                }
+                } catch (e) { console.error('[showComments] services integration failed:', e); }
+            }
+            if (previewShowCommentsState && previewEditMode && !parsed.bookmarks.error) {
+                try {
+                // Clone bookmarks to avoid mutating the parsed-config cache
+                bookmarks = bookmarks.map((group) => {
+                    const name = Object.keys(group || {})[0];
+                    if (!name) return group;
+                    const value = group[name];
+                    return Array.isArray(value) ? { [name]: [...value] } : { [name]: value };
+                });
+                const bookmarksYamlText = getTabYamlText('bookmarks');
+                const commentedBookmarksData = buildCommentedServicesData(bookmarksYamlText, bookmarks);
+                const bookmarkGroupPositions = getGroupPositions(bookmarksYamlText);
+                // Merge commented bookmarks into their active groups in YAML order
+                commentedBookmarksData.servicesMap.forEach((commentEntries, groupIdx) => {
+                    try {
+                        const group = bookmarks[groupIdx];
+                        if (!group) return;
+                        const groupName = Object.keys(group)[0];
+                        if (!groupName || !Array.isArray(group[groupName])) return;
+                        const groupPos = bookmarkGroupPositions[groupIdx];
+                        if (!groupPos) return;
+                        group[groupName] = mergeGroupEntries(group[groupName], commentEntries, groupPos.startLine, bookmarksYamlText);
+                    } catch (groupErr) {
+                        console.error('[showComments] mergeGroupEntries failed for bookmarks group', groupIdx, groupErr);
+                        const group = bookmarks[groupIdx];
+                        if (group) {
+                            const groupName = Object.keys(group)[0];
+                            if (groupName && Array.isArray(group[groupName])) {
+                                group[groupName] = group[groupName].concat(commentEntries);
+                            }
+                        }
+                    }
+                });
+                // Merge commented bookmark groups into the list in YAML order
+                try {
+                    bookmarks = mergeGroupsByLine(bookmarks, commentedBookmarksData.groups, bookmarksYamlText);
+                } catch (mergeErr) {
+                    console.error('[showComments] mergeGroupsByLine failed for bookmarks:', mergeErr);
+                    bookmarks = bookmarks.concat(commentedBookmarksData.groups);
+                }
+                } catch (e) { console.error('[showComments] bookmarks integration failed:', e); }
+            }
+            const commentedWidgetInfo = new Map();
+            if (previewShowCommentsState && previewEditMode && !parsed.widgets.error) {
+                const commentedWidgets = buildCommentedWidgetsData(getTabYamlText('widgets'));
+                if (commentedWidgets.length > 0) {
+                    commentedWidgets.forEach((w) => {
+                        const name = Object.keys(w)[0];
+                        if (name) {
+                            if (!widgetDataOccurrences.has(name)) widgetDataOccurrences.set(name, []);
+                            const occIdx = widgetDataOccurrences.get(name).length;
+                            widgetDataOccurrences.get(name).push(w[name]);
+                            commentedWidgetInfo.set(`${name}:${occIdx}`, { startLine: w.__commentedStartLine, endLine: w.__commentedEndLine });
+                        }
+                    });
+                    previewWidgets.push(...commentedWidgets.map((w) => Object.keys(w)[0]).filter(Boolean));
+                }
+            }
 
             const homepageTabInfo = getHomepageTabInfo(parsed.settings.data);
             const homepageTabs = homepageTabInfo.tabs;
@@ -3168,7 +4583,8 @@
             const groupPositionByItem = new Map();
             services.forEach((group, groupPosition) => {
                 const name = Object.keys(group || {})[0] || '';
-                groupOccurrenceByItem.set(group, takeOccurrence(groupOccurrenceCounter, name));
+                const isCommented = group.__commented === true;
+                groupOccurrenceByItem.set(group, isCommented ? 0 : takeOccurrence(groupOccurrenceCounter, name));
                 groupPositionByItem.set(group, groupPosition);
             });
 
@@ -3185,7 +4601,8 @@
                 const serviceOccurrenceCounter = new Map();
                 return servicesOnly.map(({ entry: service, entryIndex }, servicePosition) => {
                     const name = Object.keys(service || {})[0] || 'Service';
-                    const serviceOccurrenceIndex = takeOccurrence(serviceOccurrenceCounter, name);
+                    const isCommented = service.__commented === true;
+                    const serviceOccurrenceIndex = isCommented ? 0 : takeOccurrence(serviceOccurrenceCounter, name);
                     const data = service[name] || {};
                     const directSource = {
                         servicesSource: {
@@ -3195,7 +4612,8 @@
                             groupIndex,
                             ...(nestedGroupPath.length > 0 ? { nestedGroupPath } : {}),
                             serviceName: name,
-                            serviceIndex: serviceOccurrenceIndex
+                            serviceIndex: serviceOccurrenceIndex,
+                            ...(isCommented ? { commented: true, startLine: service.__commentedStartLine, endLine: service.__commentedEndLine } : {})
                         },
                         settingsSource: {
                             tab: 'settings',
@@ -3221,7 +4639,7 @@
                     const serviceDragAttributes = previewEditMode
                         ? `${getDragItemAttributes('service', directSource.servicesSource, entryIndex)} data-preview-drop-kind="service" data-preview-drop-index="${entryIndex}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"`
                         : '';
-                    return `<div class="dashboard-card preview-jump-target" ${serviceDragAttributes} ${getSourceAttributes(directSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
+                    return `<div class="dashboard-card preview-jump-target${isCommented ? ' dashboard-card--commented' : ''}" ${serviceDragAttributes} ${getSourceAttributes(directSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
                 }).join('');
             }
 
@@ -3288,12 +4706,13 @@
             filteredServices.forEach((group) => {
                 const groupName = Object.keys(group || {})[0];
                 const groupIndex = groupOccurrenceByItem.get(group) || 0;
+                const groupIsCommented = group.__commented === true;
                 const entries = groupName ? group[groupName] : [];
                 const layoutConfig = groupLayout[groupName];
                 const isCollapsed = isInitiallyCollapsed(layoutConfig);
                 const groupIcon = renderIcon(layoutConfig && layoutConfig.icon, groupName || 'Services');
                 const groupSource = {
-                    servicesSource: { tab: 'services', kind: 'services-group', groupName, groupIndex },
+                    servicesSource: { tab: 'services', kind: 'services-group', groupName, groupIndex, ...(groupIsCommented ? { commented: true, startLine: group.__commentedStartLine, endLine: group.__commentedEndLine } : {}) },
                     settingsSource: { tab: 'settings', kind: 'settings-layout-group', groupName }
                 };
                 const serviceGroupSource = groupSource.servicesSource;
@@ -3321,13 +4740,14 @@
                 const groupDragAttributes = previewEditMode
                     ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                     : '';
+                const groupClass = 'dashboard-group' + (groupIsCommented ? ' dashboard-group--commented' : '');
                 if (hasNestedGroups) {
-                    groupsHtml += `<section class="dashboard-group dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" data-preview-nested-columns="${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
+                    groupsHtml += `<section class="${groupClass} dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" data-preview-nested-columns="${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
                 } else {
                     if (!cards) {
                         addPreviewNotice(`No services configured in ${groupName || 'this group'}.`);
                     }
-                    groupsHtml += `<details class="dashboard-group" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${serviceCardsGrid}</details>`;
+                    groupsHtml += `<details class="${groupClass}" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${serviceCardsGrid}</details>`;
                 }
             });
 
@@ -3340,13 +4760,14 @@
             const bookmarkGroupsHtml = bookmarks.map((item, groupPosition) => {
                 const groupName = Object.keys(item || {})[0] || 'Bookmarks';
                 const groupIndex = takeOccurrence(bookmarkGroupOccurrenceCounter, groupName);
+                const groupIsCommented = item.__commented === true;
                 const groupData = item[groupName];
                 const entries = Array.isArray(groupData)
                     ? groupData
                     : groupData && typeof groupData === 'object'
                         ? [{ [groupName]: groupData }]
                         : [];
-                const groupSource = { tab: 'bookmarks', kind: 'bookmark-group', groupName, groupIndex };
+                const groupSource = { tab: 'bookmarks', kind: 'bookmark-group', groupName, groupIndex, ...(groupIsCommented ? { commented: true, startLine: item.__commentedStartLine, endLine: item.__commentedEndLine } : {}) };
                 const groupEditControls = previewEditMode
                     ? getBookmarkGroupEditControls(groupSource, groupPosition, bookmarks.length)
                     : '';
@@ -3356,8 +4777,9 @@
                 ]);
                 const bookmarkOccurrenceCounter = new Map();
                 const linksHtml = entries.map((entry, bookmarkPosition) => {
+                    const bookmarkIsCommented = entry.__commented === true;
                     const bookmarkName = Object.keys(entry || {})[0] || 'Bookmark';
-                    const bookmarkIndex = takeOccurrence(bookmarkOccurrenceCounter, bookmarkName);
+                    const bookmarkIndex = bookmarkIsCommented ? 0 : takeOccurrence(bookmarkOccurrenceCounter, bookmarkName);
                     const rawData = entry && entry[bookmarkName];
                     const data = Array.isArray(rawData) ? rawData[0] : rawData;
                     const bookmarkData = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
@@ -3367,7 +4789,8 @@
                         groupName,
                         groupIndex,
                         bookmarkName,
-                        bookmarkIndex
+                        bookmarkIndex,
+                        ...(bookmarkIsCommented ? { commented: true, startLine: entry.__commentedStartLine, endLine: entry.__commentedEndLine } : {})
                     };
                     const bookmarkEditControls = previewEditMode
                         ? getBookmarkEditControls(bookmarkSource, bookmarkPosition, entries.length)
@@ -3384,7 +4807,7 @@
                     const bookmarkDragAttributes = previewEditMode
                         ? `${getDragItemAttributes('bookmark', bookmarkSource, bookmarkPosition)} data-preview-drop-kind="bookmark" data-preview-drop-index="${bookmarkPosition}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                         : '';
-                    return `<div class="bookmark-card" ${bookmarkDragAttributes}>
+                    return `<div class="bookmark-card${bookmarkIsCommented ? ' bookmark-card--commented' : ''}" ${bookmarkDragAttributes}>
                         <a class="bookmark-card-link preview-jump-target" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" ${getSourceAttributes(bookmarkSource)} ${bookmarkTooltip}>
                             <span class="bookmark-card-mark" aria-hidden="true">${abbr ? escapeHtml(abbr.slice(0, 4)) : '&#8599;'}</span>
                             <span class="bookmark-card-copy"><span class="bookmark-card-name">${escapeHtml(bookmarkName)}</span>${description ? `<span class="dashboard-card-desc">${escapeHtml(description)}</span>` : ''}</span>
@@ -3399,7 +4822,7 @@
                 const bookmarkGroupDragAttributes = previewEditMode
                     ? `${getDragItemAttributes('bookmark-group', groupSource, groupPosition)} data-preview-drop-kind="bookmark-group" data-preview-drop-index="${groupPosition}" data-preview-bookmark-drop data-preview-bookmark-drop-index="${entries.length}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                     : '';
-                return `<section class="bookmark-group" ${bookmarkGroupDragAttributes}><div class="bookmark-group-heading"><span class="bookmark-group-title preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName)}</span><span class="bookmark-group-count">${entries.length} ${entries.length === 1 ? 'link' : 'links'}</span>${groupEditControls}</div>${linksHtml ? `<div class="bookmark-links"${previewEditMode ? ` data-preview-bookmark-drop-zone data-preview-bookmark-drop-index="${entries.length}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${linksHtml}</div>` : '<p class="bookmark-empty">No links configured.</p>'}${addBookmarkButton}</section>`;
+                return `<section class="bookmark-group${groupIsCommented ? ' bookmark-group--commented' : ''}" ${bookmarkGroupDragAttributes}><div class="bookmark-group-heading"><span class="bookmark-group-title preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName)}</span><span class="bookmark-group-count">${entries.length} ${entries.length === 1 ? 'link' : 'links'}</span>${groupEditControls}</div>${linksHtml ? `<div class="bookmark-links"${previewEditMode ? ` data-preview-bookmark-drop-zone data-preview-bookmark-drop-index="${entries.length}" data-preview-bookmark-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${linksHtml}</div>` : '<p class="bookmark-empty">No links configured.</p>'}${addBookmarkButton}</section>`;
             }).join('');
             const addBookmarkGroupButton = previewEditMode
                 ? '<button type="button" class="preview-add-button preview-add-bookmark-group" data-preview-action="bookmark-group.add"><span aria-hidden="true">+</span> Add bookmark group</button>'
@@ -3418,6 +4841,8 @@
             const widgetOccurrenceCounter = new Map();
             const widgetsHtml = previewWidgets.map((name) => {
                 const occurrenceIndex = takeOccurrence(widgetOccurrenceCounter, name);
+                const widgetIdentifier = `${name}:${occurrenceIndex}`;
+                const isCommented = commentedWidgetInfo.has(widgetIdentifier);
                 const widgetData = Array.isArray(widgetsData)
                     ? widgetDataOccurrences.get(name)?.[occurrenceIndex]
                     : widgetsData?.[name];
@@ -3426,7 +4851,18 @@
                     `Widget: ${name}`,
                     ...getPreviewDetailLines(widgetData, Object.keys(widgetData || {}))
                 ]);
-                return `<span class="widget-block preview-jump-target" ${getSourceAttributes({ tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData) })} ${widgetTooltip}>${escapeHtml(name)}</span>`;
+                const widgetLineInfo = isCommented ? commentedWidgetInfo.get(widgetIdentifier) : null;
+                const widgetSource = { tab: 'widgets', kind: 'widget', name, index: occurrenceIndex, isList: Array.isArray(widgetsData), ...(isCommented ? { commented: true, startLine: widgetLineInfo.startLine, endLine: widgetLineInfo.endLine } : {}) };
+                const widgetCommentButton = previewEditMode
+                    ? getPreviewEditActionButton('widget.comment', widgetSource, 'Comment/uncomment widget', '#')
+                    : '';
+                const widgetEditButton = previewEditMode && isCommented
+                    ? getPreviewEditActionButton('widget.edit', widgetSource, 'Edit widget', '&#9998;')
+                    : '';
+                const widgetRemoveButton = previewEditMode && isCommented
+                    ? getPreviewEditActionButton('widget.remove', widgetSource, 'Delete widget', '&times;', { danger: true })
+                    : '';
+                return `<span class="widget-block preview-jump-target${isCommented ? ' widget-block--commented' : ''}" ${getSourceAttributes(widgetSource)} ${widgetTooltip}>${escapeHtml(name)}${widgetCommentButton}${widgetEditButton}${widgetRemoveButton}</span>`;
             }).join('');
 
             const previewTabsHtml = homepageTabs.length > 0 || previewEditMode
@@ -3647,6 +5083,7 @@
                 previewAutoRefresh: settings.previewAutoRefresh !== false,
                 editorVisible: settings.editorVisible !== false,
                 interactiveEditor: settings.interactiveEditor === true,
+                showComments: settings.showComments === true,
                 tabOrder: normalizeConfigTabOrder(settings.tabOrder),
                 visibleTabs: normalizeVisibleConfigTabs(settings.visibleTabs, normalizeConfigTabOrder(settings.tabOrder))
             };
@@ -3660,6 +5097,11 @@
             previewAutoRefreshToggle.checked = savedAppSettings.previewAutoRefresh;
             editorVisibilityToggle.checked = savedAppSettings.editorVisible;
             previewEditToggle.checked = savedAppSettings.interactiveEditor;
+            previewShowCommentsState = savedAppSettings.showComments;
+            const commentsToggle = document.getElementById('preview-comments-toggle');
+            if (commentsToggle) commentsToggle.checked = savedAppSettings.showComments;
+            const commentsLabel = document.getElementById('preview-comments-label');
+            if (commentsLabel) commentsLabel.textContent = savedAppSettings.showComments ? 'Hide comments' : 'Show comments';
             updateAutoIndentLabel();
             updateEditorVisibility();
             previewAutoRefreshLabel.textContent = `Auto Refresh ${previewAutoRefreshToggle.checked ? 'on' : 'off'}`;
@@ -3743,6 +5185,7 @@
             document.getElementById('settings-preview-auto-refresh').checked = settings.previewAutoRefresh;
             document.getElementById('settings-editor-visible').checked = settings.editorVisible;
             document.getElementById('settings-interactive-editor').checked = settings.interactiveEditor;
+            document.getElementById('settings-show-comments').checked = settings.showComments === true;
             settingsTabOrderDraft = { tabOrder: [...settings.tabOrder], visibleTabs: [...settings.visibleTabs] };
             renderSettingsTabControls();
             activateSettingsTab(settingsActiveTab);
@@ -3771,6 +5214,7 @@
                 previewAutoRefresh: document.getElementById('settings-preview-auto-refresh').checked,
                 editorVisible: document.getElementById('settings-editor-visible').checked,
                 interactiveEditor: document.getElementById('settings-interactive-editor').checked,
+                showComments: document.getElementById('settings-show-comments').checked,
                 tabOrder: tabSettings.tabOrder,
                 visibleTabs: tabSettings.visibleTabs
             });
@@ -3803,6 +5247,7 @@
                 : '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11M15 9v11"></path>';
             previewEditToggle.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} Interactive editor`);
             document.getElementById('preview-option-types-button').hidden = !isEnabled;
+            document.getElementById('preview-comments-toggle-container').hidden = !isEnabled;
         }
         function updatePreviewEditMode() {
             const isEnabled = previewEditToggle.checked && !previewEditToggle.disabled;
@@ -3817,6 +5262,11 @@
             updateEditorVisibility();
         });
         updateEditorVisibility();
+        document.getElementById('preview-comments-toggle').addEventListener('change', function() {
+            previewShowCommentsState = this.checked;
+            document.getElementById('preview-comments-label').textContent = this.checked ? 'Hide comments' : 'Show comments';
+            updatePreview({ force: true });
+        });
         document.getElementById('settings-button').addEventListener('click', openSettingsModal);
         document.getElementById('settings-modal-close').addEventListener('click', closeSettingsModal);
         document.getElementById('settings-modal-cancel').addEventListener('click', closeSettingsModal);
@@ -3964,18 +5414,28 @@
                 const destinationName = Array.isArray(destinationTarget?.nestedGroupPath) && destinationTarget.nestedGroupPath.length > 0
                     ? destinationTarget.nestedGroupPath[destinationTarget.nestedGroupPath.length - 1].name
                     : destinationTarget?.groupName || drag.source.groupName;
-                await applyPreviewEdit(
-                    { type: 'service.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget },
-                    `Moved service ${drag.source.serviceName} to ${destinationName}.`
-                );
+                const operation = { type: 'service.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget };
+                const message = `Moved service ${drag.source.serviceName} to ${destinationName}.`;
+                if (drag.source.commented === true) {
+                    await applyCommentedPreviewEdit(operation, `Moved commented service ${drag.source.serviceName} to ${destinationName}.`);
+                } else if (previewShowCommentsState) {
+                    await applyClientSidePreviewEdit(operation, message);
+                } else {
+                    await applyPreviewEdit(operation, message);
+                }
                 return;
             }
             if (drag.kind === 'bookmark') {
                 if (sameCollection && drag.index === adjustedDestinationIndex) return;
-                await applyPreviewEdit(
-                    { type: 'bookmark.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget },
-                    `Moved bookmark ${drag.source.bookmarkName} to ${destinationTarget?.groupName || drag.source.groupName}.`
-                );
+                const operation = { type: 'bookmark.move', target: drag.source, destinationIndex: adjustedDestinationIndex, destinationTarget };
+                const message = `Moved bookmark ${drag.source.bookmarkName} to ${destinationTarget?.groupName || drag.source.groupName}.`;
+                if (drag.source.commented === true) {
+                    await applyCommentedPreviewEdit(operation, `Moved commented bookmark ${drag.source.bookmarkName} to ${destinationTarget?.groupName || drag.source.groupName}.`);
+                } else if (previewShowCommentsState) {
+                    await applyClientSidePreviewEdit(operation, message);
+                } else {
+                    await applyPreviewEdit(operation, message);
+                }
                 return;
             }
             if (drag.index === adjustedDestinationIndex) return;
@@ -3985,10 +5445,15 @@
             };
             const operationType = typeByKind[drag.kind];
             if (operationType) {
-                await applyPreviewEdit(
-                    { type: operationType, target: drag.source, destinationIndex: adjustedDestinationIndex },
-                    `Reordered ${drag.kind.replace('-', ' ')} ${drag.source.serviceName || drag.source.bookmarkName || drag.source.groupName || ''}.`
-                );
+                const operation = { type: operationType, target: drag.source, destinationIndex: adjustedDestinationIndex };
+                const itemName = drag.source.serviceName || drag.source.bookmarkName || drag.source.groupName || '';
+                if (drag.source.commented === true) {
+                    await applyCommentedPreviewEdit(operation, `Reordered commented ${drag.kind.replace('-', ' ')} ${itemName}.`);
+                } else if (previewShowCommentsState) {
+                    await applyClientSidePreviewEdit(operation, `Reordered ${drag.kind.replace('-', ' ')} ${itemName}.`);
+                } else {
+                    await applyPreviewEdit(operation, `Reordered ${drag.kind.replace('-', ' ')} ${itemName}.`);
+                }
             }
         }
 

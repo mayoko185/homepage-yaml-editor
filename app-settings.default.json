@@ -6,6 +6,7 @@
   "previewAutoRefresh": true,
   "editorVisible": false,
   "interactiveEditor": true,
+  "showComments": false,
   "visibleTabs": ["services", "settings", "bookmarks", "widgets", "docker", "proxmox", "kubernetes"],
   "tabOrder": ["services", "settings", "bookmarks", "widgets", "docker", "proxmox", "kubernetes"]
 }
