@@ -76,3 +76,130 @@ test('escapes hostile YAML names in the preview', async ({ page }) => {
   expect(await page.evaluate(() => window.previewInjected)).toBeUndefined();
   await expect(page.locator('#visual-preview img[src="x"]')).toHaveCount(0);
 });
+
+test('nested commented service card is visible in preview', async ({ page }) => {
+  const nestedServices = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+        - Beta:
+            href: https://beta.test
+`;
+  await setEditorValue(page, nestedServices);
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.locator('#preview-comments-toggle').check({ force: true });
+  await expect(page.locator('.dashboard-card', { hasText: 'Alpha' })).toBeVisible();
+  await expect(page.locator('.dashboard-card', { hasText: 'Beta' })).toBeVisible();
+
+  // Comment out Beta by editing the YAML directly
+  const commentedNested = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+        # - Beta:
+        #     href: https://beta.test
+`;
+  await setEditorValue(page, commentedNested);
+  await page.waitForTimeout(500);
+  // The commented Beta card should still be visible with commented styling
+  await expect(page.locator('.dashboard-card', { hasText: 'Beta' })).toBeVisible();
+  await expect(page.locator('.dashboard-card--commented', { hasText: 'Beta' })).toHaveCount(1);
+});
+
+test('nested commented group keeps descendants visible in preview', async ({ page }) => {
+  const nestedGroup = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+        - Beta:
+            href: https://beta.test
+`;
+  await setEditorValue(page, nestedGroup);
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.locator('#preview-comments-toggle').check({ force: true });
+  await expect(page.locator('.dashboard-card', { hasText: 'Alpha' })).toBeVisible();
+  await expect(page.locator('.dashboard-card', { hasText: 'Beta' })).toBeVisible();
+
+  // Comment out the entire SubGroup
+  const commentedGroup = `- Main:
+    # - SubGroup:
+    #     - Alpha:
+    #         href: https://alpha.test
+    #     - Beta:
+    #         href: https://beta.test
+`;
+  await setEditorValue(page, commentedGroup);
+  await page.waitForTimeout(500);
+  // SubGroup should be visible as a commented group
+  await expect(page.locator('.dashboard-nested-group', { hasText: 'SubGroup' })).toBeVisible();
+  await expect(page.locator('.dashboard-nested-group--commented', { hasText: 'SubGroup' })).toHaveCount(1);
+  // Descendants should also be visible with commented styling
+  await expect(page.locator('.dashboard-card--commented', { hasText: 'Alpha' })).toHaveCount(1);
+  await expect(page.locator('.dashboard-card--commented', { hasText: 'Beta' })).toHaveCount(1);
+});
+
+test('dragging a commented service into a nested group places it inside that group', async ({ page }) => {
+  const yaml = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+    - Beta:
+        href: https://beta.test
+`;
+  await setEditorValue(page, yaml);
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.locator('#preview-comments-toggle-container').waitFor({ state: 'visible' });
+  await page.locator('#preview-comments-toggle').check({ force: true });
+
+  // Comment out Beta by editing YAML
+  const commentedYaml = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+    # - Beta:
+    #     href: https://beta.test
+`;
+  await setEditorValue(page, commentedYaml);
+  await page.waitForTimeout(500);
+
+  // Use the internal API to move the commented service into the nested group
+  const result = await page.evaluate(async () => {
+    const source = {
+      tab: 'services',
+      kind: 'service',
+      groupName: 'Main',
+      groupIndex: 0,
+      serviceName: 'Beta',
+      serviceIndex: 0,
+      commented: true,
+      startLine: 4,
+      endLine: 5
+    };
+    const destinationTarget = {
+      groupName: 'Main',
+      groupIndex: 0,
+      nestedGroupPath: [{ name: 'SubGroup', index: 0 }]
+    };
+    const operation = {
+      type: 'service.move',
+      target: source,
+      destinationIndex: 1,
+      destinationTarget
+    };
+    return window.__applyCommentedPreviewEdit(operation, 'Moved commented service Beta.');
+  });
+  expect(result).toBe(true);
+
+  // Verify the YAML now has Beta inside SubGroup
+  const editorText = await getEditorValue(page);
+  expect(editorText).toContain('SubGroup');
+  expect(editorText).toContain('- Alpha:');
+  expect(editorText).toContain('# - Beta:');
+  // Beta should be indented under SubGroup (not at top level)
+  const lines = editorText.split('\n');
+  const betaLine = lines.findIndex((l) => l.includes('Beta'));
+  expect(betaLine).toBeGreaterThan(-1);
+  // The line before Beta should be Alpha (both under SubGroup)
+  const alphaLine = lines.findIndex((l) => l.includes('Alpha'));
+  expect(betaLine).toBeGreaterThan(alphaLine);
+});

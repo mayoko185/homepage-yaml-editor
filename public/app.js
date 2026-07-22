@@ -585,6 +585,12 @@
             }
 
             if (opType.endsWith('.move')) {
+                // Commented service move targeting a nested group: return null so
+                // applyCommentedServiceOperation handles it (it already resolves
+                // nested destinations, indentation, and insertion index correctly).
+                if (target.commented === true && isEntry && operation.destinationTarget && Array.isArray(operation.destinationTarget.nestedGroupPath) && operation.destinationTarget.nestedGroupPath.length > 0) {
+                    return null;
+                }
                 let toPath;
                 if (isEntry || nestedGroupInfo) {
                     toPath = { groupName: path.groupName, groupIndex: path.groupIndex };
@@ -943,6 +949,19 @@
             return positions;
         }
 
+        function findGroupStartLine(yamlText, groupName, occurrenceIndex) {
+            const lines = yamlText.split('\n');
+            let occurrence = -1;
+            for (let i = 0; i < lines.length; i++) {
+                const m = lines[i].match(/^-\s+(\S.*?):\s*$/);
+                if (m && m[1].trim() === groupName) {
+                    occurrence++;
+                    if (occurrence === (occurrenceIndex || 0)) return i;
+                }
+            }
+            return -1;
+        }
+
         function reindentCommentedBlockLines(blockLines, newServiceIndent) {
             if (blockLines.length === 0) return blockLines;
             const firstLine = blockLines[0];
@@ -981,6 +1000,23 @@
             return groupIndent + 2;
         }
 
+        function markDeepCommented(value) {
+            if (Array.isArray(value)) {
+                return value.map((item) => {
+                    if (item && typeof item === 'object') {
+                        const itemName = Object.keys(item)[0];
+                        if (itemName) {
+                            const itemVal = item[itemName];
+                            return { [itemName]: markDeepCommented(itemVal), __commented: true };
+                        }
+                        return { ...item, __commented: true };
+                    }
+                    return item;
+                });
+            }
+            return value;
+        }
+
         function mergeGroupEntries(activeEntries, commentedEntries, groupStartLine, yamlText) {
             if (!Array.isArray(activeEntries) || commentedEntries.length === 0) return activeEntries;
             const lines = yamlText.split('\n');
@@ -1011,6 +1047,80 @@
             }
             remainingCommented.forEach((entry) => merged.push(entry));
             return merged;
+        }
+
+        function findNestedGroupLine(lines, parentLine, groupName, occurrenceIndex) {
+            const parentEnd = findBlockEndLine(lines, parentLine);
+            const parentIndent = getYamlIndent(lines[parentLine]);
+            const childIndent = detectEntryIndent(lines, parentLine, parentEnd);
+            if (childIndent <= parentIndent) return -1;
+            let occurrence = -1;
+            for (let i = parentLine + 1; i <= parentEnd; i++) {
+                const line = lines[i];
+                const indent = getYamlIndent(line);
+                if (indent <= parentIndent) break;
+                if (indent !== childIndent) continue;
+                const m = line.match(/^(\s*)-\s+(\S.*?):\s*$/);
+                if (m && m[2].trim() === groupName) {
+                    occurrence++;
+                    if (occurrence === occurrenceIndex) return i;
+                }
+            }
+            return -1;
+        }
+
+        function mergeNestedGroupEntries(group, nestedPath, commentEntries, yamlText) {
+            // Recursively traverse into the group's nested structure following nestedPath
+            // and insert commentEntries into the matching nested array in YAML order.
+            const lines = yamlText.split('\n');
+            let current = group;
+            const groupName = Object.keys(current)[0];
+            if (!groupName) return;
+            let entries = current[groupName];
+            let parentLine = findGroupStartLine(yamlText, groupName);
+            for (let depth = 0; depth < nestedPath.length; depth++) {
+                const step = nestedPath[depth];
+                const stepName = typeof step === 'string' ? step : step.name;
+                const stepIndex = typeof step === 'object' ? step.index : 0;
+                if (!Array.isArray(entries)) return;
+                let found = null;
+                let foundIdx = -1;
+                let occurrence = -1;
+                for (let ei = 0; ei < entries.length; ei++) {
+                    const item = entries[ei];
+                    if (item && typeof item === 'object' && Object.keys(item)[0] === stepName) {
+                        occurrence++;
+                        if (occurrence === stepIndex) {
+                            found = item;
+                            foundIdx = ei;
+                            break;
+                        }
+                    }
+                }
+                if (!found) return;
+                const foundName = Object.keys(found)[0];
+                if (depth === nestedPath.length - 1) {
+                    // Last step — merge into this nested group's array in YAML order
+                    if (!Array.isArray(found[foundName])) {
+                        found[foundName] = [];
+                    }
+                    // Find the nested group's own start line within the parent's block
+                    const nestedGroupLine = parentLine >= 0
+                        ? findNestedGroupLine(lines, parentLine, foundName, stepIndex)
+                        : -1;
+                    if (nestedGroupLine >= 0) {
+                        found[foundName] = mergeGroupEntries(found[foundName], commentEntries, nestedGroupLine, yamlText);
+                    } else {
+                        found[foundName] = found[foundName].concat(commentEntries);
+                    }
+                } else {
+                    // Track the current group's line for the next depth
+                    parentLine = parentLine >= 0
+                        ? findNestedGroupLine(lines, parentLine, foundName, stepIndex)
+                        : -1;
+                    entries = found[foundName];
+                }
+            }
         }
 
         function mergeGroupsByLine(activeGroups, commentedGroups, yamlText) {
@@ -4411,7 +4521,7 @@
 
         function buildCommentedServicesData(yamlText, activeServices) {
             const blocks = extractCommentedLines(yamlText);
-            if (blocks.length === 0) return { groups: [], servicesMap: new Map() };
+            if (blocks.length === 0) return { groups: [], servicesMap: new Map(), nestedServicesMap: new Map() };
 
             // Index active groups by occurrence
             const groupOccurrenceCounter = new Map();
@@ -4424,6 +4534,7 @@
 
             const commentedGroups = [];
             const commentedServicesMap = new Map();
+            const nestedServicesMap = new Map();
 
             blocks.forEach((block) => {
                 if (block.isListItem !== true) return;
@@ -4437,10 +4548,8 @@
                         const groupEntry = {};
                         const innerData = entry[entryName];
                         if (Array.isArray(innerData)) {
-                            // Mark services inside commented group as commented
-                            groupEntry[entryName] = innerData.map((svc) =>
-                                svc && typeof svc === 'object' ? { ...svc, __commented: true } : svc
-                            );
+                            // Mark services inside commented group as commented (deep)
+                            groupEntry[entryName] = markDeepCommented(innerData);
                         } else {
                             groupEntry[entryName] = innerData;
                         }
@@ -4449,61 +4558,107 @@
                         groupEntry.__commentedEndLine = block.endLine;
                         commentedGroups.push(groupEntry);
                     } else if (block.indent > 0) {
-                        // Commented-out service/bookmark — find parent by scanning backwards in text
+                        // Build full enclosing path from YAML indentation
                         const lines = yamlText.split('\n');
-                        let parentName = null;
+                        const ancestors = [];
+                        let currentIndent = block.indent;
                         for (let j = block.startLine - 1; j >= 0; j--) {
                             const m = lines[j].match(/^(\s*)-\s+(\S.*?):\s*$/);
-                            if (m && m[1].length < block.indent && m[2].trim()) {
-                                parentName = m[2].trim();
-                                break;
+                            if (m && m[1].length < currentIndent && m[2].trim()) {
+                                ancestors.unshift({ name: m[2].trim(), indent: m[1].length, line: j });
+                                currentIndent = m[1].length;
+                                if (m[1].length === 0) break;
                             }
                         }
-                        if (!parentName) return;
+                        if (ancestors.length === 0) return;
 
-                        const lineInfo = { __commentedStartLine: block.startLine, __commentedEndLine: block.endLine };
+                        const topParent = ancestors[0];
+                        const parentName = ancestors[ancestors.length - 1].name;
 
-                        // Count how many top-level groups with this name appear before the block
+                        // Count top-level group occurrence
                         let parentOccurrence = 0;
                         for (let j = block.startLine - 1; j >= 0; j--) {
                             const m = lines[j].match(/^(\s*)-\s+(\S.*?):\s*$/);
-                            if (m && m[1].length === 0 && m[2].trim() === parentName) {
+                            if (m && m[1].length === 0 && m[2].trim() === topParent.name) {
                                 parentOccurrence++;
                             }
                         }
 
-                        // Detect if this is a nested group (value is an array)
+                        const lineInfo = { __commentedStartLine: block.startLine, __commentedEndLine: block.endLine };
                         const innerValue = entry[entryName];
                         const isNestedGroup = Array.isArray(innerValue);
 
-                        // Match to the correct active group occurrence
-                        const matchedIdx = activeGroupInfo.findIndex((gi) => gi.name === parentName && gi.idx === parentOccurrence - 1);
-                        if (matchedIdx >= 0) {
-                            if (!commentedServicesMap.has(matchedIdx)) {
-                                commentedServicesMap.set(matchedIdx, []);
-                            }
-                            const commentedEntry = isNestedGroup
-                                ? { [entryName]: innerValue.map((svc) => svc && typeof svc === 'object' ? { ...svc, __commented: true } : svc), __commented: true, ...lineInfo }
-                                : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
-                            commentedServicesMap.get(matchedIdx).push(commentedEntry);
-                        } else {
-                            // Parent is a commented-out group — add service there
-                            const parentGroup = commentedGroups.find((g) => Object.keys(g)[0] === parentName);
-                            if (parentGroup) {
-                                const parentEntries = parentGroup[parentName];
-                                if (!Array.isArray(parentEntries)) {
-                                    parentGroup[parentName] = [];
+                        if (ancestors.length === 1) {
+                            // Direct child of a top-level group (existing behavior)
+                            const matchedIdx = activeGroupInfo.findIndex((gi) => gi.name === parentName && gi.idx === parentOccurrence - 1);
+                            if (matchedIdx >= 0) {
+                                if (!commentedServicesMap.has(matchedIdx)) {
+                                    commentedServicesMap.set(matchedIdx, []);
                                 }
                                 const commentedEntry = isNestedGroup
-                                    ? { [entryName]: innerValue.map((svc) => svc && typeof svc === 'object' ? { ...svc, __commented: true } : svc), __commented: true, ...lineInfo }
+                                    ? { [entryName]: markDeepCommented(innerValue), __commented: true, ...lineInfo }
                                     : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
-                                parentGroup[parentName].push(commentedEntry);
+                                commentedServicesMap.get(matchedIdx).push(commentedEntry);
+                            } else {
+                                // Parent is a commented-out group — add service there
+                                const parentGroup = commentedGroups.find((g) => Object.keys(g)[0] === parentName);
+                                if (parentGroup) {
+                                    const parentEntries = parentGroup[parentName];
+                                    if (!Array.isArray(parentEntries)) {
+                                        parentGroup[parentName] = [];
+                                    }
+                                    const commentedEntry = isNestedGroup
+                                        ? { [entryName]: markDeepCommented(innerValue), __commented: true, ...lineInfo }
+                                        : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                                    parentGroup[parentName].push(commentedEntry);
+                                }
+                            }
+                        } else {
+                            // Nested group child — store by top-level group index + nested path
+                            const matchedIdx = activeGroupInfo.findIndex((gi) => gi.name === topParent.name && gi.idx === parentOccurrence - 1);
+                            if (matchedIdx >= 0) {
+                                // Build nested path with occurrence indexes for each step,
+                                // scoped to the parent's line range
+                                const nestedPath = [];
+                                for (let p = 1; p < ancestors.length; p++) {
+                                    const stepName = ancestors[p].name;
+                                    const parentLine = ancestors[p - 1].line;
+                                    let stepOccurrence = 0;
+                                    for (let q = parentLine; q <= block.startLine; q++) {
+                                        const m2 = lines[q].match(/^(\s*)-\s+(\S.*?):\s*$/);
+                                        if (m2 && m2[1].length === ancestors[p].indent && m2[2].trim() === stepName) {
+                                            stepOccurrence++;
+                                        }
+                                    }
+                                    nestedPath.push({ name: stepName, index: stepOccurrence - 1 });
+                                }
+                                const key = `${matchedIdx}:${nestedPath.map((s) => `${s.name}[${s.index}]`).join('/')}`;
+                                if (!nestedServicesMap.has(key)) {
+                                    nestedServicesMap.set(key, []);
+                                }
+                                const commentedEntry = isNestedGroup
+                                    ? { [entryName]: markDeepCommented(innerValue), __commented: true, ...lineInfo }
+                                    : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                                nestedServicesMap.get(key).push(commentedEntry);
+                            } else {
+                                // Parent chain includes a commented-out group — add to commentedGroups
+                                const parentGroup = commentedGroups.find((g) => Object.keys(g)[0] === topParent.name);
+                                if (parentGroup) {
+                                    const parentEntries = parentGroup[topParent.name];
+                                    if (!Array.isArray(parentEntries)) {
+                                        parentGroup[topParent.name] = [];
+                                    }
+                                    const commentedEntry = isNestedGroup
+                                        ? { [entryName]: markDeepCommented(innerValue), __commented: true, ...lineInfo }
+                                        : { [entryName]: entry[entryName], __commented: true, ...lineInfo };
+                                    parentGroup[topParent.name].push(commentedEntry);
+                                }
                             }
                         }
                     }
             });
 
-            return { groups: commentedGroups, servicesMap: commentedServicesMap };
+            return { groups: commentedGroups, servicesMap: commentedServicesMap, nestedServicesMap };
         }
 
         function buildCommentedWidgetsData(yamlText) {
@@ -4560,12 +4715,27 @@
             // Merge commented-out items when showComments is enabled (Interactive Editor only)
             if (previewShowCommentsState && previewEditMode && !parsed.services.error) {
                 try {
-                // Clone services to avoid mutating the parsed-config cache
+                // Deep-clone services to avoid mutating the parsed-config cache
+                function deepCloneEntry(item) {
+                    if (!item || typeof item !== 'object') return item;
+                    if (Array.isArray(item)) return item.map(deepCloneEntry);
+                    const name = Object.keys(item)[0];
+                    if (name) {
+                        const val = item[name];
+                        if (Array.isArray(val)) {
+                            return { [name]: val.map(deepCloneEntry), ...(item.__commented !== undefined ? { __commented: item.__commented } : {}) };
+                        }
+                    }
+                    return { ...item };
+                }
                 services = services.map((group) => {
                     const name = Object.keys(group || {})[0];
                     if (!name) return group;
                     const value = group[name];
-                    return Array.isArray(value) ? { [name]: [...value] } : { [name]: value };
+                    if (Array.isArray(value)) {
+                        return { [name]: value.map(deepCloneEntry) };
+                    }
+                    return { [name]: value };
                 });
                 const servicesYamlText = getTabYamlText('services');
                 const commentedServicesData = buildCommentedServicesData(servicesYamlText, services);
@@ -4576,7 +4746,10 @@
                         const group = services[groupIdx];
                         if (!group) return;
                         const groupName = Object.keys(group)[0];
-                        if (!groupName || !Array.isArray(group[groupName])) return;
+                        if (!groupName) return;
+                        if (!Array.isArray(group[groupName])) {
+                            group[groupName] = [];
+                        }
                         const groupPos = serviceGroupPositions[groupIdx];
                         if (!groupPos) return;
                         group[groupName] = mergeGroupEntries(group[groupName], commentEntries, groupPos.startLine, servicesYamlText);
@@ -4590,6 +4763,23 @@
                                 group[groupName] = group[groupName].concat(commentEntries);
                             }
                         }
+                    }
+                });
+                // Merge commented entries into nested groups
+                commentedServicesData.nestedServicesMap.forEach((commentEntries, key) => {
+                    const colonIdx = key.indexOf(':');
+                    const groupIdx = Number(key.slice(0, colonIdx));
+                    const pathStr = key.slice(colonIdx + 1);
+                    const nestedPath = pathStr.split('/').map((s) => {
+                        const bracketIdx = s.indexOf('[');
+                        if (bracketIdx >= 0) {
+                            return { name: s.slice(0, bracketIdx), index: Number(s.slice(bracketIdx + 1, -1)) };
+                        }
+                        return { name: s, index: 0 };
+                    });
+                    const group = services[groupIdx];
+                    if (group && nestedPath.length > 0) {
+                        mergeNestedGroupEntries(group, nestedPath, commentEntries, servicesYamlText);
                     }
                 });
                 // Merge commented groups into the services list in YAML order
@@ -5941,3 +6131,6 @@
             event.returnValue = true;
         });
         updateFloatingNavVisibility();
+
+        // Expose for browser tests
+        window.__applyCommentedPreviewEdit = applyCommentedPreviewEdit;
