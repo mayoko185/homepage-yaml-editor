@@ -92,7 +92,9 @@ function getDefaultAppSettings() {
       ? { comment: template.editBarOptions.comment !== false, duplicate: template.editBarOptions.duplicate !== false, moveUpDown: template.editBarOptions.moveUpDown !== false }
       : { comment: true, duplicate: true, moveUpDown: true },
     visibleTabs: Array.isArray(template.visibleTabs) ? [...template.visibleTabs] : [...DEFAULT_CONFIG_TAB_ORDER],
-    tabOrder: Array.isArray(template.tabOrder) ? [...template.tabOrder] : [...DEFAULT_CONFIG_TAB_ORDER]
+    tabOrder: Array.isArray(template.tabOrder) ? [...template.tabOrder] : [...DEFAULT_CONFIG_TAB_ORDER],
+    autoBackup: template.autoBackup !== false,
+    backupCount: Number.isFinite(template.backupCount) ? Math.max(1, Math.min(100, Math.round(template.backupCount))) : 10
   };
 }
 
@@ -298,7 +300,9 @@ function normalizeAppSettings(value) {
       ? { comment: value.editBarOptions.comment !== false, duplicate: value.editBarOptions.duplicate !== false, moveUpDown: value.editBarOptions.moveUpDown !== false }
       : { ...defaults.editBarOptions },
     visibleTabs: normalizeVisibleTabs(value.visibleTabs, tabOrder),
-    tabOrder
+    tabOrder,
+    autoBackup: typeof value.autoBackup === 'boolean' ? value.autoBackup : defaults.autoBackup,
+    backupCount: Number.isFinite(value.backupCount) ? Math.max(1, Math.min(100, Math.round(value.backupCount))) : defaults.backupCount
   };
 }
 
@@ -724,7 +728,38 @@ async function replaceConfigFileAtomically(filePath, content, { mode, expectedDi
   }
 }
 
-async function saveConfigFile(dirPath, filename, content, { expectedRevision }) {
+async function createBackup(backupDir, filename, content, maxBackups) {
+  await fs.mkdir(backupDir, { recursive: true });
+  const now = new Date();
+  const timestamp = String(now.getFullYear()).slice(2)
+    + String(now.getMonth() + 1).padStart(2, '0')
+    + String(now.getDate()).padStart(2, '0')
+    + String(now.getHours()).padStart(2, '0')
+    + String(now.getMinutes()).padStart(2, '0')
+    + String(now.getSeconds()).padStart(2, '0');
+  const backupPath = path.join(backupDir, `${timestamp}_${filename}`);
+  await fs.writeFile(backupPath, content, 'utf8');
+  const prefix = `*_${filename}`;
+  let entries;
+  try {
+    entries = await fs.readdir(backupDir);
+  } catch {
+    return;
+  }
+  const matching = entries
+    .filter((entry) => entry.endsWith(`_${filename}`))
+    .sort()
+    .reverse();
+  if (matching.length > maxBackups) {
+    await Promise.all(
+      matching.slice(maxBackups).map((entry) =>
+        fs.unlink(path.join(backupDir, entry)).catch(() => undefined)
+      )
+    );
+  }
+}
+
+async function saveConfigFile(dirPath, filename, content, { expectedRevision, backupDir, backupCount }) {
   const filePath = resolveConfigFilePath(dirPath, filename);
   const yamlContent = typeof content === 'string' ? content : YAML.stringify(content);
   YAML.parse(yamlContent);
@@ -735,6 +770,9 @@ async function saveConfigFile(dirPath, filename, content, { expectedRevision }) 
   }
   if (currentState.revision !== expectedRevision) {
     throw createConfigConflictError(currentState.revision);
+  }
+  if (backupDir && currentState.content !== null) {
+    await createBackup(backupDir, filename, currentState.content, backupCount);
   }
   const result = await replaceConfigFileAtomically(filePath, yamlContent, {
     mode: currentState.mode,
@@ -904,7 +942,11 @@ app.post('/api/directory/file/save', async (req, res) => {
 
     const configDir = await resolveRealAllowedConfigDirectory(dirPath);
     await assertDirectory(configDir);
-    const result = await saveConfigFile(configDir, filename, content, { expectedRevision });
+    const appSettings = await loadAppSettings();
+    const backupOptions = appSettings.autoBackup
+      ? { backupDir: path.join(APP_DATA_DIR, 'backups'), backupCount: appSettings.backupCount }
+      : {};
+    const result = await saveConfigFile(configDir, filename, content, { expectedRevision, ...backupOptions });
     return res.json({
       message: result.changed ? 'File saved successfully' : 'No changes detected',
       details: result.changed ? `Saved to ${result.filePath}` : `Skipped writing ${result.filePath}`,

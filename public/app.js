@@ -5566,7 +5566,9 @@
                 showComments: settings.showComments === true,
                 editBarOptions: normalizeEditBarOptions(settings.editBarOptions),
                 tabOrder: normalizeConfigTabOrder(settings.tabOrder),
-                visibleTabs: normalizeVisibleConfigTabs(settings.visibleTabs, normalizeConfigTabOrder(settings.tabOrder))
+                visibleTabs: normalizeVisibleConfigTabs(settings.visibleTabs, normalizeConfigTabOrder(settings.tabOrder)),
+                autoBackup: settings.autoBackup !== false,
+                backupCount: Number.isFinite(settings.backupCount) ? Math.max(1, Math.min(100, Math.round(settings.backupCount))) : 10
             };
             applyConfigTabNavigation();
             const pageTitle = savedAppSettings.customPageTitle || defaultPageTitle;
@@ -5664,6 +5666,8 @@
             document.getElementById('settings-custom-page-title').value = settings.customPageTitle;
             document.getElementById('settings-live-homepage-url').value = settings.liveHomepageUrl || '';
             document.getElementById('settings-auto-indent').checked = settings.autoIndent;
+            document.getElementById('settings-auto-backup').checked = settings.autoBackup;
+            document.getElementById('settings-backup-count').value = settings.backupCount;
             document.getElementById('settings-preview-auto-refresh').checked = settings.previewAutoRefresh;
             document.getElementById('settings-editor-visible').checked = settings.editorVisible;
             document.getElementById('settings-interactive-editor').checked = settings.interactiveEditor;
@@ -5697,6 +5701,8 @@
                 customPageTitle: document.getElementById('settings-custom-page-title').value,
                 liveHomepageUrl: document.getElementById('settings-live-homepage-url').value,
                 autoIndent: document.getElementById('settings-auto-indent').checked,
+                autoBackup: document.getElementById('settings-auto-backup').checked,
+                backupCount: Number(document.getElementById('settings-backup-count').value) || 10,
                 previewAutoRefresh: document.getElementById('settings-preview-auto-refresh').checked,
                 editorVisible: document.getElementById('settings-editor-visible').checked,
                 interactiveEditor: document.getElementById('settings-interactive-editor').checked,

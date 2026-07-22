@@ -155,7 +155,9 @@ test('serves optimized assets and supports the active configuration APIs', async
       showComments: false,
       editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
       visibleTabs: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'],
-      tabOrder: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes']
+      tabOrder: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'],
+      autoBackup: true,
+      backupCount: 10
     });
     const settingsSaveResponse = await fetch(`${baseUrl}/api/app-settings`, {
       method: 'PUT',
@@ -181,7 +183,9 @@ test('serves optimized assets and supports the active configuration APIs', async
       showComments: false,
       editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
       visibleTabs: ['kubernetes', 'services'],
-      tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
+      tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox'],
+      autoBackup: true,
+      backupCount: 10
     });
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(appDataDir, 'settings.json'), 'utf8')), {
       theme: 'dark',
@@ -194,7 +198,9 @@ test('serves optimized assets and supports the active configuration APIs', async
       showComments: false,
       editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
       visibleTabs: ['kubernetes', 'services'],
-      tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
+      tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox'],
+      autoBackup: true,
+      backupCount: 10
     });
 
     const invalidSettingsResponse = await fetch(`${baseUrl}/api/app-settings`, {

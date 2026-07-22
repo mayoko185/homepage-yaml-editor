@@ -303,6 +303,12 @@
                             <div class="settings-section-content">
                                 <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Auto Refresh</strong><small>Update the dashboard after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-auto-indent"><span class="settings-control-icon" aria-hidden="true">&#8677;</span><span class="settings-toggle-copy"><strong>Auto Indent</strong><small>Keep YAML indentation aligned while typing</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-auto-backup"><span class="settings-control-icon" aria-hidden="true">&#128190;&#65038;</span><span class="settings-toggle-copy"><strong>Auto Backup YAML</strong><small>Save a dated copy before overwriting</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-text-field" for="settings-backup-count">
+                                    <span>Backups to keep</span>
+                                    <input type="number" id="settings-backup-count" min="1" max="100" value="10">
+                                    <small>Number of dated backups to retain per file</small>
+                                </label>
                             </div>
                         </section>
                     </section>
@@ -447,6 +453,6 @@
     <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
     <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
     <script src="chunk-tree.js?v=7"></script>
-    <script src="app.js?v=180"></script>
+    <script src="app.js?v=181"></script>
 </body>
 </html>
