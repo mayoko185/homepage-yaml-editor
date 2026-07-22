@@ -210,6 +210,28 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(invalidSettingsResponse.status, 200);
     assert.equal((await invalidSettingsResponse.json()).settings.liveHomepageUrl, '');
 
+    // Regression: partial PUT must not overwrite previously saved values
+    const preMergeSave = await fetch(`${baseUrl}/api/app-settings`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        settings: { customPageTitle: 'Should Survive', showComments: true }
+      })
+    });
+    assert.equal(preMergeSave.status, 200);
+    const partialUpdate = await fetch(`${baseUrl}/api/app-settings`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        settings: { theme: 'dark' }
+      })
+    });
+    assert.equal(partialUpdate.status, 200);
+    const partialResult = (await partialUpdate.json()).settings;
+    assert.equal(partialResult.customPageTitle, 'Should Survive', 'partial PUT must preserve existing customPageTitle');
+    assert.equal(partialResult.showComments, true, 'partial PUT must preserve existing showComments');
+    assert.equal(partialResult.theme, 'dark', 'partial PUT must apply the new value');
+
     const optionTypesResponse = await fetch(`${baseUrl}/api/option-types`);
     const optionTypes = await optionTypesResponse.json();
     assert.equal(optionTypesResponse.status, 200);

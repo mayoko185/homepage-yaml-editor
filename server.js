@@ -314,7 +314,16 @@ async function loadAppSettings() {
 }
 
 async function saveAppSettings(settings) {
-  const normalized = normalizeAppSettings(settings);
+  let existing = {};
+  try {
+    existing = JSON.parse(await fs.readFile(APP_SETTINGS_PATH, 'utf8'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('Could not read existing app settings for merge:', error.message);
+    }
+  }
+  const merged = { ...existing, ...(settings && typeof settings === 'object' ? settings : {}) };
+  const normalized = normalizeAppSettings(merged);
   await writeJsonAtomically(APP_SETTINGS_PATH, normalized);
   return normalized;
 }
