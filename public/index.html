@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css?v=5.65.16">
-    <link rel="stylesheet" href="styles.css?v=227">
+    <link rel="stylesheet" href="styles.css?v=228">
     <script src="runtime-config.js"></script>
     <script src="theme-bootstrap.js?v=1"></script>
 </head>
@@ -262,20 +262,11 @@
             <form id="settings-form">
                 <div id="settings-tabs" class="settings-tabs">
                     <div id="settings-tab-list" class="settings-tab-list" role="tablist" aria-orientation="vertical" aria-label="Editor settings categories">
-                        <button type="button" role="tab" id="settings-tab-misc" class="settings-tab active" data-settings-tab="misc" aria-controls="settings-panel-misc" aria-selected="true" tabindex="0">Misc</button>
-                        <button type="button" role="tab" id="settings-tab-appearance" class="settings-tab" data-settings-tab="appearance" aria-controls="settings-panel-appearance" aria-selected="false" tabindex="-1">Appearance</button>
+                        <button type="button" role="tab" id="settings-tab-appearance" class="settings-tab active" data-settings-tab="appearance" aria-controls="settings-panel-appearance" aria-selected="true" tabindex="0">Appearance</button>
+                        <button type="button" role="tab" id="settings-tab-misc" class="settings-tab" data-settings-tab="misc" aria-controls="settings-panel-misc" aria-selected="false" tabindex="-1">Misc</button>
                         <button type="button" role="tab" id="settings-tab-yaml" class="settings-tab" data-settings-tab="yaml" aria-controls="settings-panel-yaml" aria-selected="false" tabindex="-1">YAML tabs</button>
                     </div>
-                    <section id="settings-panel-misc" class="settings-tab-panel" data-settings-panel="misc" role="tabpanel" aria-labelledby="settings-tab-misc">
-                        <section class="settings-section" aria-labelledby="settings-misc-title">
-                            <h4 id="settings-misc-title" class="settings-section-title">Misc</h4>
-                            <div class="settings-section-content">
-                                <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Auto Refresh</strong><small>Update the dashboard after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
-                                <label class="settings-toggle"><input type="checkbox" id="settings-auto-indent"><span class="settings-control-icon" aria-hidden="true">&#8677;</span><span class="settings-toggle-copy"><strong>Auto Indent</strong><small>Keep YAML indentation aligned while typing</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
-                            </div>
-                        </section>
-                    </section>
-                    <section id="settings-panel-appearance" class="settings-tab-panel" data-settings-panel="appearance" role="tabpanel" aria-labelledby="settings-tab-appearance" hidden>
+                    <section id="settings-panel-appearance" class="settings-tab-panel" data-settings-panel="appearance" role="tabpanel" aria-labelledby="settings-tab-appearance">
                         <section class="settings-section" aria-labelledby="settings-appearance-title">
                             <h4 id="settings-appearance-title" class="settings-section-title">Appearance</h4>
                             <div class="settings-section-content">
@@ -299,6 +290,19 @@
                                 <label class="settings-toggle"><input type="checkbox" id="settings-interactive-editor"><span class="settings-control-icon settings-interactive-icon" aria-hidden="true">&#9998;</span><span class="settings-toggle-copy"><strong>Interactive Editor</strong><small>Enable editing controls on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-editor-visible"><span class="settings-control-icon" aria-hidden="true">&#128065;</span><span class="settings-toggle-copy"><strong>Show YAML Editor</strong><small>Display the YAML editing panel on load</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                                 <label class="settings-toggle"><input type="checkbox" id="settings-show-comments"><span class="settings-control-icon" aria-hidden="true">#</span><span class="settings-toggle-copy"><strong>Show Comments</strong><small>Display commented-out items in the Interactive Editor</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <h5 class="settings-subsection-title">Edit bar options</h5>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-editbar-comment"><span class="settings-control-icon" aria-hidden="true">#</span><span class="settings-toggle-copy"><strong>Comment/Uncomment</strong><small>Show comment toggle in edit bars</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-editbar-duplicate"><span class="settings-control-icon" aria-hidden="true">&#128203;</span><span class="settings-toggle-copy"><strong>Duplicate</strong><small>Show duplicate button in edit bars</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-editbar-move"><span class="settings-control-icon" aria-hidden="true">&#8597;</span><span class="settings-toggle-copy"><strong>Up/Down Navigation</strong><small>Show move up/down buttons in edit bars</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                            </div>
+                        </section>
+                    </section>
+                    <section id="settings-panel-misc" class="settings-tab-panel" data-settings-panel="misc" role="tabpanel" aria-labelledby="settings-tab-misc" hidden>
+                        <section class="settings-section" aria-labelledby="settings-misc-title">
+                            <h4 id="settings-misc-title" class="settings-section-title">Misc</h4>
+                            <div class="settings-section-content">
+                                <label class="settings-toggle"><input type="checkbox" id="settings-preview-auto-refresh"><span class="settings-control-icon" aria-hidden="true">&#10227;</span><span class="settings-toggle-copy"><strong>Auto Refresh</strong><small>Update the dashboard after YAML changes</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
+                                <label class="settings-toggle"><input type="checkbox" id="settings-auto-indent"><span class="settings-control-icon" aria-hidden="true">&#8677;</span><span class="settings-toggle-copy"><strong>Auto Indent</strong><small>Keep YAML indentation aligned while typing</small></span><span class="settings-toggle-state" aria-hidden="true"><span class="settings-state-on">&#10003;</span><span class="settings-state-off">&times;</span></span></label>
                             </div>
                         </section>
                     </section>
@@ -443,6 +447,6 @@
     <script src="vendor/codemirror/codemirror.min.js?v=5.65.16"></script>
     <script src="vendor/codemirror/yaml.min.js?v=5.65.16"></script>
     <script src="chunk-tree.js?v=7"></script>
-    <script src="app.js?v=177"></script>
+    <script src="app.js?v=178"></script>
 </body>
 </html>

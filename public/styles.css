@@ -277,6 +277,17 @@
         .toolbar-button[hidden] {
             display: none;
         }
+        body[data-editbar-comment="false"] #toggle-comment-button,
+        body[data-editbar-comment="false"] .preview-edit-comment {
+            display: none;
+        }
+        body[data-editbar-duplicate="false"] .preview-edit-duplicate {
+            display: none;
+        }
+        body[data-editbar-move="false"] .preview-edit-move-up,
+        body[data-editbar-move="false"] .preview-edit-move-down {
+            display: none;
+        }
         .toolbar-button:hover {
             background-color: var(--button-bg);
             color: white;
@@ -3140,6 +3151,8 @@
             border: 1px solid var(--border-color);
             border-radius: 10px;
             background: var(--config-item-bg);
+            position: sticky;
+            top: 0;
         }
         .settings-tab {
             min-width: 0;
@@ -3237,6 +3250,14 @@
             gap: 9px;
             min-width: 0;
             padding: 9px;
+        }
+        .settings-subsection-title {
+            margin: 6px 0 -3px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
         .settings-fieldset {
             margin: 0;

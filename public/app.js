@@ -5437,6 +5437,7 @@
             previewAutoRefresh: previewAutoRefreshToggle.checked,
             editorVisible: editorVisibilityToggle.checked,
             interactiveEditor: previewEditToggle.checked,
+            editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
             visibleTabs: [...configTabNames],
             tabOrder: [...configTabNames]
         };
@@ -5451,6 +5452,21 @@
             const requestedTabs = Array.isArray(visibleTabs) ? visibleTabs : [];
             const normalizedTabs = tabOrder.filter((tabName) => requestedTabs.includes(tabName));
             return normalizedTabs.length > 0 ? normalizedTabs : [...tabOrder];
+        }
+        function normalizeEditBarOptions(options) {
+            const defaults = { comment: true, duplicate: true, moveUpDown: true };
+            if (!options || typeof options !== 'object') return { ...defaults };
+            return {
+                comment: options.comment !== false,
+                duplicate: options.duplicate !== false,
+                moveUpDown: options.moveUpDown !== false
+            };
+        }
+        function applyEditBarOptions() {
+            const opts = savedAppSettings.editBarOptions;
+            document.body.setAttribute('data-editbar-comment', String(opts.comment));
+            document.body.setAttribute('data-editbar-duplicate', String(opts.duplicate));
+            document.body.setAttribute('data-editbar-move', String(opts.moveUpDown));
         }
         function normalizeLiveHomepageUrl(value) {
             const raw = typeof value === 'string' ? value.trim() : '';
@@ -5548,6 +5564,7 @@
                 editorVisible: settings.editorVisible !== false,
                 interactiveEditor: settings.interactiveEditor === true,
                 showComments: settings.showComments === true,
+                editBarOptions: normalizeEditBarOptions(settings.editBarOptions),
                 tabOrder: normalizeConfigTabOrder(settings.tabOrder),
                 visibleTabs: normalizeVisibleConfigTabs(settings.visibleTabs, normalizeConfigTabOrder(settings.tabOrder))
             };
@@ -5571,6 +5588,7 @@
             previewAutoRefreshLabel.textContent = `Auto Refresh ${previewAutoRefreshToggle.checked ? 'on' : 'off'}`;
             manualRefreshButton.hidden = previewAutoRefreshToggle.checked;
             updatePreviewEditMode();
+            applyEditBarOptions();
             yamlCodeEditor.refresh();
         }
         function persistAppSettings() {
@@ -5595,8 +5613,8 @@
                 });
             return pendingAppSettingsSave;
         }
-        const settingsTabNames = ['misc', 'appearance', 'yaml'];
-        let settingsActiveTab = 'misc';
+        const settingsTabNames = ['appearance', 'misc', 'yaml'];
+        let settingsActiveTab = 'appearance';
         let settingsModalPreviousFocus = null;
         function activateSettingsTab(tabName, { focus = false } = {}) {
             const activeTabName = settingsTabNames.includes(tabName) ? tabName : settingsTabNames[0];
@@ -5650,6 +5668,10 @@
             document.getElementById('settings-editor-visible').checked = settings.editorVisible;
             document.getElementById('settings-interactive-editor').checked = settings.interactiveEditor;
             document.getElementById('settings-show-comments').checked = settings.showComments === true;
+            const editBarOpts = settings.editBarOptions || { comment: true, duplicate: true, moveUpDown: true };
+            document.getElementById('settings-editbar-comment').checked = editBarOpts.comment !== false;
+            document.getElementById('settings-editbar-duplicate').checked = editBarOpts.duplicate !== false;
+            document.getElementById('settings-editbar-move').checked = editBarOpts.moveUpDown !== false;
             settingsTabOrderDraft = { tabOrder: [...settings.tabOrder], visibleTabs: [...settings.visibleTabs] };
             renderSettingsTabControls();
             activateSettingsTab(settingsActiveTab);
@@ -5679,6 +5701,11 @@
                 editorVisible: document.getElementById('settings-editor-visible').checked,
                 interactiveEditor: document.getElementById('settings-interactive-editor').checked,
                 showComments: document.getElementById('settings-show-comments').checked,
+                editBarOptions: {
+                    comment: document.getElementById('settings-editbar-comment').checked,
+                    duplicate: document.getElementById('settings-editbar-duplicate').checked,
+                    moveUpDown: document.getElementById('settings-editbar-move').checked
+                },
                 tabOrder: tabSettings.tabOrder,
                 visibleTabs: tabSettings.visibleTabs
             });
