@@ -5758,6 +5758,8 @@
             document.getElementById('preview-comments-label').textContent = this.checked ? 'Hide comments' : 'Show comments';
             if (this.checked) {
                 setSaveStatus('Commented-out items cannot be moved or reordered. Uncomment them first to enable move controls.', 'warning');
+            } else {
+                document.getElementById('save-status').hidden = true;
             }
             updatePreview({ force: true });
         });

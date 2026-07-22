@@ -5,19 +5,25 @@ This file records notable user-facing, security, deployment, and behavior change
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.2] - 2026-07-22
 
 ### Added
 
-- Added a bundled `app-settings.default.json` that seeds editor setting defaults (theme, page title, tab order, auto-indent, etc.), so defaults can be changed by editing JSON instead of server code. `DEFAULT_THEME` still overrides the bundled `theme` default.
-- Added a configurable Live Homepage URL in the Appearance settings tab that, when set, surfaces a header button linking to the live dashboard.
+- Added Interactive Editor support for nested service groups, including nested service actions, per-group service creation, source navigation, and conversion between flat and nested layouts.
+- Added a Show Comments mode for displaying commented-out dashboard content in the Preview.
+- Added a Duplicate service action and Appearance controls for showing or hiding comment, duplicate, and move controls.
+- Added a configurable Live Homepage URL setting that displays a header link when configured.
+- Added `app-settings.default.json` so editor defaults can be changed without modifying server code.
 
 ### Changed
 
-- Repositioned the interactive-editor tab hover toolbar to appear below the tab (or above the tab when a second row of tabs sits below it), removed the "Jump to tab in settings.yaml" action, folded "+ Add tab" into the toolbar with right-of-anchor insertion for newly created service groups, promoted the add-tab dialog to a centered dimmed modal, and removed orphaned CSS/JS from the prior Manage-tabs modal.
-- Redesigned the preview tab strip: tabs now support drag-and-drop reordering with a visible drop line, a hover toolbar with rename, remove, and jump-to-source, and an inline "+ Add tab" control that drops into rename mode for the new tab. Removed the separate "Manage tabs" modal.
-- Extended the Interactive Editor to nested service groups: hover toolbars now support editing, moving, and deleting nested groups and the services inside them, each nested group has its own Add service button, and preview-to-source navigation jumps to the correct nested YAML line.
-- Added a Convert into a nested group control in the service group edit dialog that wraps a group's direct services into numbered nested sub-groups, with an adjustable count that auto-names sub-groups 1..N. A convert-back control flattens nested sub-groups into direct services with a collapse warning.
+- Reworked dashboard tabs with drag-and-drop reordering, visible drop targets, inline rename and add controls, contextual actions, source navigation, and insertion of new tabs beside the active tab; removed the separate Manage tabs modal.
+- Commented-out groups, services, and options are now protected from movement and reordering, and enabling Show Comments clearly warns about that limitation.
+
+### Fixed
+
+- Preserved comments and block-style YAML when moving, removing, or reordering services and groups, including nested structures and commented fields.
+- Fixed Appearance edit-control preferences being discarded after reload.
 
 ## [1.3.1] - 2026-07-18
 
