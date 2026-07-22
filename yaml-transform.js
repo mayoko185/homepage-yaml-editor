@@ -321,13 +321,14 @@ function normalizeEditableFields(fields) {
     }
     seen.add(key);
     if (Array.isArray(field && field.fields)) {
-      return { key, fields: normalizeEditableFields(field.fields) };
+      return { key, fields: normalizeEditableFields(field.fields), ...(field.commented ? { commented: true } : {}) };
     }
     return {
       key,
       value: String((field && field.value) ?? ''),
       ...(field && field.textValue ? { textValue: true } : {}),
-      ...(field && field.blankValue ? { blankValue: true } : {})
+      ...(field && field.blankValue ? { blankValue: true } : {}),
+      ...(field && field.commented ? { commented: true } : {})
     };
   });
 }
@@ -345,38 +346,165 @@ function setMapFields(document, map, fields) {
   if (!YAML.isMap(map)) {
     throw new YamlTransformError('Preview options must use a YAML mapping of names and values');
   }
-  const existingPairs = new Map();
-  map.items.forEach((pair) => {
-    const key = scalarValue(pair.key);
-    if (!existingPairs.has(key)) existingPairs.set(key, pair);
-  });
-  map.items = fields.map(({ key, value, fields: nestedFields, textValue, blankValue }) => {
-    const existingPair = existingPairs.get(key);
+
+  // Save old items so we can preserve value-level and standalone key comments.
+  const oldItemsByKey = new Map();
+  for (const item of map.items) {
+    oldItemsByKey.set(scalarValue(item.key), item);
+  }
+
+  // Build a fresh map containing only the active (uncommented) fields so the yaml
+  // library handles value quoting, block-style nested maps, and nulls correctly.
+  const activeFields = fields.filter((field) => !field.commented);
+  const activeKeys = new Set(activeFields.map((field) => field.key));
+  const activeMap = document.createNode({});
+  for (const field of activeFields) {
+    const { key, value, fields: nestedFields, textValue, blankValue } = field;
     if (nestedFields) {
-      const nestedMap = existingPair && YAML.isMap(existingPair.value)
-        ? existingPair.value : document.createNode({});
+      const oldItem = oldItemsByKey.get(key);
+      const nestedMap = oldItem && YAML.isMap(oldItem.value) ? oldItem.value : document.createNode({});
       setMapFields(document, nestedMap, nestedFields);
-      if (existingPair) {
-        existingPair.value = nestedMap;
-        return existingPair;
-      }
-      return document.createPair(key, nestedMap);
-    }
-    let valueNode;
-    if (blankValue) {
-      valueNode = document.createNode(null);
+      activeMap.set(key, nestedMap);
+    } else if (blankValue) {
+      const valueNode = document.createNode(null);
       valueNode.source = '';
       valueNode.type = YAML.Scalar.PLAIN;
+      activeMap.set(key, valueNode);
     } else {
-      valueNode = document.createNode(textValue ? value : parseEditableValue(value, key));
+      activeMap.set(key, document.createNode(textValue ? value : parseEditableValue(value, key)));
     }
-    if (existingPair) {
-      existingPair.value = valueNode;
-      return existingPair;
+  }
+
+  // Serialize the active map to a string at indent 0 and parse it back so we
+  // get proper AST nodes with correct quoting and nested-map handling.
+  const activeDoc = new YAML.Document(activeMap);
+  let activeYaml = activeDoc.toString({ indent: 2 });
+  if (!activeYaml.endsWith('\n')) activeYaml += '\n';
+  const parsedActive = YAML.parseDocument(activeYaml, { keepSourceTokens: true, prettyErrors: true });
+  if (parsedActive.errors.length > 0) {
+    throw new YamlTransformError(`Preview options contain invalid YAML: ${formatYamlParseError(parsedActive.errors[0])}`);
+  }
+
+  // Build a map of commented fields by key so we can attach them at the correct
+  // position based on the original field order.
+  const commentedFields = fields.filter((field) => field.commented);
+  const commentedFieldByKey = new Map();
+  for (const field of commentedFields) {
+    const { key, value, fields: nestedFields, textValue, blankValue } = field;
+    let valueText;
+    if (nestedFields) {
+      // Serialize the nested structure with all fields treated as active so the
+      // commented block preserves the full key-value map.
+      const nestedMap = document.createNode({});
+      for (const nf of nestedFields) {
+        if (nf.fields) {
+          const deepMap = document.createNode({});
+          setMapFields(document, deepMap, nf.fields);
+          nestedMap.set(nf.key, deepMap);
+        } else if (nf.blankValue) {
+          const valueNode = document.createNode(null);
+          valueNode.source = '';
+          valueNode.type = YAML.Scalar.PLAIN;
+          nestedMap.set(nf.key, valueNode);
+        } else {
+          nestedMap.set(nf.key, document.createNode(nf.textValue ? nf.value : parseEditableValue(nf.value, nf.key)));
+        }
+      }
+      const wrapperMap = document.createNode({});
+      wrapperMap.set(key, nestedMap);
+      const wrapperDoc = new YAML.Document(wrapperMap);
+      valueText = wrapperDoc.toString({ indent: 2 }).replace(/\n$/, '');
+      commentedFieldByKey.set(key, valueText);
+    } else if (blankValue) {
+      commentedFieldByKey.set(key, `${key}:`);
+    } else {
+      valueText = String(textValue ? value : parseEditableValue(String(value ?? ''), ''));
+      commentedFieldByKey.set(key, `${key}:${valueText ? ` ${valueText}` : ''}`);
     }
-    return document.createPair(key, valueNode);
+  }
+
+  // Preserve any existing map-level comments that do not belong to active fields.
+  const existingComments = (map.comment || '').split(/\r?\n/).filter((line) => {
+    if (!line.trim()) return false;
+    const uncommented = line.replace(/^\s*#\s?/, '').trim();
+    const key = uncommented.split(':')[0];
+    return !activeKeys.has(key);
   });
+
+  // Determine which active keys will receive new commentBefore from commented
+  // fields, so we know which keys are safe to preserve original commentBefore on.
+  const keysReceivingNewCommentBefore = new Set();
+  let hasPendingComments = false;
+  for (const field of fields) {
+    if (field.commented) {
+      hasPendingComments = true;
+      continue;
+    }
+    if (hasPendingComments) {
+      keysReceivingNewCommentBefore.add(field.key);
+      hasPendingComments = false;
+    }
+  }
+
+  // Replace the map items with the active AST nodes.
+  map.items = parsedActive.contents.items;
+  map.comment = null;
+
+  // Walk through fields in order and attach consecutive commented fields as
+  // commentBefore on the next active item, or as a trailing map comment when
+  // they appear after all active items.
+  let pendingComments = [];
+  const flushComments = (targetItem) => {
+    if (pendingComments.length === 0) return;
+    const commentText = pendingComments.map((c) => c.split('\n').map((line) => ` ${line}`).join('\n')).join('\n');
+    if (targetItem && targetItem.key) {
+      targetItem.key.commentBefore = targetItem.key.commentBefore
+        ? targetItem.key.commentBefore + '\n' + commentText
+        : commentText;
+    } else {
+      map.comment = map.comment ? map.comment + '\n' + commentText : commentText;
+    }
+    pendingComments = [];
+  };
+
+  for (const field of fields) {
+    if (field.commented) {
+      const text = commentedFieldByKey.get(field.key);
+      if (text !== undefined) pendingComments.push(text);
+      continue;
+    }
+    const item = map.items.find((i) => scalarValue(i.key) === field.key);
+    flushComments(item);
+  }
+  flushComments(null);
+
+  // Preserve original value-level and key-level comments for items that did not
+  // receive a new commentBefore from commented fields.
+  for (const item of map.items) {
+    const key = scalarValue(item.key);
+    const oldItem = oldItemsByKey.get(key);
+    if (!oldItem) continue;
+    if (!keysReceivingNewCommentBefore.has(key) && oldItem.key && oldItem.key.commentBefore) {
+      item.key.commentBefore = oldItem.key.commentBefore;
+    }
+    if (oldItem.value && item.value) {
+      if (oldItem.value.comment && !item.value.comment) {
+        item.value.comment = oldItem.value.comment;
+      }
+      if (oldItem.value.commentBefore && !item.value.commentBefore) {
+        item.value.commentBefore = oldItem.value.commentBefore;
+      }
+    }
+  }
+
+  // Append existing non-field comments to the map comment.
+  for (const comment of existingComments) {
+    const text = comment.trimStart().startsWith('#') ? comment.trimStart().slice(1).trimStart() : comment.trimStart();
+    map.comment = map.comment ? map.comment + '\n ' + text : ' ' + text;
+  }
 }
+
+
 
 function findTopLevelMapPair(document, key) {
   if (!YAML.isMap(document.contents)) {
@@ -566,8 +694,31 @@ function moveLayoutTab(settingsDocument, tabName, operation) {
   layoutMap.items.splice(insertionIndex < 0 ? layoutMap.items.length : insertionIndex, 0, ...movingPairs);
 }
 
+function forceBlockStyle(node) {
+  if (!node) return;
+  if (YAML.isSeq(node)) {
+    if (node.items.length > 0) node.flow = false;
+    for (const item of node.items) forceBlockStyle(item);
+  } else if (YAML.isMap(node)) {
+    if (node.items.length > 0) node.flow = false;
+    for (const item of node.items) {
+      forceBlockStyle(item.key);
+      forceBlockStyle(item.value);
+    }
+  } else if (YAML.isPair(node)) {
+    forceBlockStyle(node.key);
+    forceBlockStyle(node.value);
+  }
+}
+
 function serializeDocument(document, originalText) {
+  forceBlockStyle(document.contents);
   let output = document.toString({ indent: 2 });
+  // Remove empty-map braces that precede a comment so all-commented options
+  // serialize as clean commented lines instead of "{}" followed by comments.
+  // Handles both block maps and list-item maps.
+  output = output.replace(/(\n\s*)\{\}\s*(?:\n\s*)?(#[^\n]*)/g, '$1$2');
+  output = output.replace(/(\n\s*-\s)\{\}\s*(?:\n\s*)?(#[^\n]*)/g, '$1$2');
   if (!String(originalText).endsWith('\n')) {
     output = output.replace(/\n$/, '');
   }

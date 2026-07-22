@@ -1250,7 +1250,21 @@
             Object.entries(files || {}).forEach(([filename, content]) => {
                 const tabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
                 if (tabName) {
-                    normalizedFiles[tabName] = content;
+                    // Normalize commented groups so every line inside a commented group is commented
+                    let normalizedContent = content;
+                    if (typeof ChunkTree !== 'undefined' && ChunkTree.normalizeCommentedGroups) {
+                        try {
+                            if (tabName === 'services') {
+                                const chunks = ChunkTree.parseServicesDocument(content);
+                                ChunkTree.normalizeCommentedGroups(chunks);
+                                normalizedContent = ChunkTree.serializeDocument(chunks);
+                            }
+                        } catch (e) {
+                            // If normalization fails, use the original content
+                            normalizedContent = content;
+                        }
+                    }
+                    normalizedFiles[tabName] = normalizedContent;
                     normalizedFileNames[tabName] = filename;
                     normalizedRevisions[tabName] = typeof revisions[filename] === 'string' ? revisions[filename] : null;
                 }
@@ -1430,9 +1444,18 @@
             const normalized = normalizeLoadedFiles(data.files, data.revisions);
             const missingTabs = configTabNames.filter((tabName) => !Object.prototype.hasOwnProperty.call(normalized.files, tabName));
             loadedFiles = normalized.files;
+            // Preserve the original (non-normalized) YAML as the baseline so that
+            // normalization of commented groups is exposed as a pending change.
+            const originalFilesByTab = {};
+            Object.entries(data.files || {}).forEach(([filename, content]) => {
+                const tabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
+                if (tabName) originalFilesByTab[tabName] = content;
+            });
             originalLoadedFiles = Object.fromEntries(configTabNames.map((tabName) => [
                 tabName,
-                Object.prototype.hasOwnProperty.call(normalized.files, tabName) ? normalized.files[tabName] : ''
+                Object.prototype.hasOwnProperty.call(originalFilesByTab, tabName)
+                    ? originalFilesByTab[tabName]
+                    : String(sampleConfigs[tabName] || '')
             ]));
             loadedFileNames = normalized.fileNames;
             loadedFileRevisions = normalized.revisions;
@@ -2512,13 +2535,14 @@
                 const keyControl = field.locked
                     ? `<span class="preview-edit-option-key" data-preview-option-key>${escapeHtml(field.key)}</span>`
                     : `<select class="modal-input" data-preview-option-key aria-label="Option name"><option value="" disabled${field.key ? '' : ' selected'}>Choose an option</option>${knownOptionChoices}</select>`;
-                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}${field.commented ? ' preview-edit-option-row--commented' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}" data-preview-option-commented="${field.commented ? 'true' : 'false'}" ${getDragItemAttributes('edit-option', null, index, parentPath)} data-preview-drop-kind="edit-option" data-preview-drop-index="${index}">
+                const isCommentedOption = field.commented === true;
+                return `<div class="preview-edit-option-row${field.fields ? ' has-nested-options' : ''}${isCommentedOption ? ' preview-edit-option-row--commented' : ''}" data-preview-option-row data-preview-option-path="${path}" data-preview-option-locked="${field.locked ? 'true' : 'false'}" data-preview-option-commented="${isCommentedOption ? 'true' : 'false'}" ${isCommentedOption ? '' : getDragItemAttributes('edit-option', null, index, parentPath)} data-preview-drop-kind="edit-option" data-preview-drop-index="${index}">
                 ${keyControl}
                 ${valueControl}
                 <span class="preview-edit-actions preview-edit-option-actions">
-                    <button type="button" class="preview-edit-action preview-edit-comment" data-preview-option-action="comment" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="${field.commented ? 'Uncomment' : 'Comment'} ${escapeHtml(field.key || 'option')}">#<span class="preview-control-label preview-edit-action-label" aria-hidden="true">${field.commented ? 'Uncomment' : 'Comment'} option</span></button>
-                    <button type="button" class="preview-edit-action preview-edit-move-up" data-preview-option-action="up" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} up"${index === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option up</span></button>
-                    <button type="button" class="preview-edit-action preview-edit-move-down" data-preview-option-action="down" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} down"${index === fields.length - 1 ? ' disabled' : ''}>&darr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option down</span></button>
+                    <button type="button" class="preview-edit-action preview-edit-comment" data-preview-option-action="comment" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="${isCommentedOption ? 'Uncomment' : 'Comment'} ${escapeHtml(field.key || 'option')}">#<span class="preview-control-label preview-edit-action-label" aria-hidden="true">${isCommentedOption ? 'Uncomment' : 'Comment'} option</span></button>
+                    ${isCommentedOption ? '' : `<button type="button" class="preview-edit-action preview-edit-move-up" data-preview-option-action="up" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} up"${index === 0 ? ' disabled' : ''}>&uarr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option up</span></button>`}
+                    ${isCommentedOption ? '' : `<button type="button" class="preview-edit-action preview-edit-move-down" data-preview-option-action="down" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Move ${escapeHtml(field.key || 'option')} down"${index === fields.length - 1 ? ' disabled' : ''}>&darr;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Move option down</span></button>`}
                     <button type="button" class="preview-edit-action preview-edit-delete" data-preview-option-action="remove" data-preview-option-parent-path="${parentPath}" data-preview-option-index="${index}" aria-label="Remove ${escapeHtml(field.key || 'option')}">&times;<span class="preview-control-label preview-edit-action-label" aria-hidden="true">Remove option</span></button>
                 </span>
             </div>`;
@@ -2558,7 +2582,8 @@
             const select = document.getElementById('preview-edit-service-group');
             const state = previewEditDialogState;
             const choices = state?.serviceGroupChoices || [];
-            const visible = state?.action === 'service.edit' && (state.availableTabs || []).length > 0 && choices.length > 0;
+            const isCommented = state?.source?.commented === true;
+            const visible = state?.action === 'service.edit' && !isCommented && (state.availableTabs || []).length > 0 && choices.length > 0;
             section.hidden = !visible;
             if (!visible) {
                 select.innerHTML = '';
@@ -2901,8 +2926,10 @@
         function getTabEditControls(source) {
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('tab.edit', source, 'Rename tab', '&#9998;')}
-                ${getPreviewEditActionButton('tab.add', source, 'Add tab to the right', '+')}
-                ${getPreviewEditActionButton('tab.remove', source, 'Remove tab', '&times;', { danger: true })}
+                <span class="preview-edit-actions-secondary">
+                    ${getPreviewEditActionButton('tab.add', source, 'Add tab to the right', '+')}
+                    ${getPreviewEditActionButton('tab.remove', source, 'Remove tab', '&times;', { danger: true })}
+                </span>
             </span>`;
         }
 
@@ -3665,7 +3692,9 @@
                 fields.splice(index, 1);
             } else if (action === 'comment') {
                 fields[index].commented = !fields[index].commented;
-            } else {
+            } else if (action === 'up' || action === 'down') {
+                // Reject movement if the option itself is commented
+                if (fields[index].commented === true) return;
                 const destination = index + (action === 'up' ? -1 : 1);
                 if (destination < 0 || destination >= fields.length) return;
                 const [field] = fields.splice(index, 1);
@@ -4406,43 +4435,53 @@
         }
 
         function getGroupEditControls(source, position, groupCount) {
+            const isCommented = source.commented === true;
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('group.edit', source, 'Edit group', '&#9998;')}
-                ${getPreviewEditActionButton('group.comment', source, 'Comment/uncomment group', '#')}
-                ${getPreviewEditActionButton('group.move-up', source, 'Move group up', '&uarr;', { disabled: position === 0 })}
-                ${getPreviewEditActionButton('group.move-down', source, 'Move group down', '&darr;', { disabled: position === groupCount - 1 })}
-                ${getPreviewEditActionButton('group.remove', source, 'Delete group', '&times;', { danger: true })}
+                <span class="preview-edit-actions-secondary">
+                    ${getPreviewEditActionButton('group.comment', source, 'Comment/uncomment group', '#')}
+                    ${isCommented ? '' : getPreviewEditActionButton('group.move-up', source, 'Move group up', '&uarr;', { disabled: position === 0 })}
+                    ${isCommented ? '' : getPreviewEditActionButton('group.move-down', source, 'Move group down', '&darr;', { disabled: position === groupCount - 1 })}
+                    ${getPreviewEditActionButton('group.remove', source, 'Delete group', '&times;', { danger: true })}
+                </span>
             </span>`;
         }
 
         function getServiceEditControls(source, position, serviceCount) {
+            const isCommented = source.commented === true;
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('service.edit', source, 'Edit service', '&#9998;')}
-                ${getPreviewEditActionButton('service.comment', source, 'Comment/uncomment service', '#')}
-                ${getPreviewEditActionButton('service.duplicate', source, 'Duplicate service', '&#10697;')}
-                ${getPreviewEditActionButton('service.move-up', source, 'Move service up', '&uarr;', { disabled: position === 0 })}
-                ${getPreviewEditActionButton('service.move-down', source, 'Move service down', '&darr;', { disabled: position === serviceCount - 1 })}
-                ${getPreviewEditActionButton('service.remove', source, 'Delete service', '&times;', { danger: true })}
+                <span class="preview-edit-actions-secondary">
+                    ${getPreviewEditActionButton('service.comment', source, 'Comment/uncomment service', '#')}
+                    ${getPreviewEditActionButton('service.duplicate', source, 'Duplicate service', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9"/><rect x="2" y="2" width="9" height="9"/></svg>')}
+                    ${isCommented ? '' : getPreviewEditActionButton('service.move-up', source, 'Move service up', '&uarr;', { disabled: position === 0 })}
+                    ${isCommented ? '' : getPreviewEditActionButton('service.move-down', source, 'Move service down', '&darr;', { disabled: position === serviceCount - 1 })}
+                    ${getPreviewEditActionButton('service.remove', source, 'Delete service', '&times;', { danger: true })}
+                </span>
             </span>`;
         }
 
         function getBookmarkGroupEditControls(source, position, groupCount) {
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('bookmark-group.edit', source, 'Edit bookmark group', '&#9998;')}
-                ${getPreviewEditActionButton('bookmark-group.comment', source, 'Comment/uncomment bookmark group', '#')}
-                ${getPreviewEditActionButton('bookmark-group.move-up', source, 'Move bookmark group up', '&uarr;', { disabled: position === 0 })}
-                ${getPreviewEditActionButton('bookmark-group.move-down', source, 'Move bookmark group down', '&darr;', { disabled: position === groupCount - 1 })}
-                ${getPreviewEditActionButton('bookmark-group.remove', source, 'Delete bookmark group', '&times;', { danger: true })}
+                <span class="preview-edit-actions-secondary">
+                    ${getPreviewEditActionButton('bookmark-group.comment', source, 'Comment/uncomment bookmark group', '#')}
+                    ${getPreviewEditActionButton('bookmark-group.move-up', source, 'Move bookmark group up', '&uarr;', { disabled: position === 0 })}
+                    ${getPreviewEditActionButton('bookmark-group.move-down', source, 'Move bookmark group down', '&darr;', { disabled: position === groupCount - 1 })}
+                    ${getPreviewEditActionButton('bookmark-group.remove', source, 'Delete bookmark group', '&times;', { danger: true })}
+                </span>
             </span>`;
         }
 
         function getBookmarkEditControls(source, position, bookmarkCount) {
             return `<span class="preview-edit-actions">
                 ${getPreviewEditActionButton('bookmark.edit', source, 'Edit bookmark', '&#9998;')}
-                ${getPreviewEditActionButton('bookmark.comment', source, 'Comment/uncomment bookmark', '#')}
-                ${getPreviewEditActionButton('bookmark.move-up', source, 'Move bookmark up', '&uarr;', { disabled: position === 0 })}
-                ${getPreviewEditActionButton('bookmark.move-down', source, 'Move bookmark down', '&darr;', { disabled: position === bookmarkCount - 1 })}
-                ${getPreviewEditActionButton('bookmark.remove', source, 'Delete bookmark', '&times;', { danger: true })}
+                <span class="preview-edit-actions-secondary">
+                    ${getPreviewEditActionButton('bookmark.comment', source, 'Comment/uncomment bookmark', '#')}
+                    ${getPreviewEditActionButton('bookmark.move-up', source, 'Move bookmark up', '&uarr;', { disabled: position === 0 })}
+                    ${getPreviewEditActionButton('bookmark.move-down', source, 'Move bookmark down', '&darr;', { disabled: position === bookmarkCount - 1 })}
+                    ${getPreviewEditActionButton('bookmark.remove', source, 'Delete bookmark', '&times;', { danger: true })}
+                </span>
             </span>`;
         }
 
@@ -4661,6 +4700,133 @@
             return { groups: commentedGroups, servicesMap: commentedServicesMap, nestedServicesMap };
         }
 
+        function normalizeCommentedChunkLines(rawLines) {
+            return rawLines.map((line) => {
+                if (!line || line.trim() === '') return line;
+                const hashPos = line.indexOf('#');
+                if (hashPos < 0) return line;
+                let content = line.slice(hashPos + 1);
+                if (content.startsWith(' ')) content = content.slice(1);
+                const contentIndent = content.match(/^\s*/)?.[0].length || 0;
+                return ' '.repeat(hashPos + contentIndent) + content.trimStart();
+            });
+        }
+
+        function parseCommentedChunkEntry(entry, startLine, endLine) {
+            const parsedLines = normalizeCommentedChunkLines(entry.rawLines);
+            let parsed = null;
+            try {
+                parsed = jsyaml.load(parsedLines.join('\n'));
+            } catch (e) {
+                return null;
+            }
+            const document = Array.isArray(parsed) ? parsed[0] : parsed;
+            if (!document || typeof document !== 'object') return null;
+            const name = entry.name || Object.keys(document)[0];
+            if (!name) return null;
+            const value = document[name];
+            const result = {
+                [name]: Array.isArray(value) ? markDeepCommented(value) : value,
+                __commented: true,
+                __commentedStartLine: startLine,
+                __commentedEndLine: endLine
+            };
+            return result;
+        }
+
+        function buildServicesPreviewDataFromChunks(yamlText, activeServices) {
+            if (typeof ChunkTree === 'undefined') return activeServices;
+            const chunks = ChunkTree.parseServicesDocument(yamlText);
+            if (!Array.isArray(chunks)) return activeServices;
+
+            const result = [];
+            let activeGroupIndex = 0;
+            let lineCursor = 0;
+            const lines = yamlText.split('\n');
+
+            chunks.forEach((chunk) => {
+                while (lineCursor < lines.length && lines[lineCursor].trim() === '') {
+                    lineCursor++;
+                }
+                const chunkStartLine = lineCursor;
+                lineCursor += Array.isArray(chunk.rawLines) ? chunk.rawLines.length : 0;
+
+                if (chunk.kind === 'commented-group') {
+                    const entries = [];
+                    let entryLine = chunkStartLine + 1;
+                    (chunk.entries || []).forEach((entry) => {
+                        const entryStartLine = entryLine;
+                        entryLine += Array.isArray(entry.rawLines) ? entry.rawLines.length : 0;
+                        if (!entry.kind.startsWith('commented-')) return;
+                        const rawLines = entry.rawLines || [];
+                        let actualStartLine = entryStartLine;
+                        for (let k = 0; k < rawLines.length; k++) {
+                            if (rawLines[k].trim() !== '') {
+                                actualStartLine = entryStartLine + k;
+                                break;
+                            }
+                        }
+                        const parsedEntry = parseCommentedChunkEntry(
+                            entry,
+                            actualStartLine,
+                            entryLine - 1
+                        );
+                        if (parsedEntry) entries.push(parsedEntry);
+                    });
+                    result.push({
+                        [chunk.name]: entries,
+                        __commented: true,
+                        __commentedStartLine: chunkStartLine,
+                        __commentedEndLine: lineCursor - 1
+                    });
+                    return;
+                }
+
+                if (chunk.kind !== 'group') return;
+                const activeGroup = activeServices[activeGroupIndex++];
+                if (!activeGroup) return;
+                const groupName = Object.keys(activeGroup)[0];
+                if (!groupName) {
+                    result.push(activeGroup);
+                    return;
+                }
+
+                const activeEntries = Array.isArray(activeGroup[groupName]) ? activeGroup[groupName] : [];
+                const mergedEntries = [];
+                let activeEntryIndex = 0;
+                let entryLine = chunkStartLine + 1;
+                (chunk.entries || []).forEach((entry) => {
+                    const entryStartLine = entryLine;
+                    entryLine += Array.isArray(entry.rawLines) ? entry.rawLines.length : 0;
+                    if (entry.kind.startsWith('commented-')) {
+                        const rawLines = entry.rawLines || [];
+                        let actualStartLine = entryStartLine;
+                        for (let k = 0; k < rawLines.length; k++) {
+                            if (rawLines[k].trim() !== '') {
+                                actualStartLine = entryStartLine + k;
+                                break;
+                            }
+                        }
+                        const parsedEntry = parseCommentedChunkEntry(
+                            entry,
+                            actualStartLine,
+                            entryStartLine + entry.rawLines.length - 1
+                        );
+                        if (parsedEntry) mergedEntries.push(parsedEntry);
+                    } else if (entry.kind !== 'comment') {
+                        const activeEntry = activeEntries[activeEntryIndex++];
+                        if (activeEntry) mergedEntries.push(activeEntry);
+                    }
+                });
+                while (activeEntryIndex < activeEntries.length) {
+                    mergedEntries.push(activeEntries[activeEntryIndex++]);
+                }
+                result.push({ [groupName]: mergedEntries });
+            });
+
+            return result;
+        }
+
         function buildCommentedWidgetsData(yamlText) {
             const blocks = extractCommentedLines(yamlText);
             if (blocks.length === 0) return [];
@@ -4738,35 +4904,10 @@
                     return { [name]: value };
                 });
                 const servicesYamlText = getTabYamlText('services');
-                const commentedServicesData = buildCommentedServicesData(servicesYamlText, services);
-                const serviceGroupPositions = getGroupPositions(servicesYamlText);
-                // Merge commented services into their active groups in YAML order
-                commentedServicesData.servicesMap.forEach((commentEntries, groupIdx) => {
-                    try {
-                        const group = services[groupIdx];
-                        if (!group) return;
-                        const groupName = Object.keys(group)[0];
-                        if (!groupName) return;
-                        if (!Array.isArray(group[groupName])) {
-                            group[groupName] = [];
-                        }
-                        const groupPos = serviceGroupPositions[groupIdx];
-                        if (!groupPos) return;
-                        group[groupName] = mergeGroupEntries(group[groupName], commentEntries, groupPos.startLine, servicesYamlText);
-                    } catch (groupErr) {
-                        console.error('[showComments] mergeGroupEntries failed for services group', groupIdx, groupErr);
-                        // Fallback: append commented entries at the end of the group
-                        const group = services[groupIdx];
-                        if (group) {
-                            const groupName = Object.keys(group)[0];
-                            if (groupName && Array.isArray(group[groupName])) {
-                                group[groupName] = group[groupName].concat(commentEntries);
-                            }
-                        }
-                    }
-                });
-                // Merge commented entries into nested groups
-                commentedServicesData.nestedServicesMap.forEach((commentEntries, key) => {
+                // Keep the existing nested-group overlay, but let ChunkTree own
+                // top-level group and direct-service ownership/order.
+                const legacyCommentedServicesData = buildCommentedServicesData(servicesYamlText, services);
+                legacyCommentedServicesData.nestedServicesMap.forEach((commentEntries, key) => {
                     const colonIdx = key.indexOf(':');
                     const groupIdx = Number(key.slice(0, colonIdx));
                     const pathStr = key.slice(colonIdx + 1);
@@ -4782,14 +4923,7 @@
                         mergeNestedGroupEntries(group, nestedPath, commentEntries, servicesYamlText);
                     }
                 });
-                // Merge commented groups into the services list in YAML order
-                try {
-                    services = mergeGroupsByLine(services, commentedServicesData.groups, servicesYamlText);
-                } catch (mergeErr) {
-                    console.error('[showComments] mergeGroupsByLine failed for services:', mergeErr);
-                    // Fallback: append commented groups at the end
-                    services = services.concat(commentedServicesData.groups);
-                }
+                services = buildServicesPreviewDataFromChunks(servicesYamlText, services);
                 } catch (e) { console.error('[showComments] services integration failed:', e); }
             }
             if (previewShowCommentsState && previewEditMode && !parsed.bookmarks.error) {
@@ -4922,11 +5056,13 @@
 
             function renderPreviewServiceCards(entries, { groupName, groupIndex, layoutConfig, nested = false, nestedGroupPath = [] } = {}) {
                 const servicesOnly = Array.isArray(entries) ? entries.map((entry, entryIndex) => ({ entry, entryIndex })).filter(({ entry }) => !isNestedServiceGroup(entry)) : [];
+                let yamlDropIndex = 0;
                 const serviceOccurrenceCounter = new Map();
                 return servicesOnly.map(({ entry: service, entryIndex }, servicePosition) => {
                     const name = Object.keys(service || {})[0] || 'Service';
                     const isCommented = service.__commented === true;
                     const serviceOccurrenceIndex = isCommented ? 0 : takeOccurrence(serviceOccurrenceCounter, name);
+                    const currentYamlDropIndex = isCommented ? yamlDropIndex : yamlDropIndex++;
                     const data = service[name] || {};
                     const directSource = {
                         servicesSource: {
@@ -4961,19 +5097,20 @@
                         : '';
                     const dropSource = { groupName, groupIndex, ...(nestedGroupPath.length > 0 ? { nestedGroupPath } : {}) };
                     const serviceDragAttributes = previewEditMode
-                        ? `${getDragItemAttributes('service', directSource.servicesSource, entryIndex)} data-preview-drop-kind="service" data-preview-drop-index="${entryIndex}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"`
+                        ? `${isCommented ? '' : getDragItemAttributes('service', directSource.servicesSource, entryIndex)} data-preview-drop-kind="service" data-preview-drop-index="${currentYamlDropIndex}" data-preview-drop-commented="${isCommented ? 'true' : 'false'}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"`
                         : '';
                     return `<div class="dashboard-card preview-jump-target${isCommented ? ' dashboard-card--commented' : ''}" ${serviceDragAttributes} ${getSourceAttributes(directSource)} ${serviceTooltip}>${serviceEditControls}<div class="dashboard-card-heading">${serviceIcon}<div class="dashboard-card-title">${escapeHtml(name)}</div></div><div class="dashboard-card-desc">${escapeHtml(data.description || '')}</div></div>`;
                 }).join('');
             }
 
-            function buildNestedGroupSource(groupName, groupIndex, nestedName, nestedGroupPath) {
+            function buildNestedGroupSource(groupName, groupIndex, nestedName, nestedGroupPath, isCommented) {
                 const servicesSource = {
                     tab: 'services',
                     kind: 'services-group',
                     groupName,
                     groupIndex,
-                    nestedGroupPath
+                    nestedGroupPath,
+                    ...(isCommented ? { commented: true } : {})
                 };
                 return {
                     servicesSource,
@@ -4996,7 +5133,7 @@
                         : null;
                     const nestedIcon = renderIcon(nestedLayout && nestedLayout.icon, nestedName);
                     const nestedGroupPath = [...parentPath, { name: nestedName, index: nestedOccurrenceIndex }];
-                    const nestedGroupSource = buildNestedGroupSource(groupName, groupIndex, nestedName, nestedGroupPath);
+                    const nestedGroupSource = buildNestedGroupSource(groupName, groupIndex, nestedName, nestedGroupPath, nestedIsCommented);
                     const nestedCards = renderPreviewServiceCards(nestedEntries, {
                         groupName,
                         groupIndex,
@@ -5022,7 +5159,7 @@
                         : '';
                     const dropSource = { groupName, groupIndex, nestedGroupPath };
                     const serviceCardsGrid = nestedCards || addServiceButton
-                        ? `<div class="dashboard-cards"${previewEditMode ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(nestedEntries) ? nestedEntries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"` : ''}>${nestedCards}${addServiceButton}</div>`
+                        ? `<div class="dashboard-cards"${previewEditMode && !nestedIsCommented ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(nestedEntries) ? nestedEntries.filter((e) => !e.__commented && !isNestedServiceGroup(e)).length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify(dropSource))}"` : ''}>${nestedCards}${addServiceButton}</div>`
                         : '';
                     const isCollapsed = isInitiallyCollapsed(nestedLayout);
                     const nestedGroupClass = 'dashboard-nested-group' + (nestedIsCommented ? ' dashboard-nested-group--commented' : '');
@@ -5061,11 +5198,11 @@
                     ? `<button type="button" class="preview-add-button preview-add-service" data-preview-action="service.add" ${getSourceAttributes(serviceGroupSource)}><span aria-hidden="true">+</span> Add service</button>`
                     : '';
                 const serviceCardsGrid = cards || addServiceButton
-                    ? `<div class="dashboard-cards"${previewEditMode ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${cards}${addServiceButton}</div>`
+                    ? `<div class="dashboard-cards"${previewEditMode && !groupIsCommented ? ` data-preview-service-drop-zone data-preview-service-drop-index="${Array.isArray(entries) ? entries.filter((e) => !e.__commented && !isNestedServiceGroup(e)).length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"` : ''}>${cards}${addServiceButton}</div>`
                     : '';
                 const groupPosition = groupPositionByItem.get(group) || 0;
-                const groupDragAttributes = previewEditMode
-                    ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
+                const groupDragAttributes = previewEditMode && !groupIsCommented
+                    ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.filter((e) => !e.__commented && !isNestedServiceGroup(e)).length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                     : '';
                 const groupClass = 'dashboard-group' + (groupIsCommented ? ' dashboard-group--commented' : '');
                 if (hasNestedGroups) {
@@ -5723,6 +5860,8 @@
                 const fields = drag.scope
                     ? drag.scope.split('.').reduce((collection, pathIndex) => collection[Number(pathIndex)].fields, previewEditDialogState.fields)
                     : previewEditDialogState.fields;
+                // Reject drag if the option itself is commented
+                if (fields[drag.index] && fields[drag.index].commented === true) return;
                 const [item] = fields.splice(drag.index, 1);
                 fields.splice(adjustedDestinationIndex, 0, item);
                 renderPreviewEditOptions();
@@ -5897,8 +6036,9 @@
                 : verticalLine
                     ? event.clientX >= rect.left + (rect.width / 2)
                     : event.clientY >= rect.top + (rect.height / 2);
+            const isCommentedTarget = target.dataset.previewDropCommented === 'true';
             return {
-                destinationIndex: Number(target.dataset.previewDropIndex) + (after ? 1 : 0),
+                destinationIndex: Number(target.dataset.previewDropIndex) + (isCommentedTarget ? 0 : (after ? 1 : 0)),
                 destinationTarget,
                 position: after ? 'after' : 'before',
                 verticalLine
@@ -5940,6 +6080,17 @@
                 event.preventDefault();
                 return;
             }
+            // Reject drag for commented items
+            const sourceAttr = item.getAttribute('data-preview-drag-source');
+            if (sourceAttr) {
+                try {
+                    const dragSource = JSON.parse(sourceAttr);
+                    if (dragSource.commented === true) {
+                        event.preventDefault();
+                        return;
+                    }
+                } catch (e) { /* ignore parse errors */ }
+            }
             activePreviewDrag = {
                 kind: item.dataset.previewDragKind,
                 index: Number(item.dataset.previewDragIndex),
@@ -5975,6 +6126,17 @@
                 ? Boolean(target)
                 : target?.dataset.previewDropKind === activePreviewDrag.kind;
             if (!matchesKind || (!canCrossGroups && (target.dataset.previewDragScope || '') !== activePreviewDrag.scope)) return;
+            // Reject drops into commented-group destinations
+            if (activePreviewDrag.kind === 'service' || activePreviewDrag.kind === 'bookmark') {
+                const destSource = target.getAttribute('data-preview-service-drop-source') || target.getAttribute('data-preview-bookmark-drop-source') || '{}';
+                try {
+                    const dest = JSON.parse(destSource);
+                    if (dest.commented === true) {
+                        clearPreviewDragState();
+                        return;
+                    }
+                } catch (e) { /* ignore parse errors */ }
+            }
             event.preventDefault();
             const drag = activePreviewDrag;
             const { destinationIndex, destinationTarget } = getPreviewDropDetails(target, drag, event, dropTarget.position);
@@ -6131,6 +6293,3 @@
             event.returnValue = true;
         });
         updateFloatingNavVisibility();
-
-        // Expose for browser tests
-        window.__applyCommentedPreviewEdit = applyCommentedPreviewEdit;

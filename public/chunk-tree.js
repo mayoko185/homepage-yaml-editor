@@ -168,8 +168,9 @@
 
             if (indent === entryIndent && isCommentedListItem(line)) {
                 const entryChunk = chunkLines(lines, i, entryIndent, (l) => {
-                    const ind = getYamlIndent(l);
-                    return ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l));
+                    const ind = getEffectiveIndent(l);
+                    return (ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l)))
+                        || (ind <= entryIndent && l.trim().startsWith('#') && !isCommentedListItem(l) && !isActiveListItem(l));
                 });
                 const name = getYamlKeyFromLine(line.replace(/^\s*#\s*/, ''));
                 let data = null;
@@ -182,8 +183,11 @@
                 } catch (e) { /* ignore */ }
                 entryChunk.rawLines.unshift(...pendingBlanks);
                 pendingBlanks = [];
+                // A commented list item whose cleaned data is an array is a commented nested-group
+                // header.
+                const kind = data && Array.isArray(data) ? 'commented-nested-group' : 'commented-service';
                 entries.push({
-                    kind: data && Array.isArray(data) ? 'commented-nested-group' : 'commented-service',
+                    kind,
                     name: name || '',
                     rawLines: entryChunk.rawLines,
                     data
@@ -194,8 +198,9 @@
 
             if (indent === entryIndent && isActiveListItem(line)) {
                 const entryChunk = chunkLines(lines, i, entryIndent, (l) => {
-                    const ind = getYamlIndent(l);
-                    return ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l));
+                    const ind = getEffectiveIndent(l);
+                    return (ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l)))
+                        || (ind <= entryIndent && l.trim().startsWith('#') && !isCommentedListItem(l) && !isActiveListItem(l));
                 });
                 const name = getYamlKeyFromLine(line);
                 let data = {};
@@ -221,8 +226,23 @@
             // Intra-group comment at entry indent
             if (indent === entryIndent && line.trim().startsWith('#')) {
                 const commentChunk = chunkLines(lines, i, entryIndent, (l) => {
-                    const ind = getYamlIndent(l);
-                    return ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l));
+                    const ind = getEffectiveIndent(l);
+                    return (ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l)))
+                        || (ind <= entryIndent && l.trim().startsWith('#') && !isCommentedListItem(l) && !isActiveListItem(l));
+                });
+                commentChunk.rawLines.unshift(...pendingBlanks);
+                pendingBlanks = [];
+                entries.push({ kind: 'comment', rawLines: commentChunk.rawLines });
+                i = commentChunk.endIndex;
+                continue;
+            }
+
+            // Standalone comment at or above entry indent (e.g. separator line)
+            if (indent <= entryIndent && line.trim().startsWith('#') && !isCommentedListItem(line) && !isActiveListItem(line)) {
+                const commentChunk = chunkLines(lines, i, entryIndent, (l) => {
+                    const ind = getEffectiveIndent(l);
+                    return (ind === entryIndent && (isActiveListItem(l) || isCommentedListItem(l)))
+                        || (ind <= entryIndent && l.trim().startsWith('#') && !isCommentedListItem(l) && !isActiveListItem(l));
                 });
                 commentChunk.rawLines.unshift(...pendingBlanks);
                 pendingBlanks = [];
@@ -387,7 +407,13 @@
 
     function reindentLines(lines, newBaseIndent) {
         if (lines.length === 0) return lines;
-        const oldBaseIndent = getEffectiveIndent(lines[0]);
+        // Find the first non-blank line to determine the old base indent
+        let firstContentIdx = 0;
+        while (firstContentIdx < lines.length && isBlankLine(lines[firstContentIdx])) {
+            firstContentIdx++;
+        }
+        if (firstContentIdx >= lines.length) return lines;
+        const oldBaseIndent = getEffectiveIndent(lines[firstContentIdx]);
         const delta = newBaseIndent - oldBaseIndent;
         if (delta === 0) return lines;
         return lines.map((line) => {
@@ -396,6 +422,61 @@
             const newIndent = Math.max(0, currentIndent + delta);
             return ' '.repeat(newIndent) + line.trimStart();
         });
+    }
+
+    function normalizeCommentedGroups(chunks) {
+        for (const chunk of chunks) {
+            if (chunk.kind === 'commented-group' || chunk.kind === 'commented-widget') {
+                // Use the base indent of the first line (matching toggleComment behavior)
+                const baseIndent = getYamlIndent(chunk.rawLines[0]);
+                // Ensure every non-blank line in the chunk is commented
+                chunk.rawLines = chunk.rawLines.map((line) => {
+                    if (isBlankLine(line)) return line;
+                    if (line.trim().startsWith('#')) return line;
+                    return line.slice(0, baseIndent) + '# ' + line.slice(baseIndent);
+                });
+                if (chunk.entries) {
+                    chunk.entries.forEach((entry) => {
+                        normalizeCommentedEntry(entry);
+                    });
+                    rebuildGroupRawLines(chunk);
+                }
+            } else if (chunk.entries) {
+                // Also normalize commented-nested-group entries inside active groups
+                chunk.entries.forEach((entry) => {
+                    if (entry.kind === 'commented-nested-group') {
+                        normalizeCommentedEntry(entry);
+                    } else if (entry.kind === 'commented-service' && Array.isArray(entry.data)) {
+                        // A commented service whose parsed data is an array is actually a commented
+                        // nested-group header with active descendants; reclassify and normalize it.
+                        entry.kind = 'commented-nested-group';
+                        normalizeCommentedEntry(entry);
+                    }
+                });
+                rebuildGroupRawLines(chunk);
+            }
+        }
+        return chunks;
+    }
+
+    function normalizeCommentedEntry(entry) {
+        const entryBaseIndent = getYamlIndent(entry.rawLines[0]);
+        entry.rawLines = entry.rawLines.map((line) => {
+            if (isBlankLine(line)) return line;
+            if (line.trim().startsWith('#')) return line;
+            return line.slice(0, entryBaseIndent) + '# ' + line.slice(entryBaseIndent);
+        });
+        if (entry.kind === 'service') entry.kind = 'commented-service';
+        else if (entry.kind === 'nested-group') entry.kind = 'commented-nested-group';
+        else if (entry.kind === 'widget') entry.kind = 'commented-widget';
+        // Recurse into nested group entries' raw lines
+        if (entry.kind === 'commented-nested-group' && Array.isArray(entry.data)) {
+            entry.data.forEach((nestedEntry) => {
+                if (nestedEntry && typeof nestedEntry === 'object') {
+                    nestedEntry.__commented = true;
+                }
+            });
+        }
     }
 
     function moveEntry(entries, fromIndex, toIndex) {
@@ -411,9 +492,11 @@
         // If entryName is present, move within group's entries.
         // Otherwise, move top-level group.
         if (!fromPath.entryName) {
-            // Move group
+            // Move group — reject commented group movement
             const fromIdx = findChunkIndexByName(chunks, fromPath.groupName, fromPath.groupIndex || 0);
             if (fromIdx < 0) return null;
+            const fromChunk = chunks[fromIdx];
+            if (fromChunk.kind === 'commented-group' || fromChunk.kind === 'commented-widget') return null;
             let toIdx;
             if (toPath.destinationIndex !== undefined) {
                 toIdx = toPath.destinationIndex;
@@ -437,12 +520,21 @@
         const fromEntryIdx = findChunkIndexByName(fromGroup.entries, fromPath.entryName, fromPath.entryIndex || 0);
         if (fromEntryIdx < 0) return null;
 
+        const fromEntry = fromGroup.entries[fromEntryIdx];
+
+        // Reject moves from commented groups or of commented entries
+        if (fromGroup.kind === 'commented-group' || fromGroup.kind === 'commented-widget') return null;
+        if (fromEntry.kind === 'commented-service' || fromEntry.kind === 'commented-nested-group' || fromEntry.kind === 'commented-widget') return null;
+
         const toGroupIdx = toPath.groupName
             ? findChunkIndexByName(chunks, toPath.groupName, toPath.groupIndex || 0)
             : fromGroupIdx;
         if (toGroupIdx < 0) return null;
         const toGroup = chunks[toGroupIdx];
         if (!toGroup.entries) return null;
+
+        // Reject moves into commented groups
+        if (toGroup.kind === 'commented-group' || toGroup.kind === 'commented-widget') return null;
 
         let toEntryIdx;
         if (toPath.destinationIndex !== undefined) {
@@ -456,20 +548,6 @@
         }
 
         const [entry] = fromGroup.entries.splice(fromEntryIdx, 1);
-
-        // Auto-comment entry if moving to a commented group
-        if (toGroup.kind === 'commented-group') {
-            if (entry.kind === 'service') {
-                entry.rawLines = toggleComment(entry.rawLines);
-                entry.kind = 'commented-service';
-            } else if (entry.kind === 'widget') {
-                entry.rawLines = toggleComment(entry.rawLines);
-                entry.kind = 'commented-widget';
-            } else if (entry.kind === 'nested-group') {
-                entry.rawLines = toggleComment(entry.rawLines);
-                entry.kind = 'commented-nested-group';
-            }
-        }
 
         rebuildGroupRawLines(fromGroup);
 
@@ -729,6 +807,7 @@
         duplicateChunk,
         editChunk,
         toggleChunkComment,
+        normalizeCommentedGroups,
         findChunkIndexByName,
         reindentLines,
         getYamlIndent,

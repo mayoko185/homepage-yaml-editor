@@ -375,6 +375,179 @@ const activeGroupWithServices = `# top
         href: /b
 `;
 
+// ── Normalization tests ──
+
+test('normalizeCommentedGroups comments every active line inside a commented group', () => {
+    const input = `- Active Group:
+    - Service A:
+        href: /a
+# - Commented Group:
+    - Service B:
+        href: /b
+`;
+    const chunks = parseServicesDocument(input);
+    ChunkTree.normalizeCommentedGroups(chunks);
+    const result = ChunkTree.serializeDocument(chunks);
+    // The commented group header must remain commented
+    assert.ok(result.includes('# - Commented Group:'), 'commented group header must stay commented');
+    // Service B and its field must now be commented
+    assert.ok(result.includes('    # - Service B:'), 'Service B must be commented after normalization');
+    assert.ok(result.includes('    #     href: /b'), 'Service B field must be commented after normalization');
+    // Active group must remain unchanged
+    assert.ok(result.includes('- Active Group:'), 'active group must remain unchanged');
+    assert.ok(result.includes('    - Service A:'), 'active service must remain unchanged');
+    // Result must be valid YAML
+    jsyaml.load(result);
+});
+
+test('normalizeCommentedGroups handles nested commented groups', () => {
+    const input = `- Active:
+    - Active One:
+        href: /one
+# - Commented:
+    - Nested:
+        - Inner:
+            href: /inner
+`;
+    const chunks = parseServicesDocument(input);
+    ChunkTree.normalizeCommentedGroups(chunks);
+    const result = ChunkTree.serializeDocument(chunks);
+    assert.ok(result.includes('# - Commented:'), 'commented group header must stay commented');
+    assert.ok(result.includes('    # - Nested:'), 'nested group must be commented');
+    assert.ok(result.includes('    #     - Inner:'), 'inner service must be commented');
+    assert.ok(result.includes('    #         href: /inner'), 'inner field must be commented');
+    jsyaml.load(result);
+});
+
+test('normalizeCommentedGroups does not modify already-correct commented groups', () => {
+    const input = `- Active:
+    - Service:
+        href: /a
+# - Commented:
+#     - Service:
+#         href: /b
+`;
+    const chunks = parseServicesDocument(input);
+    ChunkTree.normalizeCommentedGroups(chunks);
+    const result = ChunkTree.serializeDocument(chunks);
+    assert.equal(result, input, 'already-correct commented groups must not change');
+});
+
+// ── Rejected movement tests ──
+
+test('moveChunk rejects moving an entry from a commented group', () => {
+    const input = `- Active Group:
+    - Service B:
+        href: /b
+# - Commented Group:
+    # - Service A:
+    #     href: /a
+`;
+    const chunks = parseServicesDocument(input);
+    const result = ChunkTree.moveChunk(chunks, {
+        groupName: 'Commented Group',
+        groupIndex: 0,
+        entryName: 'Service A',
+        entryIndex: 0
+    }, {
+        groupName: 'Active Group',
+        groupIndex: 0,
+        destinationIndex: 0
+    });
+    assert.equal(result, null, 'moveChunk must return null for commented-source moves');
+});
+
+test('moveChunk rejects moving an entry into a commented group', () => {
+    const input = `- Active Group:
+    - Service A:
+        href: /a
+# - Commented Group:
+    # - Service B:
+    #     href: /b
+`;
+    const chunks = parseServicesDocument(input);
+    const result = ChunkTree.moveChunk(chunks, {
+        groupName: 'Active Group',
+        groupIndex: 0,
+        entryName: 'Service A',
+        entryIndex: 0
+    }, {
+        groupName: 'Commented Group',
+        groupIndex: 0,
+        destinationIndex: 0
+    });
+    assert.equal(result, null, 'moveChunk must return null for commented-destination moves');
+});
+
+test('moveChunk rejects moving a commented entry between active groups', () => {
+    const input = `- Group A:
+    - Active One:
+        href: /one
+    # - Commented One:
+    #     href: /commented
+- Group B:
+    - Active Two:
+        href: /two
+`;
+    const chunks = parseServicesDocument(input);
+    const result = ChunkTree.moveChunk(chunks, {
+        groupName: 'Group A',
+        groupIndex: 0,
+        entryName: 'Commented One',
+        entryIndex: 0
+    }, {
+        groupName: 'Group B',
+        groupIndex: 0,
+        destinationIndex: 0
+    });
+    assert.equal(result, null, 'moveChunk must return null for commented-entry moves');
+});
+
+test('moveChunk rejects moving a commented group', () => {
+    const input = `- Active Group:
+    - Service A:
+        href: /a
+# - Commented Group:
+    # - Service B:
+    #     href: /b
+`;
+    const chunks = parseServicesDocument(input);
+    const result = ChunkTree.moveChunk(chunks, {
+        groupName: 'Commented Group',
+        groupIndex: 0
+    }, {
+        groupName: 'Commented Group',
+        groupIndex: 0,
+        direction: 'down'
+    });
+    assert.equal(result, null, 'moveChunk must return null for commented-group moves');
+});
+
+test('moveChunk still allows active service moves between active groups', () => {
+    const input = `- Group A:
+    - Active One:
+        href: /one
+- Group B:
+    - Active Two:
+        href: /two
+`;
+    const chunks = parseServicesDocument(input);
+    const result = ChunkTree.moveChunk(chunks, {
+        groupName: 'Group A',
+        groupIndex: 0,
+        entryName: 'Active One',
+        entryIndex: 0
+    }, {
+        groupName: 'Group B',
+        groupIndex: 0,
+        destinationIndex: 0
+    });
+    assert.ok(result, 'moveChunk must return a string for active moves');
+    assert.ok(result.includes('    - Active One:'), 'Active One must be in destination');
+    assert.ok(result.includes('    - Active Two:'), 'Active Two must still be present');
+    jsyaml.load(result);
+});
+
 test('duplicate group comments out active services in clone', () => {
     const chunks = parseServicesDocument(activeGroupWithServices);
     const result = ChunkTree.duplicateChunk(chunks, {
@@ -385,4 +558,44 @@ test('duplicate group comments out active services in clone', () => {
     assert.ok(result.includes('    # - Active One:'), 'cloned group services must be commented out');
     assert.ok(result.includes('    # - Active Two:'), 'cloned group services must be commented out');
     assert.ok(result.includes('    - Active One:'), 'original group services must remain active');
+});
+
+// ── Canonical commented-group regression tests ──
+
+const canonicalCommentedGroup = `- Active Group:
+    - Alpha:
+        href: /alpha
+# - Commented Group:
+#     - Alpha:
+#         href: /alpha
+#     - Beta:
+#         href: /beta
+# ----------------------------------------
+`;
+
+test('canonical commented group parses into separate chunks', () => {
+    const chunks = parseServicesDocument(canonicalCommentedGroup);
+    const commentedGroup = chunks.find((c) => c.kind === 'commented-group');
+    assert.ok(commentedGroup, 'commented group must be found');
+    assert.equal(commentedGroup.entries.length, 3, 'must have 3 entries: Alpha, Beta, separator');
+    assert.equal(commentedGroup.entries[0].kind, 'commented-service');
+    assert.equal(commentedGroup.entries[0].name, 'Alpha');
+    assert.equal(commentedGroup.entries[1].kind, 'commented-service');
+    assert.equal(commentedGroup.entries[1].name, 'Beta');
+    assert.equal(commentedGroup.entries[2].kind, 'comment', 'separator must be a comment chunk');
+});
+
+test('canonical commented group: move Alpha into active group is rejected', () => {
+    const chunks = parseServicesDocument(canonicalCommentedGroup);
+    const result = ChunkTree.moveChunk(chunks, {
+        groupName: 'Commented Group',
+        groupIndex: 0,
+        entryName: 'Alpha',
+        entryIndex: 0
+    }, {
+        groupName: 'Active Group',
+        groupIndex: 0,
+        destinationIndex: 0
+    });
+    assert.equal(result, null, 'moveChunk must return null for commented-source moves');
 });

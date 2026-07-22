@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const jsyaml = require('js-yaml');
 const { test, expect } = require('@playwright/test');
 
 const configDir = process.env.HOMEPAGE_BROWSER_TEST_DIR;
@@ -138,68 +139,114 @@ test('nested commented group keeps descendants visible in preview', async ({ pag
   await expect(page.locator('.dashboard-card--commented', { hasText: 'Beta' })).toHaveCount(1);
 });
 
-test('dragging a commented service into a nested group places it inside that group', async ({ page }) => {
-  const yaml = `- Main:
-    - SubGroup:
-        - Alpha:
-            href: https://alpha.test
-    - Beta:
-        href: https://beta.test
+test('commented service card is not draggable', async ({ page }) => {
+  const yaml = `- Active Group:
+    - Alpha:
+        href: https://alpha.test
+# - Commented Group:
+#     - Beta:
+#         href: https://beta.test
 `;
-  await setEditorValue(page, yaml);
+  await fs.writeFile(servicesPath, yaml, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
   await page.locator('#preview-edit-toggle').check({ force: true });
-  await page.locator('#preview-comments-toggle-container').waitFor({ state: 'visible' });
   await page.locator('#preview-comments-toggle').check({ force: true });
-
-  // Comment out Beta by editing YAML
-  const commentedYaml = `- Main:
-    - SubGroup:
-        - Alpha:
-            href: https://alpha.test
-    # - Beta:
-    #     href: https://beta.test
-`;
-  await setEditorValue(page, commentedYaml);
   await page.waitForTimeout(500);
 
-  // Use the internal API to move the commented service into the nested group
-  const result = await page.evaluate(async () => {
-    const source = {
-      tab: 'services',
-      kind: 'service',
-      groupName: 'Main',
-      groupIndex: 0,
-      serviceName: 'Beta',
-      serviceIndex: 0,
-      commented: true,
-      startLine: 4,
-      endLine: 5
-    };
-    const destinationTarget = {
-      groupName: 'Main',
-      groupIndex: 0,
-      nestedGroupPath: [{ name: 'SubGroup', index: 0 }]
-    };
-    const operation = {
-      type: 'service.move',
-      target: source,
-      destinationIndex: 1,
-      destinationTarget
-    };
-    return window.__applyCommentedPreviewEdit(operation, 'Moved commented service Beta.');
-  });
-  expect(result).toBe(true);
+  // Commented service card must not have draggable attribute
+  const commentedCard = page.locator('.dashboard-card--commented', { hasText: 'Beta' });
+  await expect(commentedCard).toBeVisible();
+  await expect(commentedCard).not.toHaveAttribute('draggable', 'true');
 
-  // Verify the YAML now has Beta inside SubGroup
-  const editorText = await getEditorValue(page);
-  expect(editorText).toContain('SubGroup');
-  expect(editorText).toContain('- Alpha:');
-  expect(editorText).toContain('# - Beta:');
-  // Beta should be indented under SubGroup (not at top level)
-  const lines = editorText.split('\n');
-  const betaLine = lines.findIndex((l) => l.includes('Beta'));
-  expect(betaLine).toBeGreaterThan(-1);
-  // The line before Beta should be Alpha (both under SubGroup)
-  const alphaLine = lines.findIndex((l) => l.includes('Alpha'));
-  expect(betaLine).toBeGreaterThan(alphaLine);
+  // Active service card must still be draggable
+  const activeCard = page.locator('.dashboard-card:not(.dashboard-card--commented)', { hasText: 'Alpha' });
+  await expect(activeCard).toHaveAttribute('draggable', 'true');
+});
+
+test('commented group has no drop zone and no movement buttons', async ({ page }) => {
+  const yaml = `- Active Group:
+    - Alpha:
+        href: https://alpha.test
+# - Commented Group:
+#     - Beta:
+#         href: https://beta.test
+`;
+  await fs.writeFile(servicesPath, yaml, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.locator('#preview-comments-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  // Commented group must not have a drop zone
+  const commentedGroup = page.locator('.dashboard-group--commented', { hasText: 'Commented Group' });
+  await expect(commentedGroup).toBeVisible();
+  await expect(commentedGroup.locator('[data-preview-service-drop-zone]')).toHaveCount(0);
+
+  // Commented group must not have move-up/move-down buttons
+  await expect(commentedGroup.locator('.preview-edit-move-up')).toHaveCount(0);
+  await expect(commentedGroup.locator('.preview-edit-move-down')).toHaveCount(0);
+
+  // Active group must still have group-level movement buttons
+  const activeGroup = page.locator('.dashboard-group:not(.dashboard-group--commented)', { hasText: 'Active Group' });
+  await expect(activeGroup.locator('.dashboard-group-title > .preview-edit-actions > .preview-edit-move-up')).toHaveCount(1);
+  await expect(activeGroup.locator('.dashboard-group-title > .preview-edit-actions > .preview-edit-move-down')).toHaveCount(1);
+});
+
+test('comment an option, save, reopen, and verify it remains commented and non-movable', async ({ page }) => {
+  const yaml = `- Main:
+    - Alpha:
+        href: https://alpha.test
+        description: First service
+`;
+  await fs.writeFile(servicesPath, yaml, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  // Open the edit dialog for Alpha
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).hover();
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).locator('.preview-edit-modify').click();
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  // Comment the description option
+  const descriptionRow = page.locator('[data-preview-option-row]', { hasText: 'description' });
+  await expect(descriptionRow).toBeVisible();
+  await descriptionRow.locator('.preview-edit-comment').click();
+
+  // Verify the option row now has commented styling
+  await expect(descriptionRow).toHaveAttribute('data-preview-option-commented', 'true');
+
+  // Verify commented option has no move-up/move-down buttons
+  await expect(descriptionRow.locator('.preview-edit-move-up')).toHaveCount(0);
+  await expect(descriptionRow.locator('.preview-edit-move-down')).toHaveCount(0);
+
+  // Save the edit
+  await page.locator('#preview-edit-submit').click();
+  await expect(page.locator('#preview-edit-modal')).not.toBeVisible();
+
+  // Save the file
+  await page.locator('#save-config-button').click();
+  await expect(page.locator('#save-status')).toContainText('Saved');
+
+  // Reopen the page
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  // Open the edit dialog again
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).hover();
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).locator('.preview-edit-modify').click();
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  // The description option must still be commented
+  const reopenedRow = page.locator('[data-preview-option-row]', { hasText: 'description' });
+  await expect(reopenedRow).toHaveAttribute('data-preview-option-commented', 'true');
+
+  // Verify it still has no move-up/move-down buttons
+  await expect(reopenedRow.locator('.preview-edit-move-up')).toHaveCount(0);
+  await expect(reopenedRow.locator('.preview-edit-move-down')).toHaveCount(0);
 });

@@ -4,6 +4,9 @@
 
 These instructions apply to the entire repository.
 
+Working Directory Rule: When invoking bash or any shell tool, always set workdir to the absolute project path G:\code\homepage yaml editor\. Never prefix it with :, \\, or any other character, and never rely on relative paths for destructive operations.
+
+
 ## Project Overview
 
 Homepage YAML Editor is a small Express application for editing the supported Homepage configuration files:
