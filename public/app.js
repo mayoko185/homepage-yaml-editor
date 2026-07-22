@@ -4420,7 +4420,7 @@
 
         function getPreviewEditActionButton(action, source, label, icon, { disabled = false, danger = false } = {}) {
             const dangerClass = danger ? ' preview-edit-delete' : '';
-            const actionClass = (action.endsWith('.edit') || action.endsWith('.add'))
+            const actionClass = action.endsWith('.edit')
                 ? ' preview-edit-modify'
                 : action.endsWith('.comment')
                     ? ' preview-edit-comment'
@@ -5756,6 +5756,9 @@
         document.getElementById('preview-comments-toggle').addEventListener('change', function() {
             previewShowCommentsState = this.checked;
             document.getElementById('preview-comments-label').textContent = this.checked ? 'Hide comments' : 'Show comments';
+            if (this.checked) {
+                setSaveStatus('Commented-out items cannot be moved or reordered. Uncomment them first to enable move controls.', 'warning');
+            }
             updatePreview({ force: true });
         });
         document.getElementById('settings-button').addEventListener('click', openSettingsModal);
