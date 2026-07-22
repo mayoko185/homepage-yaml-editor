@@ -62,6 +62,10 @@ test('app-settings.default.json ships well-formed editor setting defaults', asyn
   const supportedTabs = ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'];
   assert.deepEqual(defaults.tabOrder.slice().sort(), [...supportedTabs].sort(), 'app-settings.default.json "tabOrder" must list every supported tab');
   assert.deepEqual(defaults.visibleTabs.slice().sort(), [...supportedTabs].sort(), 'app-settings.default.json "visibleTabs" must list every supported tab');
+  assert.equal(typeof defaults.editBarOptions, 'object', 'app-settings.default.json "editBarOptions" must be an object');
+  assert.equal(typeof defaults.editBarOptions.comment, 'boolean', 'app-settings.default.json "editBarOptions.comment" must be a boolean');
+  assert.equal(typeof defaults.editBarOptions.duplicate, 'boolean', 'app-settings.default.json "editBarOptions.duplicate" must be a boolean');
+  assert.equal(typeof defaults.editBarOptions.moveUpDown, 'boolean', 'app-settings.default.json "editBarOptions.moveUpDown" must be a boolean');
 });
 
 test('footer version in public/index.html matches package.json', async () => {
@@ -149,6 +153,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       editorVisible: false,
       interactiveEditor: true,
       showComments: false,
+      editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
       visibleTabs: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes'],
       tabOrder: ['services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox', 'kubernetes']
     });
@@ -174,6 +179,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       editorVisible: false,
       interactiveEditor: true,
       showComments: false,
+      editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
       visibleTabs: ['kubernetes', 'services'],
       tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });
@@ -186,6 +192,7 @@ test('serves optimized assets and supports the active configuration APIs', async
       editorVisible: false,
       interactiveEditor: true,
       showComments: false,
+      editBarOptions: { comment: true, duplicate: true, moveUpDown: true },
       visibleTabs: ['kubernetes', 'services'],
       tabOrder: ['kubernetes', 'services', 'settings', 'bookmarks', 'widgets', 'docker', 'proxmox']
     });

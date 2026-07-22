@@ -88,6 +88,9 @@ function getDefaultAppSettings() {
     editorVisible: template.editorVisible,
     interactiveEditor: template.interactiveEditor,
     showComments: template.showComments === true,
+    editBarOptions: template.editBarOptions && typeof template.editBarOptions === 'object'
+      ? { comment: template.editBarOptions.comment !== false, duplicate: template.editBarOptions.duplicate !== false, moveUpDown: template.editBarOptions.moveUpDown !== false }
+      : { comment: true, duplicate: true, moveUpDown: true },
     visibleTabs: Array.isArray(template.visibleTabs) ? [...template.visibleTabs] : [...DEFAULT_CONFIG_TAB_ORDER],
     tabOrder: Array.isArray(template.tabOrder) ? [...template.tabOrder] : [...DEFAULT_CONFIG_TAB_ORDER]
   };
@@ -291,6 +294,9 @@ function normalizeAppSettings(value) {
       ? value.interactiveEditor : defaults.interactiveEditor,
     showComments: typeof value.showComments === 'boolean'
       ? value.showComments : defaults.showComments,
+    editBarOptions: value.editBarOptions && typeof value.editBarOptions === 'object'
+      ? { comment: value.editBarOptions.comment !== false, duplicate: value.editBarOptions.duplicate !== false, moveUpDown: value.editBarOptions.moveUpDown !== false }
+      : { ...defaults.editBarOptions },
     visibleTabs: normalizeVisibleTabs(value.visibleTabs, tabOrder),
     tabOrder
   };
