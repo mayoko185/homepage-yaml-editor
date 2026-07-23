@@ -341,6 +341,55 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(YAML.parse(transformed.files.services)[0].Test[1]['Preview Service'].href, 'https://preview.example');
     assert.equal(await fs.readFile(path.join(tempRoot, 'services.yaml'), 'utf8'), yamlContent);
 
+    // Server must inject groupOptionNames from cached option definitions
+    // and reject sub-group names that collide with custom group options.
+    const nestedServices = `- Top Group:
+    - Inner Group:
+        - Service A:
+            href: https://a.example
+`;
+    const nestedSettings = `title: Test
+layout:
+  Top Group:
+    tab: Main
+    Inner Group:
+      icon: inner.png
+`;
+    const collisionResponse = await fetch(`${baseUrl}/api/yaml/transform`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        files: { services: nestedServices, settings: nestedSettings },
+        operation: {
+          type: 'group.add',
+          target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] },
+          values: { name: 'customFlag', fields: [] }
+        }
+      })
+    });
+    assert.equal(collisionResponse.status, 400);
+    const collisionBody = await collisionResponse.json();
+    assert.match(collisionBody.details, /conflicts with a group option name/);
+
+    // Server must reject even when client provides an empty groupOptionNames array
+    // (bypass attempt via Array.isArray truthiness).
+    const emptyArrayBypassResponse = await fetch(`${baseUrl}/api/yaml/transform`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        files: { services: nestedServices, settings: nestedSettings },
+        operation: {
+          type: 'group.add',
+          target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] },
+          values: { name: 'customFlag', fields: [] },
+          groupOptionNames: []
+        }
+      })
+    });
+    assert.equal(emptyArrayBypassResponse.status, 400);
+    const emptyArrayBody = await emptyArrayBypassResponse.json();
+    assert.match(emptyArrayBody.details, /conflicts with a group option name/);
+
     const unchangedResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -677,6 +726,328 @@ test('optional login protects the editor and APIs with a form-based session', as
     assert.equal(lockedResponse.status, 303);
     assert.equal(lockedResponse.headers.get('location'), '/login?error=locked');
     assert.ok(Number(lockedResponse.headers.get('retry-after')) > 0);
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
+test('backup permission hardening applies to existing directories and files', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-backup-perm-test-'));
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      DATA_DIR: tempRoot,
+      AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: path.join(tempRoot, 'app-data')
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+
+    // Create a backup directory with broad permissions and an old backup file
+    const backupDir = path.join(tempRoot, 'app-data', 'backups');
+    await fs.mkdir(backupDir, { recursive: true });
+    if (process.platform !== 'win32') {
+      await fs.chmod(backupDir, 0o777);
+    }
+
+    // Create old backup files with broad permissions (both legacy 2-part and current 4-part)
+    const oldBackupPath = path.join(backupDir, '000101_00000000_0000_services.yaml');
+    await fs.writeFile(oldBackupPath, 'old: content\n', { encoding: 'utf8' });
+    const legacyBackupPath = path.join(backupDir, '250723_services.yaml');
+    await fs.writeFile(legacyBackupPath, 'legacy: content\n', { encoding: 'utf8' });
+    if (process.platform !== 'win32') {
+      await fs.chmod(oldBackupPath, 0o666);
+      await fs.chmod(legacyBackupPath, 0o666);
+    }
+
+    // Create unrelated entries that should NOT be hardened
+    const unrelatedDir = path.join(backupDir, 'unrelated-subdir');
+    await fs.mkdir(unrelatedDir, { recursive: true });
+    const unrelatedFilePath = path.join(backupDir, 'readme.txt');
+    await fs.writeFile(unrelatedFilePath, 'not a backup\n', { encoding: 'utf8' });
+    // A 4-part non-YAML file that the old >=4 heuristic would have incorrectly hardened
+    const fourPartNonYaml = path.join(backupDir, 'a_b_c_d.txt');
+    await fs.writeFile(fourPartNonYaml, 'not a backup\n', { encoding: 'utf8' });
+    const numericPrefixedYaml = path.join(backupDir, '250723_notes.yaml');
+    await fs.writeFile(numericPrefixedYaml, 'not a backup\n', { encoding: 'utf8' });
+    if (process.platform !== 'win32') {
+      await fs.chmod(unrelatedDir, 0o755);
+      await fs.chmod(unrelatedFilePath, 0o644);
+      await fs.chmod(fourPartNonYaml, 0o644);
+      await fs.chmod(numericPrefixedYaml, 0o644);
+    }
+
+    // Save a file to trigger createBackup
+    const yamlContent = 'services:\n  - name: Test\n    icon: test\n    href: https://example.com\n';
+    const saveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: tempRoot,
+        filename: 'services.yaml',
+        content: yamlContent,
+        expectedRevision: null
+      })
+    });
+    assert.equal(saveResponse.status, 200);
+
+    if (process.platform !== 'win32') {
+      // Verify directory permissions are hardened
+      const dirStat = await fs.stat(backupDir);
+      assert.equal(dirStat.mode & 0o777, 0o700, 'Backup directory must be 0o700');
+
+      // Verify old backup file permissions are hardened (both legacy 2-part and current 4-part)
+      const oldFileStat = await fs.stat(oldBackupPath);
+      assert.equal(oldFileStat.mode & 0o777, 0o600, 'Existing 4-part backup files must be 0o600');
+      const legacyFileStat = await fs.stat(legacyBackupPath);
+      assert.equal(legacyFileStat.mode & 0o777, 0o600, 'Existing legacy 2-part backup files must be 0o600');
+
+      // Verify new backup file permissions are hardened
+      const entries = await fs.readdir(backupDir);
+      const newBackup = entries.find((e) => e.endsWith('_services.yaml') && e !== '000101_00000000_0000_services.yaml');
+      assert.ok(newBackup, 'New backup file should exist');
+      const newFileStat = await fs.stat(path.join(backupDir, newBackup));
+      assert.equal(newFileStat.mode & 0o777, 0o600, 'New backup files must be 0o600');
+
+      // Verify unrelated entries are NOT hardened
+      const unrelatedDirStat = await fs.stat(unrelatedDir);
+      assert.equal(unrelatedDirStat.mode & 0o777, 0o755, 'Unrelated subdirectory must not be hardened');
+      const unrelatedFileStat = await fs.stat(unrelatedFilePath);
+      assert.equal(unrelatedFileStat.mode & 0o777, 0o644, 'Unrelated files must not be hardened');
+      const fourPartStat = await fs.stat(fourPartNonYaml);
+      assert.equal(fourPartStat.mode & 0o777, 0o644, 'Four-part non-YAML files must not be hardened');
+      const numericPrefixedYamlStat = await fs.stat(numericPrefixedYaml);
+      assert.equal(numericPrefixedYamlStat.mode & 0o777, 0o644, 'Unsupported numeric-prefixed YAML files must not be hardened');
+    }
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
+test('backup retention enforces maxBackups limit', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-retention-test-'));
+  const appDataDir = path.join(tempRoot, 'app-data');
+  await fs.mkdir(appDataDir);
+  const backupDir = path.join(appDataDir, 'backups');
+  await fs.mkdir(backupDir);
+  await fs.writeFile(path.join(backupDir, '250723_services.yaml'), 'legacy: content\n', 'utf8');
+  const yamlContent = '- Test:\n    - Service:\n        href: http://localhost/';
+  await fs.writeFile(path.join(tempRoot, 'services.yaml'), yamlContent, 'utf8');
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      DATA_DIR: tempRoot,
+      AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: appDataDir
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+
+    // Set backupCount to 2
+    const settingsResponse = await fetch(`${baseUrl}/api/app-settings`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ settings: { backupCount: 2 } })
+    });
+    assert.equal(settingsResponse.status, 200);
+
+    // Get the initial revision of the existing file
+    const startupResponse = await fetch(`${baseUrl}/api/startup-directory`);
+    const startup = await startupResponse.json();
+    let revision = startup.revisions['services.yaml'];
+
+    // Save the same file 5 times with different content to trigger backups
+    for (let i = 0; i < 5; i++) {
+      const saveResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          dirPath: tempRoot,
+          filename: 'services.yaml',
+          content: `- Test:\n    - Service:\n        href: http://localhost/${i}`,
+          expectedRevision: revision
+        })
+      });
+      assert.equal(saveResponse.status, 200);
+      revision = (await saveResponse.json()).revision;
+    }
+
+    // Check the backup directory — at most 2 current backups for services.yaml should remain.
+    // Legacy backups are unscoped and must not be deleted by directory-scoped cleanup.
+    const entries = await fs.readdir(backupDir);
+    const matching = entries.filter((e) => e.split('_').length === 4 && e.endsWith('_services.yaml'));
+    assert.ok(matching.length <= 2, `Expected at most 2 backups for services.yaml, got ${matching.length}`);
+    assert.ok(entries.includes('250723_services.yaml'), 'Legacy services backups must not be pruned by directory-scoped cleanup');
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
+test('backup namespace isolates backups by source directory', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-namespace-test-'));
+  const appDataDir = path.join(tempRoot, 'app-data');
+  await fs.mkdir(appDataDir);
+  const dirA = path.join(tempRoot, 'config-a');
+  const dirB = path.join(tempRoot, 'config-b');
+  await fs.mkdir(dirA);
+  await fs.mkdir(dirB);
+  const backupDir = path.join(appDataDir, 'backups');
+  await fs.mkdir(backupDir);
+  const legacyBackupPath = path.join(backupDir, '250723_services.yaml');
+  await fs.writeFile(legacyBackupPath, 'legacy: content\n', 'utf8');
+  const yamlContent = '- Test:\n    - Service:\n        href: http://localhost/';
+  await fs.writeFile(path.join(dirA, 'services.yaml'), yamlContent, 'utf8');
+  await fs.writeFile(path.join(dirB, 'services.yaml'), yamlContent, 'utf8');
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      DATA_DIR: tempRoot,
+      AUTOLOAD_DIR: tempRoot,
+      APP_DATA_DIR: appDataDir
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+
+    // Get the initial revisions for each subdirectory
+    const loadA = await (await fetch(`${baseUrl}/api/directory/load`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: dirA })
+    })).json();
+    const loadB = await (await fetch(`${baseUrl}/api/directory/load`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: dirB })
+    })).json();
+    const revisionA = loadA.revisions['services.yaml'];
+    const revisionB = loadB.revisions['services.yaml'];
+
+    // Save from dirA
+    const saveAResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: dirA,
+        filename: 'services.yaml',
+        content: '- Test:\n    - Service:\n        href: http://a.example',
+        expectedRevision: revisionA
+      })
+    });
+    assert.equal(saveAResponse.status, 200);
+
+    // Save from dirB
+    const saveBResponse = await fetch(`${baseUrl}/api/directory/file/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dirPath: dirB,
+        filename: 'services.yaml',
+        content: '- Test:\n    - Service:\n        href: http://b.example',
+        expectedRevision: revisionB
+      })
+    });
+    assert.equal(saveBResponse.status, 200);
+
+    // The backup directory should have at least 2 backup files for services.yaml
+    const entries = await fs.readdir(backupDir);
+    const matching = entries.filter((e) => e.split('_').length === 4 && e.endsWith('_services.yaml'));
+    // Each save from a different source dir produces a separate backup
+    // because the dirHash in the filename differs
+    assert.ok(matching.length >= 2, `Expected at least 2 backup files for services.yaml, got ${matching.length}`);
+    // The dirHash portion (second underscore-delimited field) must differ
+    const hashes = matching.map((e) => e.split('_')[1]);
+    assert.notEqual(hashes[0], hashes[1], 'Backup dirHash from different directories must differ');
+
+    // Set a low backupCount and verify cross-directory retention pruning
+    const retentionResponse = await fetch(`${baseUrl}/api/app-settings`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ settings: { backupCount: 1 } })
+    });
+    assert.equal(retentionResponse.status, 200);
+
+    // Save from dirA multiple times — only 1 backup for dirA's hash should remain
+    for (let i = 0; i < 3; i++) {
+      const loadA2 = await (await fetch(`${baseUrl}/api/directory/load`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ dirPath: dirA })
+      })).json();
+      const revA = loadA2.revisions['services.yaml'];
+      const saveA2 = await fetch(`${baseUrl}/api/directory/file/save`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          dirPath: dirA,
+          filename: 'services.yaml',
+          content: `- Test:\n    - Service:\n        href: http://a${i}.example`,
+          expectedRevision: revA
+        })
+      });
+      assert.equal(saveA2.status, 200);
+    }
+
+    // Save from dirB multiple times — only 1 backup for dirB's hash should remain
+    for (let i = 0; i < 3; i++) {
+      const loadB2 = await (await fetch(`${baseUrl}/api/directory/load`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ dirPath: dirB })
+      })).json();
+      const revB = loadB2.revisions['services.yaml'];
+      const saveB2 = await fetch(`${baseUrl}/api/directory/file/save`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          dirPath: dirB,
+          filename: 'services.yaml',
+          content: `- Test:\n    - Service:\n        href: http://b${i}.example`,
+          expectedRevision: revB
+        })
+      });
+      assert.equal(saveB2.status, 200);
+    }
+
+    // Verify per-directory retention: each dirHash should have at most 1 backup
+    const entriesAfter = await fs.readdir(backupDir);
+    const matchingA = entriesAfter.filter((e) => e.endsWith('_services.yaml') && e.includes(`_${hashes[0]}_`));
+    const matchingB = entriesAfter.filter((e) => e.endsWith('_services.yaml') && e.includes(`_${hashes[1]}_`));
+    assert.ok(matchingA.length <= 1, `Expected at most 1 backup for dirA, got ${matchingA.length}`);
+    assert.ok(matchingB.length <= 1, `Expected at most 1 backup for dirB, got ${matchingB.length}`);
+    assert.ok(entriesAfter.includes('250723_services.yaml'), 'Legacy backups must not be pruned as another directory\'s backups');
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => child.once('exit', resolve));

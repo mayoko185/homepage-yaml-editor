@@ -339,6 +339,51 @@ test('nested group edit dialog hides convert button and tab location', async ({ 
   await expect(page.locator('#preview-edit-group-location')).toBeHidden();
 });
 
+test('rejects nested-group drag and drop across parent scopes', async ({ page }) => {
+  const services = `- Main:
+    - Parent A:
+        - Child A:
+            - Alpha:
+                href: https://alpha.test
+- Other:
+    - Parent B:
+        - Child B:
+            - Beta:
+                href: https://beta.test
+`;
+  await setEditorValue(page, services);
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  const nestedGroups = page.locator('.dashboard-nested-group');
+  await expect(nestedGroups).toHaveCount(4);
+  const dragItems = await nestedGroups.evaluateAll((elements) => elements.map((element) => ({
+    name: element.querySelector('.preview-jump-target')?.textContent.trim(),
+    scope: element.dataset.previewDragScope
+  })));
+  expect(dragItems).toEqual([
+    { name: 'Parent A', scope: 'group-Main-0' },
+    { name: 'Child A', scope: 'group-Main-0/nested-Parent A-0' },
+    { name: 'Parent B', scope: 'group-Other-0' },
+    { name: 'Child B', scope: 'group-Other-0/nested-Parent B-0' }
+  ]);
+
+  const sourceIndex = await nestedGroups.evaluateAll((elements) => elements.findIndex((element) => (
+    element.querySelector(':scope > .dashboard-nested-group-title > .preview-jump-target')?.textContent.trim() === 'Child A'
+  )));
+  const destinationIndex = await nestedGroups.evaluateAll((elements) => elements.findIndex((element) => (
+    element.querySelector(':scope > .dashboard-nested-group-title > .preview-jump-target')?.textContent.trim() === 'Child B'
+  )));
+  expect(sourceIndex).toBeGreaterThanOrEqual(0);
+  expect(destinationIndex).toBeGreaterThanOrEqual(0);
+  const source = nestedGroups.nth(sourceIndex);
+  const destination = nestedGroups.nth(destinationIndex);
+  const originalServices = await getEditorValue(page);
+  await source.dragTo(destination);
+  await page.waitForTimeout(300);
+  expect(await getEditorValue(page)).toBe(originalServices);
+});
+
 test('adds a nested group option, saves, reloads, and verifies it persists', async ({ page }) => {
   const services = `- Main:
     - SubGroup:

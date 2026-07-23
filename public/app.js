@@ -3213,6 +3213,9 @@
             }
             const values = { name, fields };
             const operation = { type: action, target: source, values };
+            if (action === 'group.add' || action === 'group.edit') {
+                operation.groupOptionNames = getOptionDefinitionsForTarget('group').map((definition) => definition.name);
+            }
             let destinationGroupName = '';
             if (action === 'service.edit' && previewEditDialogState.serviceGroupChoices?.length) {
                 const selectedIndex = Number(document.getElementById('preview-edit-service-group').value);
@@ -5152,8 +5155,9 @@
                         : '';
                     const isCollapsed = isInitiallyCollapsed(nestedLayout);
                     const nestedGroupClass = 'dashboard-nested-group' + (nestedIsCommented ? ' dashboard-nested-group--commented' : '');
+                    const nestedScope = parentPath.reduce((acc, step) => `${acc}/nested-${step.name}-${step.index}`, `group-${groupName}-${groupIndex}`);
                     const nestedGroupDragAttrs = previewEditMode && !nestedIsCommented
-                        ? `${getDragItemAttributes('nested-group', nestedGroupSource.servicesSource, entryIndex)} data-preview-drop-kind="nested-group" data-preview-drop-index="${entryIndex}"`
+                        ? `${getDragItemAttributes('nested-group', nestedGroupSource.servicesSource, entryIndex, nestedScope)} data-preview-drop-kind="nested-group" data-preview-drop-index="${entryIndex}"`
                         : '';
                     return `<details class="${nestedGroupClass}" ${nestedGroupDragAttrs} ${getPreviewLayoutAttributes(nestedLayout)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-nested-group-title">${nestedIcon}<span class="preview-jump-target" ${getSourceAttributes(nestedGroupSource)} ${nestedGroupTooltip}>${escapeHtml(nestedName)}</span>${nestedGroupEditControls}</summary>${serviceCardsGrid}${nestedChildren}</details>`;
                 }).join('');
@@ -5197,7 +5201,7 @@
                     ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.filter((e) => !e.__commented && !isNestedServiceGroup(e)).length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                     : '';
                 const groupClass = 'dashboard-group' + (groupIsCommented ? ' dashboard-group--commented' : '');
-                const addSubGroupButton = previewEditMode
+                const addSubGroupButton = previewEditMode && !groupIsCommented
                     ? `<button type="button" class="preview-add-button preview-add-group" data-preview-action="group.add" ${getSourceAttributes({ tab: 'services', kind: 'services-group', groupName, groupIndex, nestedGroupPath: [] })}><span aria-hidden="true">+</span> Add service group</button>`
                     : '';
                 if (hasNestedGroups) {

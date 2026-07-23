@@ -210,16 +210,21 @@ async function writeJsonAtomically(filePath, value) {
 
 async function loadOptionDefinitions() {
   try {
-    return normalizeOptionDefinitions(JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8')));
+    const definitions = normalizeOptionDefinitions(JSON.parse(await fs.readFile(OPTION_TYPES_PATH, 'utf8')));
+    app.locals.optionDefinitions = definitions;
+    return definitions;
   } catch (error) {
     if (error.code !== 'ENOENT') console.warn('Could not read option type definitions:', error.message);
-    return getDefaultOptionDefinitions();
+    const defaults = getDefaultOptionDefinitions();
+    app.locals.optionDefinitions = defaults;
+    return defaults;
   }
 }
 
 async function saveOptionDefinitions(definitions) {
   const normalized = normalizeOptionDefinitions(definitions);
   await writeJsonAtomically(OPTION_TYPES_PATH, normalized);
+  app.locals.optionDefinitions = normalized;
   return normalized;
 }
 
@@ -545,6 +550,23 @@ function isValidConfigFile(filename) {
   return typeof filename === 'string' && ALLOWED_CONFIG_FILES.has(filename.toLowerCase());
 }
 
+function parseBackupFilename(filename) {
+  const parts = filename.split('_');
+  if (parts.length === 2 && /^\d+$/.test(parts[0]) && isValidConfigFile(parts[1])) {
+    return { filename: parts[1], dirHash: null };
+  }
+  if (
+    parts.length === 4
+    && /^\d+$/.test(parts[0])
+    && /^[a-f0-9]{8}$/i.test(parts[1])
+    && /^[a-f0-9]{4}$/i.test(parts[2])
+    && isValidConfigFile(parts[3])
+  ) {
+    return { filename: parts[3], dirHash: parts[1].toLowerCase() };
+  }
+  return null;
+}
+
 function resolveConfigFilePath(dirPath, filename) {
   if (!isValidConfigFile(filename)) {
     const supportedFiles = CONFIG_BASE_NAMES.flatMap((baseName) => CONFIG_EXTENSIONS.map((extension) => `${baseName}${extension}`));
@@ -728,32 +750,63 @@ async function replaceConfigFileAtomically(filePath, content, { mode, expectedDi
   }
 }
 
-async function createBackup(backupDir, filename, content, maxBackups) {
-  await fs.mkdir(backupDir, { recursive: true });
+async function createBackup(backupDir, filename, content, maxBackups, sourceDir) {
+  await fs.mkdir(backupDir, { recursive: true, mode: 0o700 });
+  // Harden existing backup directory (mkdir mode only applies on creation)
+  try {
+    await fs.chmod(backupDir, 0o700);
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.warn('Could not set backup directory permissions:', error.message);
+  }
   const now = new Date();
   const timestamp = String(now.getFullYear()).slice(2)
     + String(now.getMonth() + 1).padStart(2, '0')
     + String(now.getDate()).padStart(2, '0')
     + String(now.getHours()).padStart(2, '0')
     + String(now.getMinutes()).padStart(2, '0')
-    + String(now.getSeconds()).padStart(2, '0');
-  const backupPath = path.join(backupDir, `${timestamp}_${filename}`);
-  await fs.writeFile(backupPath, content, 'utf8');
-  const prefix = `*_${filename}`;
+    + String(now.getSeconds()).padStart(2, '0')
+    + String(now.getMilliseconds()).padStart(3, '0');
+  const dirHash = crypto.createHash('md5').update(sourceDir || '').digest('hex').slice(0, 8);
+  const randomSuffix = crypto.randomUUID().slice(0, 4);
+  const backupPath = path.join(backupDir, `${timestamp}_${dirHash}_${randomSuffix}_${filename}`);
+  await fs.writeFile(backupPath, content, { encoding: 'utf8', mode: 0o600 });
   let entries;
   try {
     entries = await fs.readdir(backupDir);
-  } catch {
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.warn('Could not read backup directory for cleanup:', error.message);
     return;
   }
+  // Harden permissions on existing backup files only (skip directories, unrelated files)
+  await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(backupDir, entry);
+      try {
+        const stat = await fs.stat(entryPath);
+        if (stat.isFile() && parseBackupFilename(entry)) {
+          await fs.chmod(entryPath, 0o600);
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') console.warn('Could not set backup file permissions:', error.message);
+      }
+    })
+  );
+
   const matching = entries
-    .filter((entry) => entry.endsWith(`_${filename}`))
+    .filter((entry) => {
+      const backup = parseBackupFilename(entry);
+      return backup
+        && backup.filename.toLowerCase() === filename.toLowerCase()
+        && backup.dirHash === dirHash;
+    })
     .sort()
     .reverse();
   if (matching.length > maxBackups) {
     await Promise.all(
       matching.slice(maxBackups).map((entry) =>
-        fs.unlink(path.join(backupDir, entry)).catch(() => undefined)
+        fs.unlink(path.join(backupDir, entry)).catch((error) => {
+          if (error.code !== 'ENOENT') console.warn('Could not remove old backup:', error.message);
+        })
       )
     );
   }
@@ -772,7 +825,7 @@ async function saveConfigFile(dirPath, filename, content, { expectedRevision, ba
     throw createConfigConflictError(currentState.revision);
   }
   if (backupDir && currentState.content !== null) {
-    await createBackup(backupDir, filename, currentState.content, backupCount);
+    await createBackup(backupDir, filename, currentState.content, backupCount, dirPath);
   }
   const result = await replaceConfigFileAtomically(filePath, yamlContent, {
     mode: currentState.mode,
@@ -890,7 +943,20 @@ app.get('/api/startup-directory', async (req, res) => {
 
 app.post('/api/yaml/transform', (req, res) => {
   try {
-    return res.json(transformPreviewYaml(req.body));
+    const body = req.body;
+    const operation = body && body.operation;
+    if (operation && ['group.add', 'group.edit', 'group.rename'].includes(operation.type)) {
+      const definitions = app.locals.optionDefinitions || [];
+      const serverGroupOptionNames = definitions
+        .filter((definition) => definition.appliesTo.includes('group'))
+        .map((definition) => definition.name);
+      if (Array.isArray(operation.groupOptionNames)) {
+        operation.groupOptionNames = [...new Set([...operation.groupOptionNames, ...serverGroupOptionNames])];
+      } else {
+        operation.groupOptionNames = serverGroupOptionNames;
+      }
+    }
+    return res.json(transformPreviewYaml(body));
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       error: error.statusCode ? 'Could not apply edit' : 'Edit failed unexpectedly',
@@ -975,6 +1041,7 @@ async function startServer() {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.mkdir(APP_DATA_DIR, { recursive: true });
   await ensureOptionDefinitions();
+  await loadOptionDefinitions();
   await applyStartupDirectoryLoad();
   return new Promise((resolve, reject) => {
     const server = app.listen(PORT, () => {

@@ -1,5 +1,14 @@
 const YAML = require('yaml');
 
+const GROUP_OPTION_NAMES = new Set(['header', 'useEqualHeights', 'style', 'columns', 'tab', 'icon']);
+
+function getReservedGroupOptionNames(operation) {
+  if (Array.isArray(operation?.groupOptionNames) && operation.groupOptionNames.length > 0) {
+    return new Set([...GROUP_OPTION_NAMES, ...operation.groupOptionNames]);
+  }
+  return GROUP_OPTION_NAMES;
+}
+
 class YamlTransformError extends Error {
   constructor(message, statusCode = 400) {
     super(message);
@@ -560,7 +569,7 @@ function getOrCreateGroupLayoutMap(settingsDocument, target) {
   return topLayoutMap;
 }
 
-function syncLayoutRename(settingsDocument, oldName, newName, target) {
+function syncLayoutRename(settingsDocument, oldName, newName, target, servicesSequence) {
   const layoutMap = getLayoutMap(settingsDocument);
   if (!layoutMap) return false;
   if (Array.isArray(target?.nestedGroupPath) && target.nestedGroupPath.length > 0) {
@@ -572,10 +581,18 @@ function syncLayoutRename(settingsDocument, oldName, newName, target) {
       // Not under parent yet — check top level (migration from old layout storage)
       const topLevelEntry = findLayoutPair(layoutMap, oldName);
       if (topLevelEntry) {
-        // Move the entry from top level into the parent's map
-        const [moved] = layoutMap.items.splice(topLevelEntry.index, 1);
-        parentEntry.pair.value.items.push(moved);
-        layoutEntry = findLayoutPair(parentEntry.pair.value, oldName);
+        // Only move the entry if no real top-level service group has this name
+        const topLevelGroupExists = servicesSequence && servicesSequence.items.some((item) => {
+          if (!YAML.isMap(item)) return false;
+          const k = item.items[0]?.key;
+          return k && scalarValue(k) === oldName;
+        });
+        if (!topLevelGroupExists) {
+          // Move the entry from top level into the parent's map
+          const [moved] = layoutMap.items.splice(topLevelEntry.index, 1);
+          parentEntry.pair.value.items.push(moved);
+          layoutEntry = findLayoutPair(parentEntry.pair.value, oldName);
+        }
       }
     }
     if (layoutEntry && YAML.isScalar(layoutEntry.pair.key)) {
@@ -818,8 +835,9 @@ function removeGroupOptionDefinitions(settingsDocument, definitions, servicesSeq
     })
   );
   layoutMap.items.forEach((pair) => {
-    if (removeMapOptions(pair.value, groupOptions)) changed = true;
-    // Only descend into nested group layout entries (layout[parent][nested])
+    // Compute nested group names before filtering, so we don't accidentally
+    // remove a nested group whose name collides with a group option name.
+    const nestedNames = new Set();
     if (YAML.isMap(pair.value) && YAML.isSeq(servicesSequence)) {
       const groupName = scalarValue(pair.key);
       const groupItem = servicesSequence.items.find((item) => {
@@ -827,7 +845,6 @@ function removeGroupOptionDefinitions(settingsDocument, definitions, servicesSeq
         const k = item.items[0]?.key;
         return k && scalarValue(k) === groupName;
       });
-      const nestedNames = new Set();
       if (groupItem) {
         const groupValue = groupItem.items[0]?.value;
         if (YAML.isSeq(groupValue)) {
@@ -838,13 +855,26 @@ function removeGroupOptionDefinitions(settingsDocument, definitions, servicesSeq
           });
         }
       }
+    }
+    // Remove all group options from the top-level layout entry, including
+    // map-valued options (e.g. customMapping). Nested-group entries are not
+    // group options — their keys are group names, not option names — so they
+    // are never removed. Skip non-map entries (e.g. null/scalar values).
+    if (YAML.isMap(pair.value)) {
+      const topLen = pair.value.items.length;
+      pair.value.items = pair.value.items.filter((item) => {
+        const name = scalarValue(item.key);
+        return !groupOptions.has(name) || nestedNames.has(name);
+      });
+      if (pair.value.items.length !== topLen) changed = true;
+    }
+    // Only descend into nested group layout entries (layout[parent][nested])
+    if (YAML.isMap(pair.value) && YAML.isSeq(servicesSequence)) {
       pair.value.items.forEach((nestedPair) => {
         // A nested group layout entry is always a map. Group options are
         // scalars (text, boolean, tab), so skip scalar entries.
         if (!YAML.isMap(nestedPair.value)) return;
         const key = scalarValue(nestedPair.key);
-        // Skip known group option names — they are scalars, not nested groups.
-        if (groupOptions.has(key)) return;
         // Only descend into entries that are actual nested groups (present
         // in the services sequence) or entries
         // whose value contains only known option keys and at least one group
@@ -916,6 +946,9 @@ function transformPreviewYaml({ files, operation }) {
     case 'option-types.remove': {
       if (!Array.isArray(operation.options)) {
         throw new YamlTransformError('Removed option types must be provided as a list');
+      }
+      if (!Array.isArray(operation.allOptionNames)) {
+        throw new YamlTransformError('All option names are required when removing option types');
       }
       const definitions = operation.options.map((definition) => ({
         name: requireName(definition && definition.name, 'Removed option'),
@@ -1015,6 +1048,9 @@ function transformPreviewYaml({ files, operation }) {
     case 'group.add': {
       const name = requireName(values.name, 'Group');
       const isSubGroup = Array.isArray(target.nestedGroupPath);
+      if (isSubGroup && getReservedGroupOptionNames(operation).has(name)) {
+        throw new YamlTransformError(`Sub-group name "${name}" conflicts with a group option name. Choose a different name`);
+      }
       const sequence = isSubGroup
         ? resolveServiceSequence(servicesDocument, target, { createIfMissing: true })
         : servicesSequence;
@@ -1053,9 +1089,12 @@ function transformPreviewYaml({ files, operation }) {
           throw new YamlTransformError(`Group "${name}" already exists. Choose a different group name`);
         }
       }
+      if (found.isNested && getReservedGroupOptionNames(operation).has(name)) {
+        throw new YamlTransformError(`Sub-group name "${name}" conflicts with a group option name. Choose a different name`);
+      }
       if (YAML.isScalar(found.pair.key)) found.pair.key.value = name;
       servicesChanged = true;
-      settingsChanged = syncLayoutRename(settingsDocument, oldName, name, target);
+      settingsChanged = syncLayoutRename(settingsDocument, oldName, name, target, servicesSequence);
       if (operation.type === 'group.edit' && Array.isArray(values.fields)) {
         const fields = normalizeEditableFields(values.fields);
         const layoutMap = getOrCreateGroupLayoutMap(settingsDocument, target);

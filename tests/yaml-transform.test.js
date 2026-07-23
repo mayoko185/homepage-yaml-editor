@@ -298,7 +298,8 @@ test('removes deleted option types from every applicable YAML target', () => {
       { name: 'key', appliesTo: ['widget'] },
       { name: 'tab', appliesTo: ['group'] },
       { name: 'abbr', appliesTo: ['bookmark'] }
-    ]
+    ],
+    allOptionNames: ['description', 'key', 'tab', 'abbr', 'icon', 'href', 'target', 'showStats', 'showLabel', 'showStatus', 'showTime', 'showName', 'hideVersion', 'siteMonitor', 'statusStyle', 'header', 'useEqualHeights', 'style', 'columns', 'type', 'fields', 'url', 'enableBlocks', 'widget']
   }, { services, settings, bookmarks });
   const parsedServices = YAML.parse(files.services);
   const parsedSettings = YAML.parse(files.settings);
@@ -1401,6 +1402,91 @@ layout:
   assert.match(files.settings, /keep this settings comment/);
 });
 
+test('removes map-valued group options from top-level layout entries', () => {
+  // Regression: a group option whose value is a map (e.g. customMapping)
+  // must be removed from the top-level layout, not preserved because it
+  // happens to be a map. Only actual nested-group entries are preserved.
+  const services = `- Top Group:
+    - Direct Service:
+        href: https://direct.example
+    - Inner Group:
+        - Inner Service A:
+            href: https://a.example
+`;
+  const settings = `layout:
+  Top Group:
+    tab: Main
+    customMapping:
+      columns: 2
+    Inner Group:
+      icon: inner.png
+      columns: 2
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] },
+      { name: 'columns', appliesTo: ['group'] },
+      { name: 'customMapping', appliesTo: ['group'] }
+    ],
+    allOptionNames: ['icon', 'columns', 'customMapping', 'tab']
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Map-valued group option must be removed from top-level
+  assert.equal(parsedSettings.layout['Top Group'].customMapping, undefined);
+  // Scalar group options must also be removed
+  assert.equal(parsedSettings.layout['Top Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].columns, undefined);
+  // Non-removed options must be preserved
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+  // Nested group must be preserved
+  assert.ok(parsedSettings.layout['Top Group']['Inner Group']);
+  // Nested group's options must still be removed
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].columns, undefined);
+});
+
+test('preserves nested group layout when its name collides with a removed group option name', () => {
+  // Regression: a nested group named "icon" or "columns" (same as a group
+  // option) must not have its layout entry deleted when that option type is
+  // removed. The top-level filter must check nested group names first.
+  const services = `- Top Group:
+    - Direct Service:
+        href: https://direct.example
+    - icon:
+        - Icon Service:
+            href: https://icon.example
+    - columns:
+        - Column Service:
+            href: https://column.example
+`;
+  const settings = `layout:
+  Top Group:
+    tab: Main
+    icon:
+      icon: service-icon.png
+    columns:
+      columns: 3
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] },
+      { name: 'columns', appliesTo: ['group'] }
+    ],
+    allOptionNames: ['icon', 'columns', 'tab']
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Nested groups named after removed options must be preserved
+  assert.ok(parsedSettings.layout['Top Group']['icon'], 'nested group "icon" must be preserved');
+  assert.ok(parsedSettings.layout['Top Group']['columns'], 'nested group "columns" must be preserved');
+  // Their own group options must still be removed
+  assert.equal(parsedSettings.layout['Top Group']['icon'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group']['columns'].columns, undefined);
+  // Non-removed options must be preserved
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+});
+
 test('removes group option types from nested layout entries when parent group is absent from services', () => {
   // The parent group "Top Group" is commented out in services, so the
   // services sequence has no entry for it. The fallback must still identify
@@ -1478,7 +1564,8 @@ layout:
     options: [
       { name: 'icon', appliesTo: ['group'] },
       { name: 'columns', appliesTo: ['group'] }
-    ]
+    ],
+    allOptionNames: ['icon', 'columns', 'tab', 'header', 'useEqualHeights', 'style']
   }, { services, settings });
   const parsedSettings = YAML.parse(files.settings);
   // Active top-level group options must be removed
@@ -1520,7 +1607,8 @@ layout:
     options: [
       { name: 'icon', appliesTo: ['group'] },
       { name: 'columns', appliesTo: ['group'] }
-    ]
+    ],
+    allOptionNames: ['icon', 'columns', 'tab', 'header', 'useEqualHeights', 'style']
   }, { services, settings });
   const parsedSettings = YAML.parse(files.settings);
   // Top-level group options on the active parent must be removed
@@ -1533,4 +1621,199 @@ layout:
   // Unrelated group must keep its non-removed options
   assert.equal(parsedSettings.layout['Other Group'].tab, 'Other');
   assert.match(files.settings, /keep this settings comment/);
+});
+
+test('handles option-types.remove when a layout entry has a null/scalar value', () => {
+  // Regression: layout entries like `Group: null` or `Group: someString`
+  // must not throw TypeError when pair.value is not a Map.
+  const services = `- Top Group:
+    - Service A:
+        href: https://a.example
+`;
+  const settings = `layout:
+  Top Group:
+    tab: Main
+    icon: old-icon
+  Disabled Group: null
+  Legacy Group: just-a-string
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] }
+    ],
+    allOptionNames: ['icon', 'tab']
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Normal group still has its options removed
+  assert.equal(parsedSettings.layout['Top Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+  // Null/scalar entries are preserved as-is
+  assert.equal(parsedSettings.layout['Disabled Group'], null);
+  assert.equal(parsedSettings.layout['Legacy Group'], 'just-a-string');
+});
+
+test('rejects option-types.remove without allOptionNames', () => {
+  assert.throws(() => transform({
+    type: 'option-types.remove',
+    options: [{ name: 'description', appliesTo: ['service'] }]
+  }), /All option names are required/);
+});
+
+test('rejects creating a sub-group with a reserved group option name', () => {
+  assert.throws(() => transform({
+    type: 'group.add',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'icon', fields: [] }
+  }, { services: nestedServices, settings: nestedSettings }), /conflicts with a group option name/);
+});
+
+test('rejects renaming a nested group to a reserved group option name', () => {
+  assert.throws(() => transform({
+    type: 'group.rename',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'columns' }
+  }, { services: nestedServices, settings: nestedSettings }), /conflicts with a group option name/);
+});
+
+test('renames a nested group without stealing a top-level group layout with the same old name', () => {
+  const services = `- Top Group:
+    - Inner Group:
+        - Service A:
+            href: https://a.example
+- Inner Group:
+    - Top-level Service:
+        href: https://top.example
+`;
+  const settings = `title: Test
+layout:
+  Top Group:
+    tab: Main
+  Inner Group:
+    tab: Other
+`;
+  const files = transform({
+    type: 'group.rename',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] },
+    values: { name: 'Renamed Inner' }
+  }, { services, settings });
+  const parsedServices = YAML.parse(files.services);
+  const parsedSettings = YAML.parse(files.settings);
+  assert.equal(Object.keys(parsedServices[0]['Top Group'][0])[0], 'Renamed Inner');
+  assert.equal(Object.keys(parsedServices[1])[0], 'Inner Group');
+  assert.deepEqual(parsedSettings.layout['Inner Group'], { tab: 'Other' });
+  assert.equal(parsedSettings.layout['Top Group']['Renamed Inner'], undefined);
+});
+
+test('renaming a nested group to its own name is a no-op and does not throw', () => {
+  const services = `- Top Group:
+    - Inner Group:
+        - Service A:
+            href: https://a.example
+`;
+  const settings = `title: Test
+layout:
+  Top Group:
+    tab: Main
+    Inner Group:
+      icon: inner.png
+`;
+  const files = transform({
+    type: 'group.rename',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] },
+    values: { name: 'Inner Group' }
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Layout entry must survive unchanged
+  assert.deepEqual(parsedSettings.layout['Top Group']['Inner Group'], { icon: 'inner.png' });
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+});
+
+test('reorders a nested group via destinationIndex (browser drag/drop path)', () => {
+  const services = `- Top Group:
+    - Inner B:
+        - Service B:
+            href: https://b.example
+    - Inner A:
+        - Service A:
+            href: https://a.example
+    - Direct:
+        href: https://direct.example
+`;
+  const settings = `title: Test
+layout:
+  Top Group:
+    tab: Main
+    Inner B:
+      icon: b.png
+    Inner A:
+      icon: a.png
+`;
+  const files = transform({
+    type: 'group.move',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner B', index: 0 }] },
+    destinationIndex: 1
+  }, { services, settings });
+  const parsed = YAML.parse(files.services);
+  const entries = parsed[0]['Top Group'].map((e) => Object.keys(e)[0]);
+  assert.deepEqual(entries, ['Inner A', 'Inner B', 'Direct'], 'nested groups reordered via destinationIndex');
+  const parsedSettings = YAML.parse(files.settings);
+  assert.deepEqual(parsedSettings.layout['Top Group']['Inner A'], { icon: 'a.png' });
+  assert.deepEqual(parsedSettings.layout['Top Group']['Inner B'], { icon: 'b.png' });
+});
+
+test('moves a service between nested groups under different parent paths', () => {
+  const services = `- Parent A:
+    - Group A1:
+        - Service A:
+            href: https://a.example
+- Parent B:
+    - Group B1:
+        - Service B:
+            href: https://b.example
+`;
+  const files = transform({
+    type: 'service.move',
+    target: { groupName: 'Parent A', groupIndex: 0, nestedGroupPath: [{ name: 'Group A1', index: 0 }], serviceName: 'Service A', serviceIndex: 0 },
+    destinationTarget: { groupName: 'Parent B', groupIndex: 0, nestedGroupPath: [{ name: 'Group B1', index: 0 }] },
+    destinationIndex: 0
+  }, { services });
+  const parsed = YAML.parse(files.services);
+  const parentB = parsed[1]['Parent B'];
+  const groupB1 = parentB.find((entry) => Object.keys(entry)[0] === 'Group B1')['Group B1'];
+  assert.equal(Object.keys(groupB1[0])[0], 'Service A');
+  assert.equal(Object.keys(groupB1[1])[0], 'Service B');
+  const parentA = parsed[0]['Parent A'];
+  const groupA1 = parentA.find((entry) => Object.keys(entry)[0] === 'Group A1')['Group A1'];
+  assert.equal(groupA1.length, 0);
+});
+
+test('rejects creating a sub-group with a custom group option name from groupOptionNames', () => {
+  assert.throws(() => transform({
+    type: 'group.add',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'customFlag', fields: [] },
+    groupOptionNames: ['customFlag', 'customMapping']
+  }, { services: nestedServices, settings: nestedSettings }), /conflicts with a group option name/);
+});
+
+test('rejects renaming a nested group to a custom group option name from groupOptionNames', () => {
+  assert.throws(() => transform({
+    type: 'group.rename',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'customMapping' },
+    groupOptionNames: ['customFlag', 'customMapping']
+  }, { services: nestedServices, settings: nestedSettings }), /conflicts with a group option name/);
+});
+
+test('allows creating a sub-group with a custom group option name when groupOptionNames is not provided', () => {
+  const files = transform({
+    type: 'group.add',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: nestedPath },
+    values: { name: 'customFlag', fields: [] }
+  }, { services: nestedServices, settings: nestedSettings });
+  const parsed = YAML.parse(files.services);
+  const innerGroup = parsed[0]['Top Group'].find((entry) => Object.keys(entry)[0] === 'Inner Group')['Inner Group'];
+  const customFlag = innerGroup.find((entry) => Object.keys(entry)[0] === 'customFlag');
+  assert.ok(customFlag, 'customFlag sub-group must be created when groupOptionNames is absent');
 });
