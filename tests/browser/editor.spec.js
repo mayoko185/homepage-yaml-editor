@@ -5,6 +5,7 @@ const { test, expect } = require('@playwright/test');
 
 const configDir = process.env.HOMEPAGE_BROWSER_TEST_DIR;
 const servicesPath = path.join(configDir, 'services.yaml');
+const settingsPath = path.join(configDir, 'settings.yaml');
 const baseServices = '- Main:\n    - Alpha:\n        href: https://example.test\n        description: First service\n';
 const consoleErrorsByPage = new WeakMap();
 
@@ -249,4 +250,138 @@ test('comment an option, save, reopen, and verify it remains commented and non-m
   // Verify it still has no move-up/move-down buttons
   await expect(reopenedRow.locator('.preview-edit-move-up')).toHaveCount(0);
   await expect(reopenedRow.locator('.preview-edit-move-down')).toHaveCount(0);
+});
+
+test('adds a nested widget option, saves, reopens, and verifies it persists', async ({ page }) => {
+  const yaml = `- Main:
+    - Alpha:
+        href: https://alpha.test
+        widget:
+          type: customapi
+`;
+  await fs.writeFile(servicesPath, yaml, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  // Open the edit dialog for Alpha
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).hover();
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).locator('.preview-edit-modify').click();
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  // Find the widget nested options container
+  const widgetNested = page.locator('[data-preview-option-row]').filter({ hasText: 'widget' }).locator('[data-preview-nested-options]');
+  await expect(widgetNested).toBeVisible();
+
+  // Add a nested option inside widget
+  await widgetNested.locator('[data-preview-option-add-child]').click();
+  await page.waitForTimeout(300);
+
+  // Select "key" from the new row's key dropdown
+  const newOptionRow = widgetNested.locator('[data-preview-option-row]').last();
+  await newOptionRow.locator('[data-preview-option-key]').selectOption('key');
+  await page.waitForTimeout(300);
+
+  // Fill the value
+  await newOptionRow.locator('.preview-edit-option-value').fill('my-api-key');
+
+  // Save the edit
+  await page.locator('#preview-edit-submit').click();
+  await expect(page.locator('#preview-edit-modal')).not.toBeVisible();
+
+  // Save the file
+  await page.locator('#save-config-button').click();
+  await expect(page.locator('#save-status')).toContainText('Saved');
+
+  // Reopen the page
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  // Open the edit dialog again
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).hover();
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).locator('.preview-edit-modify').click();
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  // The widget section should still have the key option with the saved value
+  const reopenedWidgetNested = page.locator('[data-preview-option-row]').filter({ hasText: 'widget' }).locator('[data-preview-nested-options]');
+  const keyRow = reopenedWidgetNested.locator('[data-preview-option-row]', { hasText: 'key' });
+  await expect(keyRow).toBeVisible();
+  await expect(keyRow.locator('.preview-edit-option-value')).toHaveValue('my-api-key');
+});
+
+test('nested group edit dialog hides convert button and tab location', async ({ page }) => {
+  const services = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+        - Beta:
+            href: https://beta.test
+`;
+  await fs.writeFile(servicesPath, services, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  // Open the edit dialog for the nested group SubGroup
+  const nestedGroup = page.locator('.dashboard-nested-group', { hasText: 'SubGroup' });
+  await expect(nestedGroup).toBeVisible();
+  await nestedGroup.locator('.dashboard-nested-group-title .preview-edit-modify').click({ force: true });
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  // The convert button must not be present in the DOM
+  await expect(page.locator('#preview-edit-group-convert')).toHaveCount(0);
+
+  // The tab location section must be hidden
+  await expect(page.locator('#preview-edit-group-location')).toBeHidden();
+});
+
+test('adds a nested group option, saves, reloads, and verifies it persists', async ({ page }) => {
+  const services = `- Main:
+    - SubGroup:
+        - Alpha:
+            href: https://alpha.test
+`;
+  const settings = `title: Browser Test
+layout:
+  Main:
+    style: row
+    columns: 2
+`;
+  await fs.writeFile(servicesPath, services, 'utf8');
+  await fs.writeFile(settingsPath, settings, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  const nestedGroup = page.locator('.dashboard-nested-group', { hasText: 'SubGroup' });
+  await expect(nestedGroup).toBeVisible();
+  await nestedGroup.locator('.dashboard-nested-group-title .preview-edit-modify').click({ force: true });
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  await page.locator('#preview-edit-add-option').click();
+  const newGroupOption = page.locator('#preview-edit-options > [data-preview-option-row]').last();
+  await newGroupOption.locator('[data-preview-option-key]').selectOption('columns');
+  await newGroupOption.locator('.preview-edit-option-value').fill('3');
+  await page.locator('#preview-edit-submit').click();
+  await expect(page.locator('#preview-edit-modal')).not.toBeVisible();
+
+  await page.locator('#save-config-button').click();
+  await expect(page.locator('#save-status')).toContainText('Saved');
+
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+  await page.locator('.dashboard-nested-group', { hasText: 'SubGroup' })
+    .locator('.dashboard-nested-group-title .preview-edit-modify').click({ force: true });
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  const reopenedGroupOption = page.locator('#preview-edit-options > [data-preview-option-row]').last();
+  await expect(reopenedGroupOption.locator('[data-preview-option-key]')).toHaveText('columns');
+  await expect(reopenedGroupOption.locator('.preview-edit-option-value')).toHaveValue('3');
 });

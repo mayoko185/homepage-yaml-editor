@@ -4,3 +4,4 @@ node_modules/
 playwright-report/
 test-results/
 .atl/
+data/settings.json

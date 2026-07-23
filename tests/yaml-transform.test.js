@@ -654,8 +654,8 @@ test('edits, moves and removes nested service groups while keeping layout in syn
   let parsedSettings = YAML.parse(files.settings);
   const topEntries = parsedServices[0]['Top Group'];
   assert.ok(topEntries.some((entry) => Object.keys(entry)[0] === 'Renamed Inner'));
-  assert.equal(parsedSettings.layout['Renamed Inner'].icon, 'updated.png');
-  assert.equal(parsedSettings.layout['Renamed Inner'].columns, 3);
+  assert.equal(parsedSettings.layout['Top Group']['Renamed Inner'].icon, 'updated.png');
+  assert.equal(parsedSettings.layout['Top Group']['Renamed Inner'].columns, 3);
   assert.equal(parsedSettings.layout['Inner Group'], undefined);
   assert.match(files.services, /nested services comment/);
 
@@ -679,6 +679,43 @@ test('edits, moves and removes nested service groups while keeping layout in syn
   assert.deepEqual(remaining, ['Direct Service', 'After Nested']);
   assert.equal(parsedSettings.layout['Renamed Inner'], undefined);
   assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+});
+
+test('removing a nested group does not delete a top-level group layout with the same name', () => {
+  const sameNameServices = `- Top Group:
+    - Inner:
+        href: https://inner.example
+    - Inner Group:
+        - Service A:
+            href: https://a.example
+- Inner Group:
+    href: https://top-inner.example
+`;
+  const sameNameSettings = `title: Same Name
+layout:
+  Top Group:
+    tab: Main
+    Inner:
+      icon: inner.png
+    Inner Group:
+      icon: nested.png
+  Inner Group:
+    tab: Other
+    columns: 2
+`;
+  const files = transform({
+    type: 'group.remove',
+    target: { groupName: 'Top Group', groupIndex: 0, nestedGroupPath: [{ name: 'Inner Group', index: 0 }] }
+  }, { services: sameNameServices, settings: sameNameSettings });
+  const parsedSettings = YAML.parse(files.settings);
+  // The top-level group "Inner Group" must keep its layout entry
+  assert.ok(parsedSettings.layout['Inner Group'], 'top-level group layout must survive');
+  assert.equal(parsedSettings.layout['Inner Group'].tab, 'Other');
+  assert.equal(parsedSettings.layout['Inner Group'].columns, 2);
+  // The nested group's layout under the parent must be gone
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'], undefined);
+  // A direct service's layout entry under the parent must survive
+  assert.deepEqual(parsedSettings.layout['Top Group']['Inner'], { icon: 'inner.png' });
 });
 
 test('rejects duplicate nested group names within the same parent', () => {
@@ -1352,4 +1389,184 @@ test('preserves commented-out groups when moving an active group', () => {
 
   assert.match(files.services, /# - Commented Group:/);
   assert.match(files.services, /#     - Service:/);
+});
+
+test('removes group option types from nested layout entries', () => {
+  const services = `- Top Group:
+    - Direct Service:
+        href: https://direct.example
+    - Inner Group:
+        - Inner Service A:
+            href: https://a.example
+`;
+  const settings = `# keep this settings comment
+title: Nested
+layout:
+  Top Group:
+    tab: Main
+    customMapping:
+      columns: 2
+    Inner Group:
+      icon: inner.png
+      columns: 2
+      customMapping:
+        columns: 3
+  Other Group:
+    tab: Other
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] },
+      { name: 'columns', appliesTo: ['group'] }
+    ],
+    allOptionNames: ['icon', 'columns', 'customMapping']
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Top-level group options must be removed
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+  assert.equal(parsedSettings.layout['Top Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].columns, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].customMapping.columns, 2);
+  // Nested group options must also be removed
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].columns, undefined);
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].customMapping.columns, 3);
+  // Unrelated group must keep its non-removed options
+  assert.equal(parsedSettings.layout['Other Group'].tab, 'Other');
+  assert.match(files.settings, /keep this settings comment/);
+});
+
+test('removes group option types from nested layout entries when parent group is absent from services', () => {
+  // The parent group "Top Group" is commented out in services, so the
+  // services sequence has no entry for it. The fallback must still identify
+  // its nested layout while preserving a retained mapping option.
+  const services = `# - Top Group:
+  #     - Direct Service:
+  #         href: https://direct.example
+  #     - Inner Group:
+  #         - Inner Service A:
+  #             href: https://a.example
+- Other Group:
+    - Service:
+        href: https://other.example
+`;
+  const settings = `# keep this settings comment
+title: Nested
+layout:
+  Top Group:
+    tab: Main
+    Inner Group:
+      icon: inner.png
+      customMapping:
+        columns: 2
+        label: keep
+  Other Group:
+    tab: Other
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] },
+      { name: 'columns', appliesTo: ['group'] }
+    ],
+    allOptionNames: ['icon', 'columns', 'customMapping']
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Top-level group options on the absent parent must still be removed
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+  assert.equal(parsedSettings.layout['Top Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].columns, undefined);
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].icon, undefined);
+  assert.deepEqual(parsedSettings.layout['Top Group']['Inner Group'].customMapping, {
+    columns: 2,
+    label: 'keep'
+  });
+  // Unrelated group must keep its non-removed options
+  assert.equal(parsedSettings.layout['Other Group'].tab, 'Other');
+  assert.match(files.settings, /keep this settings comment/);
+});
+
+test('removes group option types from a top-level group that is commented out in services', () => {
+  // "Inner Group" is commented out in services but has a top-level layout
+  // entry. The top-level cleanup (removeMapOptions on the layout pair value)
+  // must still remove its options.
+  const services = `- Top Group:
+    - Direct Service:
+        href: https://direct.example
+    # - Inner Group:
+    #     - Inner Service A:
+    #         href: https://a.example
+`;
+  const settings = `# keep this settings comment
+title: Nested
+layout:
+  Top Group:
+    tab: Main
+  Inner Group:
+    icon: inner.png
+    columns: 2
+  Other Group:
+    tab: Other
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] },
+      { name: 'columns', appliesTo: ['group'] }
+    ]
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Active top-level group options must be removed
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+  assert.equal(parsedSettings.layout['Top Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].columns, undefined);
+  // Commented-out top-level group's layout options must also be removed
+  assert.equal(parsedSettings.layout['Inner Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Inner Group'].columns, undefined);
+  // Unrelated group must keep its non-removed options
+  assert.equal(parsedSettings.layout['Other Group'].tab, 'Other');
+  assert.match(files.settings, /keep this settings comment/);
+});
+
+test('removes group option types from nested layout entries when the nested group is commented out in services', () => {
+  // The parent "Top Group" is active, but "Inner Group" is commented out
+  // in the services sequence. The layout entry for "Inner Group" nested
+  // under "Top Group" must still have its options cleaned up.
+  const services = `- Top Group:
+    - Direct Service:
+        href: https://direct.example
+    # - Inner Group:
+    #     - Inner Service A:
+    #         href: https://a.example
+`;
+  const settings = `# keep this settings comment
+title: Nested
+layout:
+  Top Group:
+    tab: Main
+    Inner Group:
+      icon: inner.png
+      columns: 2
+  Other Group:
+    tab: Other
+`;
+  const files = transform({
+    type: 'option-types.remove',
+    options: [
+      { name: 'icon', appliesTo: ['group'] },
+      { name: 'columns', appliesTo: ['group'] }
+    ]
+  }, { services, settings });
+  const parsedSettings = YAML.parse(files.settings);
+  // Top-level group options on the active parent must be removed
+  assert.equal(parsedSettings.layout['Top Group'].tab, 'Main');
+  assert.equal(parsedSettings.layout['Top Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group'].columns, undefined);
+  // Commented-out nested group's layout options must also be removed
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].icon, undefined);
+  assert.equal(parsedSettings.layout['Top Group']['Inner Group'].columns, undefined);
+  // Unrelated group must keep its non-removed options
+  assert.equal(parsedSettings.layout['Other Group'].tab, 'Other');
+  assert.match(files.settings, /keep this settings comment/);
 });

@@ -2339,13 +2339,17 @@
             const remainingNames = new Set(optionTypesToSave.map((definition) => definition.name.trim()));
             const removedDefinitions = Array.from(optionTypesRemovedDefinitions.values())
                 .filter((definition) => !remainingNames.has(definition.name));
+            const allOptionNames = [...new Set([
+                ...optionTypesToSave.map((definition) => definition.name.trim()),
+                ...removedDefinitions.map((definition) => definition.name)
+            ])];
             const saveButton = document.getElementById('option-types-save');
             saveButton.disabled = true;
             setOptionTypesStatus();
             try {
                 if (removedDefinitions.length > 0) {
                     const removedFromYaml = await applyPreviewEdit(
-                        { type: 'option-types.remove', options: removedDefinitions },
+                        { type: 'option-types.remove', options: removedDefinitions, allOptionNames },
                         `Removed deleted option type${removedDefinitions.length === 1 ? '' : 's'} from the loaded YAML.`
                     );
                     if (!removedFromYaml) throw new Error('Could not remove deleted option types from the loaded YAML');
@@ -2600,7 +2604,8 @@
             const select = document.getElementById('preview-edit-group-tab');
             const state = previewEditDialogState;
             const tabs = state?.availableTabs || [];
-            const visible = state?.action === 'group.edit' && tabs.length > 0;
+            const isNestedGroup = state?.action === 'group.edit' && Array.isArray(state?.source?.nestedGroupPath) && state.source.nestedGroupPath.length > 0;
+            const visible = state?.action === 'group.edit' && tabs.length > 0 && !isNestedGroup;
             section.hidden = !visible;
             if (!visible) {
                 select.innerHTML = '';
@@ -2623,13 +2628,15 @@
             }
             const source = state.source;
             const isNestedGroup = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0;
+            // Nested groups themselves should not show convert or sub-group controls
+            if (isNestedGroup) {
+                section.innerHTML = '';
+                section.hidden = true;
+                return;
+            }
             let entries;
             try {
-                if (isNestedGroup) {
-                    entries = findPreviewNestedGroup(source).entries;
-                } else {
-                    entries = findPreviewGroup(source).services;
-                }
+                entries = findPreviewGroup(source).services;
             } catch (error) {
                 section.innerHTML = `<p class="preview-edit-note">${escapeHtml(error.message)}</p>`;
                 return;
@@ -2639,7 +2646,7 @@
             const settings = parseTabConfig('settings');
             const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
                 ? settings.data.layout : {};
-            const groupName = isNestedGroup ? source.nestedGroupPath[source.nestedGroupPath.length - 1].name : source.groupName;
+            const groupName = source.groupName;
             const layoutConfig = layout[groupName];
             const columnsDefault = getNestedGroupColumns(layoutConfig);
             if (!hasNestedSubGroups) {

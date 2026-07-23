@@ -544,8 +544,47 @@ function findLayoutPair(layoutMap, groupName) {
   return index === -1 ? null : { pair: layoutMap.items[index], index };
 }
 
-function syncLayoutRename(settingsDocument, oldName, newName) {
-  const layoutEntry = findLayoutPair(getLayoutMap(settingsDocument), oldName);
+function getOrCreateGroupLayoutMap(settingsDocument, target) {
+  const topLayoutMap = getOrCreateLayoutMap(settingsDocument);
+  if (Array.isArray(target.nestedGroupPath) && target.nestedGroupPath.length > 0) {
+    let parentEntry = findLayoutPair(topLayoutMap, target.groupName);
+    if (!parentEntry) {
+      topLayoutMap.set(target.groupName, settingsDocument.createNode({}));
+      parentEntry = findLayoutPair(topLayoutMap, target.groupName);
+    }
+    if (!YAML.isMap(parentEntry.pair.value)) {
+      parentEntry.pair.value = settingsDocument.createNode({});
+    }
+    return parentEntry.pair.value;
+  }
+  return topLayoutMap;
+}
+
+function syncLayoutRename(settingsDocument, oldName, newName, target) {
+  const layoutMap = getLayoutMap(settingsDocument);
+  if (!layoutMap) return false;
+  if (Array.isArray(target?.nestedGroupPath) && target.nestedGroupPath.length > 0) {
+    const parentEntry = findLayoutPair(layoutMap, target.groupName);
+    if (!parentEntry || !YAML.isMap(parentEntry.pair.value)) return false;
+    // Check if the old name exists under the parent already
+    let layoutEntry = findLayoutPair(parentEntry.pair.value, oldName);
+    if (!layoutEntry) {
+      // Not under parent yet — check top level (migration from old layout storage)
+      const topLevelEntry = findLayoutPair(layoutMap, oldName);
+      if (topLevelEntry) {
+        // Move the entry from top level into the parent's map
+        const [moved] = layoutMap.items.splice(topLevelEntry.index, 1);
+        parentEntry.pair.value.items.push(moved);
+        layoutEntry = findLayoutPair(parentEntry.pair.value, oldName);
+      }
+    }
+    if (layoutEntry && YAML.isScalar(layoutEntry.pair.key)) {
+      layoutEntry.pair.key.value = newName;
+      return true;
+    }
+    return false;
+  }
+  const layoutEntry = findLayoutPair(layoutMap, oldName);
   if (layoutEntry && YAML.isScalar(layoutEntry.pair.key)) {
     layoutEntry.pair.key.value = newName;
     return true;
@@ -760,13 +799,61 @@ function removeServiceOptionDefinitions(servicesSequence, definitions) {
   return changed;
 }
 
-function removeGroupOptionDefinitions(settingsDocument, definitions) {
+function removeGroupOptionDefinitions(settingsDocument, definitions, servicesSequence, optionNames) {
   const groupOptions = new Set(definitions.filter((definition) => definition.appliesTo.includes('group')).map((definition) => definition.name));
+  const allOptionNames = new Set([
+    ...definitions.map((definition) => definition.name),
+    ...(Array.isArray(optionNames) ? optionNames : [])
+  ]);
   const layoutMap = getLayoutMap(settingsDocument);
   if (!layoutMap || groupOptions.size === 0) return false;
   let changed = false;
+  const isFallbackNestedGroup = (map) => (
+    YAML.isMap(map) &&
+    map.items.length > 0 &&
+    map.items.some((item) => groupOptions.has(scalarValue(item.key))) &&
+    map.items.every((item) => {
+      const name = scalarValue(item.key);
+      return groupOptions.has(name) || allOptionNames.has(name);
+    })
+  );
   layoutMap.items.forEach((pair) => {
     if (removeMapOptions(pair.value, groupOptions)) changed = true;
+    // Only descend into nested group layout entries (layout[parent][nested])
+    if (YAML.isMap(pair.value) && YAML.isSeq(servicesSequence)) {
+      const groupName = scalarValue(pair.key);
+      const groupItem = servicesSequence.items.find((item) => {
+        if (!YAML.isMap(item)) return false;
+        const k = item.items[0]?.key;
+        return k && scalarValue(k) === groupName;
+      });
+      const nestedNames = new Set();
+      if (groupItem) {
+        const groupValue = groupItem.items[0]?.value;
+        if (YAML.isSeq(groupValue)) {
+          groupValue.items.forEach((entry) => {
+            if (!YAML.isMap(entry)) return;
+            const v = entry.items[0]?.value;
+            if (YAML.isSeq(v)) nestedNames.add(scalarValue(entry.items[0].key));
+          });
+        }
+      }
+      pair.value.items.forEach((nestedPair) => {
+        // A nested group layout entry is always a map. Group options are
+        // scalars (text, boolean, tab), so skip scalar entries.
+        if (!YAML.isMap(nestedPair.value)) return;
+        const key = scalarValue(nestedPair.key);
+        // Skip known group option names — they are scalars, not nested groups.
+        if (groupOptions.has(key)) return;
+        // Only descend into entries that are actual nested groups (present
+        // in the services sequence) or entries
+        // whose value contains only known option keys and at least one group
+        // option (commented-out nested groups). This avoids treating
+        // map-valued options like customMapping.columns as nested groups.
+        const isNestedGroup = nestedNames.has(key) || (!allOptionNames.has(key) && isFallbackNestedGroup(nestedPair.value));
+        if (isNestedGroup && removeMapOptions(nestedPair.value, groupOptions)) changed = true;
+      });
+    }
   });
   return changed;
 }
@@ -836,7 +923,7 @@ function transformPreviewYaml({ files, operation }) {
           ? definition.appliesTo.map((targetName) => String(targetName)) : []
       }));
       servicesChanged = removeServiceOptionDefinitions(servicesSequence, definitions);
-      settingsChanged = removeGroupOptionDefinitions(settingsDocument, definitions);
+      settingsChanged = removeGroupOptionDefinitions(settingsDocument, definitions, servicesSequence, operation.allOptionNames);
       bookmarksChanged = removeBookmarkOptionDefinitions(bookmarksSequence, definitions);
       break;
     }
@@ -962,10 +1049,10 @@ function transformPreviewYaml({ files, operation }) {
       }
       if (YAML.isScalar(found.pair.key)) found.pair.key.value = name;
       servicesChanged = true;
-      settingsChanged = syncLayoutRename(settingsDocument, oldName, name);
+      settingsChanged = syncLayoutRename(settingsDocument, oldName, name, target);
       if (operation.type === 'group.edit' && Array.isArray(values.fields)) {
         const fields = normalizeEditableFields(values.fields);
-        let layoutMap = getLayoutMap(settingsDocument);
+        const layoutMap = getOrCreateGroupLayoutMap(settingsDocument, target);
         let layoutEntry = findLayoutPair(layoutMap, name);
         if (fields.length === 0) {
           if (layoutEntry) {
@@ -973,8 +1060,6 @@ function transformPreviewYaml({ files, operation }) {
             settingsChanged = true;
           }
         } else {
-          if (!layoutMap) layoutMap = getOrCreateLayoutMap(settingsDocument);
-          layoutEntry = findLayoutPair(layoutMap, name);
           if (!layoutEntry) {
             layoutMap.set(name, settingsDocument.createNode({}));
             layoutEntry = findLayoutPair(layoutMap, name);
@@ -995,7 +1080,27 @@ function transformPreviewYaml({ files, operation }) {
       found.parentSequence.items.splice(found.index, 1);
       restoreCommentBefore(found.parentSequence, found.index, savedComment);
       servicesChanged = true;
-      settingsChanged = syncLayoutRemove(settingsDocument, oldName);
+      if (found.isNested) {
+        const topLayoutMap = getLayoutMap(settingsDocument);
+        const parentEntry = topLayoutMap && findLayoutPair(topLayoutMap, target.groupName);
+        if (parentEntry && YAML.isMap(parentEntry.pair.value)) {
+          const layoutEntry = findLayoutPair(parentEntry.pair.value, oldName);
+          if (layoutEntry) {
+            parentEntry.pair.value.items.splice(layoutEntry.index, 1);
+            settingsChanged = true;
+          }
+        }
+        // Clean up any legacy top-level layout entry from buggy files,
+        // but only if no top-level group has this name (avoid deleting an unrelated group's layout)
+        const topLevelGroupExists = getServicesSequence(servicesDocument).items.some((item) => {
+          if (!YAML.isMap(item)) return false;
+          const k = item.items[0]?.key;
+          return k && scalarValue(k) === oldName;
+        });
+        if (!topLevelGroupExists && syncLayoutRemove(settingsDocument, oldName)) settingsChanged = true;
+      } else {
+        settingsChanged = syncLayoutRemove(settingsDocument, oldName);
+      }
       break;
     }
     case 'group.move': {
