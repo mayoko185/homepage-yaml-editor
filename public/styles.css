@@ -747,6 +747,9 @@
             align-items: center;
             gap: 7px;
         }
+        .preview-refresh-toggle[hidden] {
+            display: none;
+        }
         .preview-refresh-toggle {
             position: relative;
             display: inline-grid;
@@ -1604,17 +1607,16 @@
         details.dashboard-nested-group[open] > summary.dashboard-nested-group-title::after {
             transform: rotate(225deg);
         }
-        .dashboard-group-nested-root {
+        details.dashboard-group-nested-root {
             padding: 12px;
             border: 1px solid var(--border-color);
             background: var(--config-item-bg);
         }
-        .dashboard-group-nested-root > .dashboard-group-title {
+        details.dashboard-group-nested-root > .dashboard-group-title {
             margin: 0 0 10px;
-            cursor: default;
         }
-        .dashboard-group-nested-root > .dashboard-group-title::after {
-            display: none;
+        details.dashboard-group-nested-root[open] > .dashboard-group-title {
+            margin-bottom: 10px;
         }
         .dashboard-nested-groups {
             display: grid;
@@ -2000,29 +2002,38 @@
             backdrop-filter: blur(8px);
             box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
         }
-        .dashboard-card > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions {
             top: auto;
             bottom: -10px;
         }
-        .dashboard-card > .preview-edit-actions .preview-edit-action-label,
+        .dashboard-card > .preview-edit-actions .preview-edit-action-label {
+            top: calc(100% + 8px);
+            bottom: auto;
+            transform: translate(-50%, -4px);
+        }
         .bookmark-card > .preview-edit-actions .preview-edit-action-label {
             top: auto;
             bottom: calc(100% + 8px);
             transform: translate(-50%, 4px);
         }
         .dashboard-card > .preview-edit-actions .preview-edit-action:hover > .preview-edit-action-label,
-        .dashboard-card > .preview-edit-actions .preview-edit-action:focus-visible > .preview-edit-action-label,
+        .dashboard-card > .preview-edit-actions .preview-edit-action:focus-visible > .preview-edit-action-label {
+            transform: translate(-50%, 0);
+        }
         .bookmark-card > .preview-edit-actions .preview-edit-action:hover > .preview-edit-action-label,
         .bookmark-card > .preview-edit-actions .preview-edit-action:focus-visible > .preview-edit-action-label {
             transform: translate(-50%, 0);
         }
-        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child > .preview-edit-action-label,
+        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child > .preview-edit-action-label {
+            transform: translateY(-4px);
+        }
         .bookmark-card > .preview-edit-actions .preview-edit-action:last-child > .preview-edit-action-label {
             transform: translateY(4px);
         }
         .dashboard-card > .preview-edit-actions .preview-edit-action:last-child:hover > .preview-edit-action-label,
-        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child:focus-visible > .preview-edit-action-label,
+        .dashboard-card > .preview-edit-actions .preview-edit-action:last-child:focus-visible > .preview-edit-action-label {
+            transform: translateY(0);
+        }
         .bookmark-card > .preview-edit-actions .preview-edit-action:last-child:hover > .preview-edit-action-label,
         .bookmark-card > .preview-edit-actions .preview-edit-action:last-child:focus-visible > .preview-edit-action-label {
             transform: translateY(0);
@@ -2031,11 +2042,11 @@
         .dashboard-card > .preview-edit-actions:has(.preview-edit-action:focus-visible),
         .bookmark-card:hover > .preview-edit-actions,
         .bookmark-card > .preview-edit-actions:has(.preview-edit-action:focus-visible),
-        .bookmark-group:hover > .bookmark-group-heading > .preview-edit-actions,
+        .bookmark-group > .bookmark-group-heading:hover > .preview-edit-actions,
         .bookmark-group > .bookmark-group-heading > .preview-edit-actions:has(.preview-edit-action:focus-visible),
-        .dashboard-group:hover > .dashboard-group-title > .preview-edit-actions,
+        .dashboard-group > .dashboard-group-title:hover > .preview-edit-actions,
         .dashboard-group > .dashboard-group-title > .preview-edit-actions:has(.preview-edit-action:focus-visible),
-        .dashboard-nested-group:hover > .dashboard-nested-group-title > .preview-edit-actions,
+        .dashboard-nested-group > .dashboard-nested-group-title:hover > .preview-edit-actions,
         .dashboard-nested-group > .dashboard-nested-group-title > .preview-edit-actions:has(.preview-edit-action:focus-visible) {
             opacity: 1;
             pointer-events: auto;
@@ -2084,6 +2095,7 @@
         }
         .preview-add-group {
             justify-self: start;
+            margin-top: 10px;
         }
         .dashboard-empty {
             padding: 10px;
@@ -2433,19 +2445,6 @@
         }
         .preview-edit-service-location .preview-edit-note {
             margin-top: 6px;
-        }
-        .preview-edit-group-nested-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 6px;
-        }
-        .preview-edit-group-nested-row .modal-input {
-            width: 5em;
-            flex: 0 0 auto;
-        }
-        .preview-edit-group-nested-row .modal-button {
-            flex: 0 0 auto;
         }
         .preview-edit-group-convert-button {
             width: 100%;

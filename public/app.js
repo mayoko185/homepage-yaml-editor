@@ -2643,12 +2643,6 @@
             }
             const nestedSubGroups = Array.isArray(entries) ? entries.filter(isNestedServiceGroup) : [];
             const hasNestedSubGroups = nestedSubGroups.length > 0;
-            const settings = parseTabConfig('settings');
-            const layout = settings.data && settings.data.layout && typeof settings.data.layout === 'object'
-                ? settings.data.layout : {};
-            const groupName = source.groupName;
-            const layoutConfig = layout[groupName];
-            const columnsDefault = getNestedGroupColumns(layoutConfig);
             if (!hasNestedSubGroups) {
                 section.innerHTML = `
                     <button type="button" id="preview-edit-group-convert" class="preview-add-option preview-edit-group-convert-button">Convert into a nested group</button>
@@ -2656,12 +2650,6 @@
                 `;
             } else {
                 section.innerHTML = `
-                    <label for="preview-edit-group-nested-count">Nested sub-groups</label>
-                    <div class="preview-edit-group-nested-row">
-                        <input type="number" id="preview-edit-group-nested-count" class="modal-input" min="1" max="12" value="${columnsDefault}">
-                        <button type="button" id="preview-edit-group-nested-apply" class="modal-button modal-button-secondary">Apply</button>
-                    </div>
-                    <p class="preview-edit-note">Renames sub-groups to 1..N and adjusts the count. Currently ${nestedSubGroups.length} sub-group${nestedSubGroups.length === 1 ? '' : 's'}; columns suggests ${columnsDefault}.</p>
                     <button type="button" id="preview-edit-group-convert-back" class="preview-add-option preview-edit-group-convert-button">Convert back to normal service group</button>
                     <p class="preview-edit-note">Flattens all nested sub-groups into direct services. All services will collapse into this group.</p>
                 `;
@@ -2691,9 +2679,14 @@
             }
 
             if (action === 'group.add') {
-                title.textContent = 'Add service group';
+                const isSubGroup = Array.isArray(source?.nestedGroupPath);
+                title.textContent = isSubGroup ? `Add sub-group to ${source.groupName}` : 'Add service group';
                 submit.textContent = 'Add group';
                 previewEditDialogState.fields = getDefaultPreviewOptionFields('group', { availableTabs: previewEditDialogState.availableTabs });
+                if (isSubGroup) {
+                    // Sub-groups inherit tab from parent — remove tab option
+                    previewEditDialogState.fields = previewEditDialogState.fields.filter((f) => f.key !== 'tab');
+                }
             } else if (action === 'group.edit') {
                 const isNestedGroup = Array.isArray(source.nestedGroupPath) && source.nestedGroupPath.length > 0;
                 title.textContent = isNestedGroup ? 'Edit nested service group' : 'Edit service group';
@@ -3235,8 +3228,9 @@
             const submitButton = document.getElementById('preview-edit-submit');
             submitButton.disabled = true;
             setPreviewEditModalStatus();
+            const isSubGroup = action === 'group.add' && Array.isArray(source?.nestedGroupPath);
             const message = action === 'group.add'
-                ? `Added group ${name}.`
+                ? isSubGroup ? `Added sub-group ${name} to ${source.groupName}.` : `Added group ${name}.`
                 : action === 'group.edit'
                     ? groupTabChanged
                         ? selectedGroupTab
@@ -3595,8 +3589,7 @@
         document.getElementById('preview-edit-group-nested').addEventListener('click', async function(event) {
             const convertButton = event.target.closest('#preview-edit-group-convert');
             const convertBackButton = event.target.closest('#preview-edit-group-convert-back');
-            const applyButton = event.target.closest('#preview-edit-group-nested-apply');
-            if (!convertButton && !convertBackButton && !applyButton) return;
+            if (!convertButton && !convertBackButton) return;
             const state = previewEditDialogState;
             if (!state || state.action !== 'group.edit') return;
             event.preventDefault();
@@ -3625,17 +3618,6 @@
                 convertBackButton.disabled = false;
                 if (applied) renderPreviewEditGroupNested();
                 return;
-            }
-            if (applyButton) {
-                const countInput = document.getElementById('preview-edit-group-nested-count');
-                const count = Math.max(1, Math.min(12, Number(countInput && countInput.value) || 1));
-                applyButton.disabled = true;
-                const applied = await applyPreviewEdit(
-                    { type: 'group.set-nested-count', target: state.source, values: { count } },
-                    `Updated nested sub-groups to ${count}.`
-                );
-                applyButton.disabled = false;
-                if (applied) renderPreviewEditGroupNested();
             }
         });
         document.getElementById('preview-edit-add-option').addEventListener('click', () => {
@@ -5170,7 +5152,10 @@
                         : '';
                     const isCollapsed = isInitiallyCollapsed(nestedLayout);
                     const nestedGroupClass = 'dashboard-nested-group' + (nestedIsCommented ? ' dashboard-nested-group--commented' : '');
-                    return `<details class="${nestedGroupClass}" ${getPreviewLayoutAttributes(nestedLayout)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-nested-group-title">${nestedIcon}<span class="preview-jump-target" ${getSourceAttributes(nestedGroupSource)} ${nestedGroupTooltip}>${escapeHtml(nestedName)}</span>${nestedGroupEditControls}</summary>${serviceCardsGrid}${nestedChildren}</details>`;
+                    const nestedGroupDragAttrs = previewEditMode && !nestedIsCommented
+                        ? `${getDragItemAttributes('nested-group', nestedGroupSource.servicesSource, entryIndex)} data-preview-drop-kind="nested-group" data-preview-drop-index="${entryIndex}"`
+                        : '';
+                    return `<details class="${nestedGroupClass}" ${nestedGroupDragAttrs} ${getPreviewLayoutAttributes(nestedLayout)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-nested-group-title">${nestedIcon}<span class="preview-jump-target" ${getSourceAttributes(nestedGroupSource)} ${nestedGroupTooltip}>${escapeHtml(nestedName)}</span>${nestedGroupEditControls}</summary>${serviceCardsGrid}${nestedChildren}</details>`;
                 }).join('');
             }
 
@@ -5212,8 +5197,11 @@
                     ? `${getDragItemAttributes('group', serviceGroupSource, groupPosition)} data-preview-drop-kind="group" data-preview-drop-index="${groupPosition}" data-preview-service-drop data-preview-service-drop-index="${Array.isArray(entries) ? entries.filter((e) => !e.__commented && !isNestedServiceGroup(e)).length : 0}" data-preview-service-drop-source="${escapeHtml(JSON.stringify({ groupName, groupIndex }))}"`
                     : '';
                 const groupClass = 'dashboard-group' + (groupIsCommented ? ' dashboard-group--commented' : '');
+                const addSubGroupButton = previewEditMode
+                    ? `<button type="button" class="preview-add-button preview-add-group" data-preview-action="group.add" ${getSourceAttributes({ tab: 'services', kind: 'services-group', groupName, groupIndex, nestedGroupPath: [] })}><span aria-hidden="true">+</span> Add service group</button>`
+                    : '';
                 if (hasNestedGroups) {
-                    groupsHtml += `<section class="${groupClass} dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)}><div class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</div>${serviceCardsGrid}<div class="dashboard-nested-groups" data-preview-nested-columns="${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div></section>`;
+                    groupsHtml += `<details class="${groupClass} dashboard-group-nested-root" ${groupDragAttributes}${getPreviewLayoutAttributes(layoutConfig)} ${isCollapsed ? '' : 'open'}><summary class="dashboard-group-title">${groupIcon}<span class="preview-jump-target" ${getSourceAttributes(groupSource)} ${groupTooltip}>${escapeHtml(groupName || 'Services')}</span>${groupEditControls}</summary>${serviceCardsGrid}<div class="dashboard-nested-groups" data-preview-nested-columns="${getNestedGroupColumns(layoutConfig)}">${nestedGroups}</div>${addSubGroupButton}</details>`;
                 } else {
                     if (!cards) {
                         addPreviewNotice(`No services configured in ${groupName || 'this group'}.`);
@@ -5952,6 +5940,7 @@
             if (drag.index === adjustedDestinationIndex) return;
             const typeByKind = {
                 group: 'group.move',
+                'nested-group': 'group.move',
                 'bookmark-group': 'bookmark-group.move'
             };
             const operationType = typeByKind[drag.kind];
@@ -6064,7 +6053,7 @@
             }
 
             const rect = target.getBoundingClientRect();
-            const verticalLine = drag.kind === 'service' && target.classList.contains('dashboard-card');
+            const verticalLine = (drag.kind === 'service' && target.classList.contains('dashboard-card')) || drag.kind === 'nested-group';
             if (drag.kind === 'tab') {
                 const afterTab = forcedPosition
                     ? forcedPosition === 'after'
@@ -6093,7 +6082,7 @@
         function showPreviewDropIndicator(target, details, drag) {
             clearPreviewDropIndicators();
             target.classList.add('preview-drag-over');
-            if (['service', 'bookmark', 'group', 'bookmark-group'].includes(drag.kind)) {
+            if (['service', 'bookmark', 'group', 'bookmark-group', 'nested-group'].includes(drag.kind)) {
                 const rect = target.getBoundingClientRect();
                 const line = ensurePreviewMainDropIndicator(Boolean(details.verticalLine));
                 if (details.verticalLine) {

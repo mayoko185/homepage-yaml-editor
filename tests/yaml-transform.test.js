@@ -760,7 +760,7 @@ test('rejects moves that would push a nested group outside its parent list', () 
   }, { services: trailingNestedServices, settings: nestedSettings }), /cannot be moved/);
 });
 
-test('converts a flat service group into a nested group and adjusts the sub-group count', () => {
+test('converts a flat service group into a nested group', () => {
   const flatServices = `- Flat Group:
     - Service A:
         href: https://a.example
@@ -775,11 +775,11 @@ layout:
     columns: 3
 `;
 
-  let files = transform({
+  const files = transform({
     type: 'group.convert-to-nested',
     target: { groupName: 'Flat Group', groupIndex: 0 }
   }, { services: flatServices, settings: flatSettings });
-  let parsed = YAML.parse(files.services);
+  const parsed = YAML.parse(files.services);
   const entries = parsed[0]['Flat Group'];
   assert.equal(entries.length, 1);
   assert.equal(Object.keys(entries[0])[0], '1');
@@ -787,74 +787,38 @@ layout:
   assert.equal(subGroup.length, 3);
   assert.equal(Object.keys(subGroup[0])[0], 'Service A');
   assert.equal(Object.keys(subGroup[2])[0], 'Service C');
-
-  files = transform({
-    type: 'group.set-nested-count',
-    target: { groupName: 'Flat Group', groupIndex: 0 },
-    values: { count: 3 }
-  }, files);
-  parsed = YAML.parse(files.services);
-  const afterExpand = parsed[0]['Flat Group'];
-  assert.equal(afterExpand.length, 3);
-  assert.deepEqual(afterExpand.map((entry) => Object.keys(entry)[0]), ['1', '2', '3']);
-  assert.equal(afterExpand[0]['1'].length, 3);
-  assert.equal(afterExpand[1]['2'].length, 0);
-  assert.equal(afterExpand[2]['3'].length, 0);
-
-  files = transform({
-    type: 'group.set-nested-count',
-    target: { groupName: 'Flat Group', groupIndex: 0 },
-    values: { count: 1 }
-  }, { services: files.services, settings: flatSettings });
-  parsed = YAML.parse(files.services);
-  const merged = parsed[0]['Flat Group'];
-  assert.equal(merged.length, 1);
-  assert.equal(Object.keys(merged[0])[0], '1');
 });
 
-test('set-nested-count merges services from removed sub-groups into the last kept one', () => {
+test('group.add with nested path adds a sub-group inside the parent', () => {
   const services = `- Top:
     - "1":
         - A:
             href: https://a.example
-    - "2":
-        - B:
-            href: https://b.example
-    - "3":
-        - C:
-            href: https://c.example
 `;
   const files = transform({
-    type: 'group.set-nested-count',
-    target: { groupName: 'Top', groupIndex: 0 },
-    values: { count: 1 }
+    type: 'group.add',
+    target: { groupName: 'Top', groupIndex: 0, nestedGroupPath: [] },
+    values: { name: 'New Sub', fields: [] }
   }, { services, settings: 'title: T\n' });
   const parsed = YAML.parse(files.services);
   const entries = parsed[0]['Top'];
-  assert.equal(entries.length, 1);
-  const subGroup = entries[0]['1'];
-  assert.deepEqual(subGroup.map((service) => Object.keys(service)[0]), ['A', 'B', 'C']);
+  assert.equal(entries.length, 2);
+  assert.equal(Object.keys(entries[0])[0], '1');
+  assert.equal(Object.keys(entries[1])[0], 'New Sub');
+  assert.deepEqual(entries[1]['New Sub'], []);
 });
 
-test('set-nested-count renames existing sub-groups to numbered names', () => {
+test('group.add with nested path rejects duplicate name within the same parent', () => {
   const services = `- Top:
-    - Alpha:
+    - "1":
         - A:
             href: https://a.example
-    - Beta:
-        - B:
-            href: https://b.example
 `;
-  const files = transform({
-    type: 'group.set-nested-count',
-    target: { groupName: 'Top', groupIndex: 0 },
-    values: { count: 2 }
-  }, { services, settings: 'title: T\n' });
-  const parsed = YAML.parse(files.services);
-  const entries = parsed[0]['Top'];
-  assert.deepEqual(entries.map((entry) => Object.keys(entry)[0]), ['1', '2']);
-  assert.equal(entries[0]['1'][0]['A'].href, 'https://a.example');
-  assert.equal(entries[1]['2'][0]['B'].href, 'https://b.example');
+  assert.throws(() => transform({
+    type: 'group.add',
+    target: { groupName: 'Top', groupIndex: 0, nestedGroupPath: [] },
+    values: { name: '1', fields: [] }
+  }, { services, settings: 'title: T\n' }), /already exists/);
 });
 
 test('convert-to-nested preserves direct services alongside existing nested sub-groups', () => {

@@ -546,7 +546,7 @@ function findLayoutPair(layoutMap, groupName) {
 
 function getOrCreateGroupLayoutMap(settingsDocument, target) {
   const topLayoutMap = getOrCreateLayoutMap(settingsDocument);
-  if (Array.isArray(target.nestedGroupPath) && target.nestedGroupPath.length > 0) {
+  if (Array.isArray(target.nestedGroupPath)) {
     let parentEntry = findLayoutPair(topLayoutMap, target.groupName);
     if (!parentEntry) {
       topLayoutMap.set(target.groupName, settingsDocument.createNode({}));
@@ -1014,15 +1014,21 @@ function transformPreviewYaml({ files, operation }) {
     }
     case 'group.add': {
       const name = requireName(values.name, 'Group');
-      assertUniqueGroupName(servicesSequence, name);
-      servicesSequence.items.push(servicesDocument.createNode({ [name]: [] }));
+      const isSubGroup = Array.isArray(target.nestedGroupPath);
+      const sequence = isSubGroup
+        ? resolveServiceSequence(servicesDocument, target, { createIfMissing: true })
+        : servicesSequence;
+      assertUniqueGroupName(sequence, name);
+      sequence.items.push(servicesDocument.createNode({ [name]: [] }));
       servicesChanged = true;
       if (Array.isArray(values.fields)) {
         const fields = normalizeEditableFields(values.fields).filter((field) => (
           Array.isArray(field.fields) ? field.fields.length > 0 : field.blankValue || field.value !== ''
         ));
         if (fields.length > 0) {
-          const layoutMap = getOrCreateLayoutMap(settingsDocument);
+          const layoutMap = isSubGroup
+            ? getOrCreateGroupLayoutMap(settingsDocument, target)
+            : getOrCreateLayoutMap(settingsDocument);
           layoutMap.set(name, settingsDocument.createNode({}));
           const layoutEntry = findLayoutPair(layoutMap, name);
           setMapFields(settingsDocument, layoutEntry.pair.value, fields);
@@ -1140,48 +1146,6 @@ function transformPreviewYaml({ files, operation }) {
       const newNestedItem = servicesDocument.createNode({});
       newNestedItem.set('1', newNestedValue);
       sequence.items = [...existingNestedItems, newNestedItem];
-      servicesChanged = true;
-      break;
-    }
-    case 'group.set-nested-count': {
-      const count = Math.max(1, Math.min(12, Number(values.count) || 1));
-      const sequence = resolveServiceSequence(servicesDocument, target, { createIfMissing: true });
-      const directServiceItems = [];
-      const nestedItems = [];
-      sequence.items.forEach((item) => {
-        const pair = getSinglePair(item, 'Service group');
-        if (YAML.isSeq(pair.value)) {
-          nestedItems.push(item);
-        } else {
-          directServiceItems.push(item);
-        }
-      });
-      const keepCount = Math.min(count, nestedItems.length);
-      for (let index = 0; index < keepCount; index++) {
-        const pair = getSinglePair(nestedItems[index], 'Service group');
-        if (YAML.isScalar(pair.key)) pair.key.value = String(index + 1);
-      }
-      if (nestedItems.length > count) {
-        const lastKept = nestedItems[count - 1];
-        const lastKeptPair = getSinglePair(lastKept, 'Service group');
-        const lastKeptSeq = lastKeptPair && YAML.isSeq(lastKeptPair.value) ? lastKeptPair.value : null;
-        if (lastKeptSeq) {
-          for (let index = count; index < nestedItems.length; index++) {
-            const removed = nestedItems[index];
-            const removedPair = getSinglePair(removed, 'Service group');
-            if (removedPair && YAML.isSeq(removedPair.value)) {
-              removedPair.value.items.forEach((item) => lastKeptSeq.items.push(item));
-            }
-          }
-        }
-      }
-      const newNestedItems = nestedItems.slice(0, count);
-      for (let index = nestedItems.length; index < count; index++) {
-        const newNested = servicesDocument.createNode({});
-        newNested.set(String(index + 1), servicesDocument.createNode([]));
-        newNestedItems.push(newNested);
-      }
-      sequence.items = [...directServiceItems, ...newNestedItems];
       servicesChanged = true;
       break;
     }
