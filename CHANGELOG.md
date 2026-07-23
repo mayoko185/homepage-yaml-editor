@@ -5,6 +5,23 @@ This file records notable user-facing, security, deployment, and behavior change
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-07-23
+
+### Added
+
+- Added configurable automatic, dated YAML backups before overwriting files, including per-file retention limits.
+- Added nested service-group drag-and-drop reordering, cross-group service moves, and direct sub-group creation from the Preview.
+
+### Changed
+
+- Reworked nested service-group editing to use scoped layout entries and a simpler add-sub-group flow instead of numeric sub-group count adjustment.
+- Hardened backup storage with directory-specific retention, private permissions, and safer handling of existing backup files.
+
+### Fixed
+
+- Preserved unrelated application settings when saving a settings update instead of overwriting them.
+- Prevented nested-group layout mappings from being lost or corrupted when groups are renamed, removed, commented out, or share names with group options.
+
 ## [1.3.2] - 2026-07-22
 
 ### Added
