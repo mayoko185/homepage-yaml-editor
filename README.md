@@ -1,24 +1,30 @@
 # Homepage YAML Editor
 
-Homepage YAML Editor is a browser-based editor for [Homepage](https://gethomepage.dev/) configuration files. Edit YAML beside your Homepage dashboard with syntax highlighting, validation, a live preview, and an Interactive Editor for common dashboard changes.
+Homepage YAML Editor is a browser-based editor for [Homepage](https://gethomepage.dev/) configuration files. Designed to run alongside Homepage dashboard, edit your YAML with syntax highlighting, validation, a live preview, or an Interactive Editor.
 
 ## Screenshots
 
 ### YAML editor and live preview
 
-![YAML editor and live preview](screenshots/test-yaml-editor.jpg)
+![YAML editor and live preview](screenshots/yaml-editor.jpg)
 
-Edit raw YAML with CodeMirror, switch between supported files, use the editor toolbar, and preview the resulting Homepage layout in the same workspace.
+Edit raw YAML with CodeMirror, with the ability to jump between the services and settings YAML while staying in the same service group.
+
+### Live preview
+
+![YAML editor and live preview](screenshots/live-preview.jpg)
+
+Preview the resulting Homepage layout in the same workspace.
 
 ### Interactive Editor with nested groups
 
 ![Interactive Editor with nested groups](screenshots/interactive-editor.jpg)
 
-Add, edit, move, reorder, and remove supported dashboard items from the preview, including nested service groups and their services.
+Add, edit, move, reorder, and remove supported dashboard items from the preview, including nested service groups.
 
 ## Highlights
 
-- Supports `services`, `settings`, `bookmarks`, `widgets`, `docker`, `proxmox`, and `kubernetes` YAML files.
+- Supports `services`, `settings`, `bookmarks`, `widgets`, `docker`, `proxmox`, and `kubernetes` Homepage YAML files.
 - Preserves source YAML text, comments, and formatting when files are loaded and saved.
 - Provides syntax highlighting, line numbers, auto-indent, comment toggling, validation, and preview-to-source navigation.
 - Renders groups, nested groups, service cards, bookmarks, widgets, icons, layouts, and common Homepage options in the preview.
@@ -34,8 +40,7 @@ Add, edit, move, reorder, and remove supported dashboard items from the preview,
 The recommended deployment runs Homepage and Homepage YAML Editor together with a shared configuration directory:
 
 ```sh
-git clone https://github.com/mayoko185/homepage-yaml-editor.git
-cd homepage-yaml-editor
+curl -O https://raw.githubusercontent.com/mayoko185/homepage-yaml-editor/refs/heads/main/docker-compose.yml
 # Edit the config volume path and HOMEPAGE_ALLOWED_HOSTS in docker-compose.yml if needed
 docker compose up -d
 ```
