@@ -10,11 +10,8 @@ COPY pnpm-lock.yaml ./
 RUN npm install --global pnpm@11.7.0 && \
     pnpm install --prod --frozen-lockfile
 
-COPY server.js ./
-COPY auth-state.js ./
-COPY yaml-transform.js ./
-COPY option-types.default.json ./
-COPY app-settings.default.json ./
+COPY server ./server
+COPY defaults ./defaults
 COPY public ./public
 COPY examples ./examples
 COPY --chmod=755 start.sh ./start.sh

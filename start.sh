@@ -43,4 +43,4 @@ for base_name in services settings bookmarks widgets docker proxmox kubernetes; 
     done
 done
 
-exec su-exec "$PUID:$PGID" node server.js
+exec su-exec "$PUID:$PGID" node server/index.js

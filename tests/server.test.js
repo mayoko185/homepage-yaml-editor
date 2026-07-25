@@ -35,15 +35,12 @@ function createServerEnv(overrides) {
 
 test('Docker image copies every runtime server module', async () => {
   const dockerfile = await fs.readFile(path.resolve(__dirname, '..', 'Dockerfile'), 'utf8');
-  assert.match(dockerfile, /^COPY server\.js \.\/$/m);
-  assert.match(dockerfile, /^COPY auth-state\.js \.\/$/m);
-  assert.match(dockerfile, /^COPY yaml-transform\.js \.\/$/m);
-  assert.match(dockerfile, /^COPY option-types\.default\.json \.\/$/m);
-  assert.match(dockerfile, /^COPY app-settings\.default\.json \.\/$/m);
+  assert.match(dockerfile, /^COPY server \.\/server$/m);
+  assert.match(dockerfile, /^COPY defaults \.\/defaults$/m);
 });
 
 test('app-settings.default.json ships well-formed editor setting defaults', async () => {
-  const defaults = JSON.parse(await fs.readFile(path.resolve(__dirname, '..', 'app-settings.default.json'), 'utf8'));
+  const defaults = JSON.parse(await fs.readFile(path.resolve(__dirname, '..', 'defaults', 'app-settings.default.json'), 'utf8'));
   assert.equal(typeof defaults, 'object');
   assert.equal(Array.isArray(defaults), false);
   for (const key of ['customPageTitle', 'liveHomepageUrl']) {
@@ -109,7 +106,7 @@ test('serves optimized assets and supports the active configuration APIs', async
   ]), 'utf8');
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
@@ -324,7 +321,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     assert.equal(loadResponse.status, 200);
     assert.equal(loaded.files['services.yaml'], yamlContent);
 
-    const transformResponse = await fetch(`${baseUrl}/api/yaml/transform`, {
+    const transformResponse = await fetch(`${baseUrl}/api/transform`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -355,7 +352,7 @@ layout:
     Inner Group:
       icon: inner.png
 `;
-    const collisionResponse = await fetch(`${baseUrl}/api/yaml/transform`, {
+    const collisionResponse = await fetch(`${baseUrl}/api/transform`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -373,7 +370,7 @@ layout:
 
     // Server must reject even when client provides an empty groupOptionNames array
     // (bypass attempt via Array.isArray truthiness).
-    const emptyArrayBypassResponse = await fetch(`${baseUrl}/api/yaml/transform`, {
+    const emptyArrayBypassResponse = await fetch(`${baseUrl}/api/transform`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -506,11 +503,11 @@ layout:
     assert.equal(runtimeConfigResponse.headers.get('cache-control'), 'no-store');
     assert.match(await runtimeConfigResponse.text(), /"defaultTheme":"light"/);
 
-    const assetResponse = await fetch(`${baseUrl}/app.js?v=146`, {
+    const assetResponse = await fetch(`${baseUrl}/js/app.js?v=186`, {
       headers: { 'accept-encoding': 'gzip' }
     });
     assert.equal(assetResponse.status, 200);
-    assert.match(assetResponse.headers.get('cache-control'), /max-age=86400/);
+    assert.equal(assetResponse.headers.get('cache-control'), 'no-cache');
     assert.equal(assetResponse.headers.get('content-encoding'), 'gzip');
 
     const vendorAssetResponse = await fetch(`${baseUrl}/vendor/js-yaml/js-yaml.min.js?v=4.3.0`);
@@ -532,7 +529,7 @@ test('keeps an empty startup directory in read-only sample mode', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-sample-test-'));
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
@@ -576,7 +573,7 @@ test('rejects allowed-root symlink escapes', async () => {
   await fs.symlink(outsideRoot, escapePath, 'junction');
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
@@ -625,7 +622,7 @@ test('optional login protects the editor and APIs with a form-based session', as
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-auth-test-'));
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
@@ -740,7 +737,7 @@ test('backup permission hardening applies to existing directories and files', as
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-backup-perm-test-'));
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
@@ -851,7 +848,7 @@ test('backup retention enforces maxBackups limit', async () => {
   await fs.writeFile(path.join(tempRoot, 'services.yaml'), yamlContent, 'utf8');
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
@@ -927,7 +924,7 @@ test('backup namespace isolates backups by source directory', async () => {
   await fs.writeFile(path.join(dirB, 'services.yaml'), yamlContent, 'utf8');
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
+  const child = spawn(process.execPath, ['server/index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),

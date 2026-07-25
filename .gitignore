@@ -5,3 +5,4 @@ playwright-report/
 test-results/
 .atl/
 data/settings.json
+data/option-types.json

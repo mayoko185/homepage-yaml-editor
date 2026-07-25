@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { pruneExpiredAuthState, setBoundedMapEntry } = require('../auth-state');
+const { pruneExpiredAuthState, setBoundedMapEntry } = require('../server/auth/state');
 
 test('bounds authentication state and evicts the oldest entry', () => {
   const state = new Map([['oldest', 1], ['newer', 2]]);

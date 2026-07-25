@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const YAML = require('yaml');
-const { transformPreviewYaml } = require('../yaml-transform');
+const { transformPreviewYaml } = require('../server/yaml');
 
 const services = `# keep this services comment
 - First Group:

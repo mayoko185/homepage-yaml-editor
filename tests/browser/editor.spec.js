@@ -6,6 +6,8 @@ const { test, expect } = require('@playwright/test');
 const configDir = process.env.HOMEPAGE_BROWSER_TEST_DIR;
 const servicesPath = path.join(configDir, 'services.yaml');
 const settingsPath = path.join(configDir, 'settings.yaml');
+const bookmarksPath = path.join(configDir, 'bookmarks.yaml');
+const widgetsPath = path.join(configDir, 'widgets.yaml');
 const baseServices = '- Main:\n    - Alpha:\n        href: https://example.test\n        description: First service\n';
 const consoleErrorsByPage = new WeakMap();
 
@@ -26,6 +28,14 @@ async function setEditorValue(page, value) {
 
 async function getEditorValue(page) {
   return page.locator('.CodeMirror').evaluate((element) => element.CodeMirror.getValue());
+}
+
+async function getEditorPosition(page) {
+  return page.locator('.CodeMirror').evaluate((element) => {
+    const editor = element.CodeMirror;
+    const cursor = editor.getCursor();
+    return { line: cursor.line, ch: cursor.ch, text: editor.getLine(cursor.line) };
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -429,4 +439,300 @@ layout:
   const reopenedGroupOption = page.locator('#preview-edit-options > [data-preview-option-row]').last();
   await expect(reopenedGroupOption.locator('[data-preview-option-key]')).toHaveText('columns');
   await expect(reopenedGroupOption.locator('.preview-edit-option-value')).toHaveValue('3');
+});
+
+test('Jump to Settings targets the matching layout group', async ({ page }) => {
+  await fs.writeFile(settingsPath, `title: Browser Jump Test
+layout:
+  Main:
+    tab: Home
+    style: row
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+
+  await page.getByRole('checkbox', { name: 'Show editor' }).check({ force: true });
+  await expect(page.locator('#jump-section-button')).toHaveAttribute('aria-label', 'Jump to Settings');
+  await page.locator('#jump-section-button').click();
+
+  await expect(page.locator('.tab[data-tab="settings"]')).toHaveClass(/active/);
+  await expect.poll(() => getEditorPosition(page)).toEqual({ line: 2, ch: 2, text: '  Main:' });
+  await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('Jump to Services targets the matching service group', async ({ page }) => {
+  await fs.writeFile(settingsPath, `title: Browser Jump Test
+layout:
+  Main:
+    tab: Home
+    style: row
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+
+  await page.getByRole('checkbox', { name: 'Show editor' }).check({ force: true });
+  await page.locator('.tab[data-tab="settings"]').click();
+  await page.locator('.CodeMirror').evaluate((element) => {
+    element.CodeMirror.setCursor({ line: 2, ch: 2 });
+  });
+  await expect(page.locator('#jump-section-button')).toHaveAttribute('aria-label', 'Jump to Services');
+  await page.locator('#jump-section-button').click();
+
+  await expect(page.locator('.tab[data-tab="services"]')).toHaveClass(/active/);
+  await expect.poll(() => getEditorPosition(page)).toEqual({ line: 0, ch: 0, text: '- Main:' });
+  await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('opens Service Edit with populated select options and no page error', async ({ page }) => {
+  await fs.writeFile(servicesPath, `- Main:
+    - Alpha:
+        href: https://alpha.test
+        description: First service
+        statusStyle: dot
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+
+  const card = page.locator('.dashboard-card', { hasText: 'Alpha' });
+  await card.hover();
+  await card.locator('[data-preview-action="service.edit"]').click();
+
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+  const statusStyleRow = page.locator('[data-preview-option-row]', { hasText: 'statusStyle' });
+  const statusStyleSelect = statusStyleRow.locator('select');
+  await expect(statusStyleSelect).toHaveValue('dot');
+  expect(await statusStyleSelect.locator('option').allTextContents()).toEqual(expect.arrayContaining(['dot']));
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('preview tab interactions restore focus and stay console-safe', async ({ page }) => {
+  await fs.writeFile(settingsPath, `title: Browser Test
+layout:
+  Main:
+    tab: Home
+  Other:
+    tab: Admin
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+
+  const homeTab = page.locator('.preview-tab:has(button[data-preview-tab="Home"])');
+  const homeButton = homeTab.locator('.preview-tab-btn');
+  await homeTab.hover();
+  await homeButton.focus();
+  await expect(homeButton).toBeFocused();
+
+  await homeTab.locator('[data-preview-action="tab.edit"]').click({ force: true });
+  await expect(page.locator('[data-preview-tab-rename-input]')).toBeVisible();
+  await page.locator('[data-preview-tab-rename-input]').press('Escape');
+  await expect(page.locator('[data-preview-tab-rename-input]')).toHaveCount(0);
+  await expect(homeTab.locator('.preview-tab-btn')).toBeFocused();
+
+  await page.locator('.preview-tab:has(button[data-preview-tab="Admin"])').dragTo(homeTab);
+  await expect(page.locator('.preview-tab-btn')).toHaveText(['Admin', 'Home']);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('downloads all configurations successfully without an error status', async ({ page }) => {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#download-config-button').click()
+  ]);
+
+  expect(await download.failure()).toBeNull();
+  expect(download.suggestedFilename()).toMatch(/^homepage-config-\d{4}-\d{2}-\d{2}\.zip$/);
+  await expect(page.locator('#save-status')).not.toContainText('Could not create the configuration download');
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('first bookmark navigation targets the bookmark line', async ({ page }) => {
+  await fs.writeFile(bookmarksPath, `- Links:
+    - Docs:
+        href: https://docs.test
+- More:
+    - Status:
+        href: https://status.test
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').uncheck({ force: true });
+
+  await page.locator('a[data-source*="Docs"]').click();
+
+  await expect(page.locator('.tab[data-tab="bookmarks"]')).toHaveClass(/active/);
+  await expect.poll(() => getEditorPosition(page)).toEqual({ line: 1, ch: 4, text: '    - Docs:' });
+  await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('nested group navigation targets the nested group', async ({ page }) => {
+  await fs.writeFile(servicesPath, `- Main:
+    - Parent:
+        - Nested:
+            - Alpha:
+                href: https://alpha.test
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').uncheck({ force: true });
+
+  await page.locator('.dashboard-nested-group-title .preview-jump-target', { hasText: 'Nested' }).click();
+
+  await expect(page.locator('.tab[data-tab="services"]')).toHaveClass(/active/);
+  await expect.poll(() => getEditorPosition(page)).toEqual({ line: 2, ch: 8, text: '        - Nested:' });
+  await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('YAML error card navigation targets its reported line', async ({ page }) => {
+  const invalidServices = '- Main:\n    - Alpha:\n        href: [\n        broken\n';
+  await setEditorValue(page, invalidServices);
+  const errorCard = page.locator('.yaml-error-card');
+  await expect(errorCard).toBeVisible();
+
+  const source = JSON.parse(await errorCard.getAttribute('data-source'));
+  expect(source.line).toBe(5);
+  await errorCard.click();
+
+  await expect.poll(() => getEditorPosition(page)).toEqual({ line: 4, ch: 0, text: '' });
+  await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('commented service navigation uses commented-source metadata', async ({ page }) => {
+  await fs.writeFile(servicesPath, `- Main:
+    - Alpha:
+        href: https://alpha.test
+    # - Beta:
+    #     href: https://beta.test
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.locator('#preview-comments-toggle').check({ force: true });
+  const commentedCard = page.locator('.dashboard-card--commented', { hasText: 'Beta' });
+  await expect(commentedCard).toBeVisible();
+
+  await page.locator('#preview-edit-toggle').evaluate((input) => {
+    input.checked = false;
+  });
+  await commentedCard.click();
+
+  await expect.poll(() => getEditorPosition(page)).toEqual({ line: 3, ch: 4, text: '    # - Beta:' });
+  await expect(page.locator('.CodeMirror-linebackground.source-line-highlight')).toHaveCount(1);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('commenting one service affects only that service block', async ({ page }) => {
+  await fs.writeFile(servicesPath, `- Main:
+    - Alpha:
+        href: https://alpha.test
+        description: Alpha service
+    - Beta:
+        href: https://beta.test
+        description: Beta service
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+
+  const alphaCard = page.locator('.dashboard-card', { hasText: 'Alpha' });
+  await alphaCard.hover();
+  await alphaCard.locator('[data-preview-action="service.comment"]').click();
+
+  const lines = (await getEditorValue(page)).split('\n');
+  expect(lines[1]).toMatch(/^\s+# - Alpha:/);
+  expect(lines[2]).toMatch(/^\s+#\s+href:/);
+  expect(lines[4]).toMatch(/^\s+- Beta:/);
+  expect(lines[5]).not.toMatch(/^\s+#/);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('commented widget Edit preserves all widget fields', async ({ page }) => {
+  await fs.writeFile(widgetsPath, `# - resources:
+#     type: resources
+#     url: https://resources.test
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.locator('#preview-comments-toggle').check({ force: true });
+
+  const widgetEdit = page.locator('[data-preview-action="widget.edit"]');
+  await expect(widgetEdit).toHaveCount(1);
+  await widgetEdit.click({ force: true });
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+  await expect(page.locator('#preview-edit-name')).toHaveValue('resources');
+
+  await page.locator('#preview-edit-name').fill('resources-renamed');
+  await page.locator('#preview-edit-submit').click();
+  await expect(page.locator('#preview-edit-modal')).toBeHidden();
+  await page.locator('.tab[data-tab="widgets"]').click();
+
+  const editedWidgets = await getEditorValue(page);
+  expect(editedWidgets).toContain('#     type: resources');
+  expect(editedWidgets).toContain('#     url: https://resources.test');
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('Reload after direct editor edits confirms discard and preserves both outcomes', async ({ page }) => {
+  const marker = '# direct reload edit';
+  await setEditorValue(page, `${baseServices}${marker}\n`);
+  await expect(page.locator('.tab[data-tab="services"]')).toHaveClass(/unsaved/);
+  await expect(page.locator('#unsaved-status')).toBeVisible();
+
+  await page.locator('#reload-directory-button').click();
+  await expect(page.locator('#confirmation-modal')).toBeVisible();
+  await page.locator('#confirmation-modal-cancel').click();
+  await expect(page.locator('#confirmation-modal')).toBeHidden();
+  expect(await getEditorValue(page)).toContain(marker);
+
+  await page.locator('#reload-directory-button').click();
+  await page.locator('#confirmation-modal-confirm').click();
+  await expect.poll(() => getEditorValue(page)).not.toContain(marker);
+  await expect(page.locator('.tab[data-tab="services"]')).not.toHaveClass(/unsaved/);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
+});
+
+test('preview add, remove, and reorder actions support Undo', async ({ page }) => {
+  await fs.writeFile(servicesPath, `- Main:
+    - Alpha:
+        href: https://alpha.test
+    - Beta:
+        href: https://beta.test
+`, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  const original = await getEditorValue(page);
+
+  await page.locator('[data-preview-action="service.add"]').first().click({ force: true });
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+  await page.locator('#preview-edit-name').fill('Delta');
+  await page.locator('#preview-edit-submit').click();
+  await expect(page.locator('.dashboard-card', { hasText: 'Delta' })).toBeVisible();
+  await page.locator('#preview-undo-button').click();
+  await expect.poll(() => getEditorValue(page)).toBe(original);
+
+  const alphaCard = page.locator('.dashboard-card', { hasText: 'Alpha' });
+  const betaCard = page.locator('.dashboard-card', { hasText: 'Beta' });
+  await betaCard.dragTo(alphaCard, { targetPosition: { x: 4, y: 4 } });
+  await expect.poll(async () => {
+    const value = await getEditorValue(page);
+    return value.indexOf('- Beta:') < value.indexOf('- Alpha:');
+  }).toBe(true);
+  await page.locator('#preview-undo-button').click();
+  await expect.poll(() => getEditorValue(page)).toBe(original);
+
+  await alphaCard.hover();
+  await alphaCard.locator('[data-preview-action="service.remove"]').click({ force: true });
+  await expect(page.locator('#confirmation-modal')).toBeVisible();
+  await page.locator('#confirmation-modal-confirm').click();
+  await expect.poll(() => getEditorValue(page)).not.toContain('Alpha:');
+  await page.locator('#preview-undo-button').click();
+  await expect.poll(() => getEditorValue(page)).toBe(original);
+  expect(consoleErrorsByPage.get(page)).toEqual([]);
 });

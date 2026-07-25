@@ -5,6 +5,16 @@ This file records notable user-facing, security, deployment, and behavior change
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Reorganized server code into modular files under `server/`: entry point (`server/index.js`), route handlers (`server/routes/`), library helpers (`server/lib/`), YAML transform (`server/yaml/`), and auth state (`server/auth/`).
+- Cleaned API route paths to use consistent, predictable URL patterns.
+- Split the monolithic `public/app.js` into ESM modules: `constants.js`, `state.js`, `api.js`, `editor.js`, `ui.js`, `preview.js`, and a bootstrap/coordination entry point.
+- Moved default configuration files (`option-types.default.json`, `app-settings.default.json`) into a `defaults/` directory.
+- Updated Dockerfile to use directory-level COPY instructions matching the new layout.
+
 ## [1.3.3] - 2026-07-23
 
 ### Added

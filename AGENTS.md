@@ -23,18 +23,49 @@ The server reads and writes configuration files from explicitly allowed server-s
 
 ## Repository Layout
 
-- `server.js`: Express server, configuration-directory validation, YAML validation, and file APIs.
-- `yaml-transform.js`: In-memory Preview edit operations for service and Settings YAML documents.
-- `option-types.default.json`: Bundled JSON defaults for Preview option types, loaded by `server.js`.
-- `app-settings.default.json`: Bundled JSON defaults for editor settings (theme, page title, tab order, auto-indent, etc.), loaded by `server.js`. `DEFAULT_THEME` still overrides the bundled `theme` default.
+- `server/index.js`: Express server entry point, middleware stack, static/vendor asset serving, and runtime-config generation.
+- `server/routes/index.js`: Mounts all route handlers (auth, config, settings, startup).
+- `server/routes/auth.js`: Login/logout routes and `authMiddleware`.
+- `server/routes/config.js`: Examples, YAML transform, directory load/save routes.
+- `server/routes/settings.js`: App-settings and option-types GET/PUT routes.
+- `server/routes/startup.js`: Startup directory route.
+- `server/lib/config-files.js`: File/directory validation helpers (17 functions).
+- `server/lib/option-types.js`: Option-type definition management (9 functions).
+- `server/lib/app-settings.js`: Editor settings management (8 functions).
+- `server/auth/state.js`: Session and login-attempt map management with bounded-size eviction and expiry pruning.
+- `server/yaml/transform.js`: In-memory Preview edit operations for service and Settings YAML documents.
+- `server/yaml/index.js`: Re-export shim for `transform.js`.
+- `defaults/option-types.default.json`: Bundled JSON defaults for Preview option types.
+- `defaults/app-settings.default.json`: Bundled JSON defaults for editor settings (theme, page title, tab order, auto-indent, etc.).
 - `public/index.html`: Page markup and external asset loading.
-- `public/app.js`: Editor state, save/load behavior, ZIP generation, preview rendering, and preview-to-source navigation.
-- `public/styles.css`: Application and CodeMirror styling.
+- `public/js/app.js`: ESM entry point — bootstrap/coordination layer (7 functions + event binding).
+- `public/js/constants.js`: App constants (tab names, sample configs, option type choices).
+- `public/js/state.js`: Single authoritative state owner with getters/setters.
+- `public/js/api.js`: API wrappers and ZIP/download utilities.
+- `public/js/editor.js`: CodeMirror wrapper functions.
+- `public/js/ui.js`: DOM helpers, settings/theme/modals UI.
+- `public/js/preview.js`: YAML operations, preview rendering, preview edit dialog, drag-and-drop.
+- `public/js/vendor/chunk-tree.js`: ESM re-export of the UMD ChunkTree global.
+- `public/chunk-tree.js`: Comment-preserving YAML chunk-tree parser/serializer (UMD/IIFE global, loaded via `<script>` before modules).
+- `public/styles.css`: Application and CodeMirror styling (dark + light theme via `.light-mode` class).
+- `public/login.html`: Login page markup.
+- `public/js/login.js`: Login page client logic (error display, HTTP warning).
+- `public/theme-bootstrap.js`: Applies the light-mode class before page render to avoid flash.
 - `tests/server.test.js`: Server/API integration tests using Node's built-in test runner.
 - `tests/yaml-transform.test.js`: YAML Preview transformation and comment-preservation tests.
+- `tests/auth-state.test.js`: Auth state eviction and expiry tests.
+- `tests/chunk-tree.test.js`: Chunk-tree parser/serializer tests (runs in Node via global jsyaml shim).
+- `tests/browser/editor.spec.js`: Playwright browser tests.
+- `tests/browser/global-setup.js`: Playwright global setup (temp dir, server start).
+- `playwright.config.js`: Playwright configuration (Chromium, port 4173, temp config dir).
 - `start.sh`: Container user/group setup and application startup.
-- `Dockerfile`: Production container definition.
-- `docker-compose.yml`: Example deployment configuration.
+- `Dockerfile`: Production container definition (node:24-alpine, pnpm, su-exec).
+- `docker-compose.yml`: Example deployment configuration (Homepage + editor side-by-side).
+- `.gitattributes`: LF normalization for `.sh` and `Dockerfile`.
+- `.gitignore`: Ignores `node_modules/`, `.pnpm-store/`, logs, test artifacts, and runtime data files.
+- `.git/hooks/pre-commit`: Enforces cache-version bumps for `styles.css` and `public/js/*.js` in HTML files.
+
+Vendor assets (CodeMirror CSS/JS, js-yaml) are served from `node_modules` via `require.resolve()` mappings in `server/index.js`, not from a `public/vendor/` directory. The `runtime-config.js` endpoint is generated dynamically by the server.
 
 ## Development Commands
 
@@ -50,8 +81,30 @@ pnpm dev
 Run syntax checks when changing JavaScript:
 
 ```sh
-node --check server.js
-node --check public/app.js
+node --check server/index.js
+node --check server/routes/index.js
+node --check server/lib/config-files.js
+node --check public/js/app.js
+node --check public/js/preview.js
+node --check public/js/ui.js
+node --check public/js/api.js
+node --check public/js/state.js
+node --check public/js/editor.js
+node --check public/js/constants.js
+node --check public/chunk-tree.js
+```
+
+Browser tests (requires Playwright Chromium):
+
+```sh
+pnpm exec playwright install chromium
+pnpm test:browser
+```
+
+Check for whitespace issues before committing:
+
+```sh
+git diff --check
 ```
 
 ## Implementation Guidelines

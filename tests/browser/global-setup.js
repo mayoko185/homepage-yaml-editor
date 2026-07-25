@@ -29,7 +29,7 @@ module.exports = async function globalSetup() {
   process.env.APP_DATA_DIR = path.join(configDir, 'app-data');
   process.env.REQUIRE_LOGIN_USER = '';
   process.env.REQUIRE_LOGIN_PASSWORD = '';
-  const { startServer } = require('../../server');
+  const { startServer } = require('../../server/index');
   const server = await startServer();
 
   return async () => {
