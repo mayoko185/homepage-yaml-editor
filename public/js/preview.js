@@ -2358,7 +2358,7 @@ export function buildCommentedWidgetsData(yamlText) {
                     .map((optionName) => `<option value="${escapeHtml(optionName)}"${optionName === field.key ? ' selected' : ''}>${escapeHtml(optionName)}</option>`)
                     .join('');
                 const valueControl = field.fields
-                    ? `<div class="preview-edit-nested-options" data-preview-nested-options>${renderRows(field.fields, path, field.key === 'widget' ? 'widget' : currentTarget)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
+                    ? `<div class="preview-edit-nested-options${field.key === 'widget' ? ' preview-edit-widget-options' : ''}" data-preview-nested-options>${renderRows(field.fields, path, field.key === 'widget' ? 'widget' : currentTarget)}<button type="button" class="preview-add-option" data-preview-option-add-child data-preview-option-path="${path}">+ Add ${escapeHtml(field.key || 'nested')} option</button></div>`
                     : isTabOption
                     ? `<select class="modal-input preview-edit-option-value" data-preview-option-value aria-label="Dashboard tab"><option value="" disabled${field.value ? '' : ' selected'}>Select a tab</option>${tabOptions}</select>`
                     : isSelectOption
@@ -3579,7 +3579,7 @@ export function updateVisualPreview() {
         const widgetRemoveButton = previewEditMode && isCommented
             ? getPreviewEditActionButton('widget.remove', widgetSource, 'Delete widget', '&times;', { danger: true })
             : '';
-        return `<span class="widget-block preview-jump-target${isCommented ? ' widget-block--commented' : ''}" ${getSourceAttributes(widgetSource)} ${widgetTooltip}>${escapeHtml(name)}${widgetEditButton}${widgetCommentButton}${widgetRemoveButton}</span>`;
+        return `<span class="widget-block preview-jump-target${isCommented ? ' widget-block--commented' : ''}" ${getSourceAttributes(widgetSource)} ${widgetTooltip}>${escapeHtml(name)}<span class="preview-edit-actions">${widgetEditButton}${widgetCommentButton}${widgetRemoveButton}</span></span>`;
     }).join('');
 
     const previewTabsHtml = homepageTabs.length > 0 || previewEditMode
@@ -3647,15 +3647,6 @@ export function refreshPreview() {
         refreshBtn.querySelector('.preview-control-label').textContent = 'Refresh dashboard manually';
     }, 500);
 }
-
-        export function updateTabToolbarPosition(tabEl) {
-            const strip = tabEl.closest('.preview-tab-strip');
-            if (!strip) return;
-            const myTop = tabEl.offsetTop;
-            const peers = strip.querySelectorAll('.preview-tab');
-            const hasRowBelow = Array.from(peers).some((p) => p.offsetTop > myTop + 1);
-            tabEl.setAttribute('data-toolbar-side', hasRowBelow ? 'up' : 'down');
-        }
 
 export function clearPreviewDropIndicators() {
     document.querySelectorAll('.preview-drag-over, .preview-drop-before, .preview-drop-after, .preview-drop-inside, .preview-drop-left, .preview-drop-right').forEach((element) => {

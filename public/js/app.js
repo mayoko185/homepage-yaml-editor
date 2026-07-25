@@ -3,7 +3,7 @@ import { getApiErrorMessage, formatYamlError, formatYamlErrorLocation, getSaveEr
 import { ChunkTree } from './vendor/chunk-tree.js';
 import { getEditorValue, setEditorValue, getSelectedLineNumbers, toggleSelectedComments, toggleLineRangeComments, init as initEditor } from './editor.js';
 import { escapeHtml, updateUnsavedIndicators, setSaveStatus, clearSaveStatus, setPreviewStatus, setDirectoryStatus, setDirectoryModalStatus, handleLoadDirectory, openDirectoryModal, closeDirectoryModal, showConfirmationDialog, closeConfirmationDialog, openInlineAddTabPanel, initInlineAddTabModal, closeInlineAddTabPanel, exitTabRenameMode, applyPersistentAppSettings, setPreviewEditModalStatus, setOptionTypesStatus, readOptionTypesDraft, renderOptionTypesDraft, renderOptionDefaultsDraft, getOrderedOptionDefaultIndexes, setOptionDefaultOrder, openOptionTypesModal, closeOptionTypesModal, saveOptionTypes, setInlineAddTabStatus, updateAutoIndentLabel, updateEditorVisibility, syncPreviewEditModePresentation, updatePreviewEditMode, updatePreviewUndoButton, toggleTheme, setResetSampleVisible, setReloadDirectoryVisible, setSampleMode, scrollToTop, scrollToEditor, scrollToPreview, updateFloatingNavVisibility, updateSectionJumpButton, getFirstVisibleConfigTab, openSettingsModal, closeSettingsModal, submitSettingsModal, activateSettingsTab, handleSettingsTabKeydown, renderSettingsTabControls, moveSettingsTab, updateSettingsTabVisibilityDraft } from './ui.js';
- import { getTabYamlText, parseTabConfig, getHomepageTabInfo, isInitiallyCollapsed, isNestedServiceGroup, getNestedGroupColumns, resolveIconUrl, renderIcon, getSafeLinkUrl, getYamlLines, getYamlKeyFromLine, getYamlIndent, findYamlKeyLine, findNthYamlListKeyLine, findGroupRangeFromLine, findYamlGroupRange, findNestedGroupPathRange, findServicesGroupAtLine, findSettingsLayoutGroupAtLine, findNestedYamlKeyLine, findLineContainingValue, findSourceLine, findBlockLineRange, getSourceAttributes, getDragItemAttributes, takeOccurrence, formatPreviewTooltipLabel, formatPreviewTooltipValue, getPreviewDetailLines, getPreviewTooltipAttributes, getBookmarkTooltipLines, getCurrentTabSource, getPreviewEditActionButton, getGroupEditControls, getServiceEditControls, getBookmarkGroupEditControls, getBookmarkEditControls, extractCommentedLines, buildCommentedServicesData, normalizeCommentedChunkLines, parseCommentedChunkEntry, buildServicesPreviewDataFromChunks, buildCommentedWidgetsData, setPreviewOptionDefinitions, getDefaultPreviewOptionFields, renderPreviewEditOptions, syncPreviewEditOptionState, updatePreviewEditTabWarning, getPreviewEditFieldAtPath, renderPreviewEditGroupNested, closePreviewEditDialog, submitPreviewEditForm, applyPreviewEdit, handlePreviewEditAction, scheduleVisualPreview, updatePreview, refreshPreview, undoPreviewEdit, handlePreviewDragStart, handlePreviewDragOver, handlePreviewDrop, clearPreviewDragState, updateTabToolbarPosition } from './preview.js';
+ import { getTabYamlText, parseTabConfig, getHomepageTabInfo, isInitiallyCollapsed, isNestedServiceGroup, getNestedGroupColumns, resolveIconUrl, renderIcon, getSafeLinkUrl, getYamlLines, getYamlKeyFromLine, getYamlIndent, findYamlKeyLine, findNthYamlListKeyLine, findGroupRangeFromLine, findYamlGroupRange, findNestedGroupPathRange, findServicesGroupAtLine, findSettingsLayoutGroupAtLine, findNestedYamlKeyLine, findLineContainingValue, findSourceLine, findBlockLineRange, getSourceAttributes, getDragItemAttributes, takeOccurrence, formatPreviewTooltipLabel, formatPreviewTooltipValue, getPreviewDetailLines, getPreviewTooltipAttributes, getBookmarkTooltipLines, getCurrentTabSource, getPreviewEditActionButton, getGroupEditControls, getServiceEditControls, getBookmarkGroupEditControls, getBookmarkEditControls, extractCommentedLines, buildCommentedServicesData, normalizeCommentedChunkLines, parseCommentedChunkEntry, buildServicesPreviewDataFromChunks, buildCommentedWidgetsData, setPreviewOptionDefinitions, getDefaultPreviewOptionFields, renderPreviewEditOptions, syncPreviewEditOptionState, updatePreviewEditTabWarning, getPreviewEditFieldAtPath, renderPreviewEditGroupNested, closePreviewEditDialog, submitPreviewEditForm, applyPreviewEdit, handlePreviewEditAction, scheduleVisualPreview, updatePreview, refreshPreview, undoPreviewEdit, handlePreviewDragStart, handlePreviewDragOver, handlePreviewDrop, clearPreviewDragState } from './preview.js';
 import { yamlCodeEditor, previewAddTabModal, saveStatusElement, setYamlCodeEditor, setPreviewAddTabModal, setSaveStatusElement } from './shared.js';
 import { currentTab, loadedFiles, originalLoadedFiles, loadedFileRevisions, loadedFileNames, currentDirectoryPath, currentDirectoryWasAutoloaded, sampleModeEnabled, parsedConfigCache, previewHomepageTab, previewShowCommentsState, previewEditDialogState, previewUndoState, previewUpdateTimer, applyingPreviewFiles, sourceHighlightLine, sourceHighlightTimer, optionDefinitions, optionTypesDraft, optionTypesRemovedDefinitions, optionTypesPreviousFocus, directoryModalPreviousFocus, confirmationDialogResolver, confirmationDialogPreviousFocus, previewEditModalPreviousFocus, pendingInlineRenameTab, pendingInlineRenameBackup, previewTabAddAnchor, previewTabAddAfterTab, previewTabAddInFlight, activePreviewDrag, setCurrentTab, setLoadedFiles, setOriginalLoadedFiles, setLoadedFileRevisions, setLoadedFileNames, setCurrentDirectoryPath, setCurrentDirectoryWasAutoloaded, setSampleModeEnabled, setPreviewHomepageTab, setPreviewShowCommentsState, setPreviewUndoState, setApplyingPreviewFiles, setSourceHighlightLine, setSourceHighlightTimer, setOptionDefinitions, setOptionTypesRemovedDefinitions, setOptionTypesPreviousFocus, setDirectoryModalPreviousFocus, setConfirmationDialogResolver, setConfirmationDialogPreviousFocus, setPreviewEditModalPreviousFocus, setPendingInlineRenameTab, setPendingInlineRenameBackup, setPreviewTabAddAnchor, setPreviewTabAddAfterTab, setPreviewTabAddInFlight, setActivePreviewDrag, mutatePreviewEditDialogState, mutateOptionTypesDraft, setLoadedFileContent, setOriginalLoadedFileContent, setLoadedFileName, setLoadedFileRevision, clearParsedConfigCache, setParsedConfigCache, deleteParsedConfigCache, setOptionDefinition, deleteOptionDefinition, clearOptionDefinitions, getUnsavedTabNames, hasUnsavedChanges } from './state.js';
 
@@ -77,16 +77,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                      : { tab: 'services', line: 1 });
              }
          }
-
-             const previewDiv = document.getElementById('visual-preview');
-            previewDiv.addEventListener('mouseover', function(event) {
-                const tab = event.target.closest('.preview-tab');
-                if (tab && this.contains(tab)) updateTabToolbarPosition(tab);
-            });
-            previewDiv.addEventListener('focusin', function(event) {
-                const tab = event.target.closest('.preview-tab');
-                if (tab && this.contains(tab)) updateTabToolbarPosition(tab);
-            });
 
             document.getElementById('visual-preview').addEventListener('click', function(event) {
                 const actionTarget = event.target.closest('[data-preview-action]');
@@ -734,7 +724,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                     'Converted nested group back to a normal service group.'
                 );
                 convertBackButton.disabled = false;
-                if (applied) renderPreviewEditGroupNested();
+                if (applied) {
+                    renderPreviewEditGroupNested();
+                    closePreviewEditDialog();
+                }
                 return;
             }
         });
@@ -751,7 +744,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             syncPreviewEditOptionState();
             updatePreviewEditTabWarning();
         });
-        document.getElementById('preview-edit-options').addEventListener('change', function(event) {
+        const previewEditOptions = document.getElementById('preview-edit-options');
+        previewEditOptions.addEventListener('change', function(event) {
             if (!event.target.matches('[data-preview-option-key], [data-preview-option-value], [data-preview-option-value] input[type="radio"]')) return;
             const optionRow = event.target.closest('[data-preview-option-row]');
             const optionPath = optionRow && optionRow.getAttribute('data-preview-option-path');
