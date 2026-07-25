@@ -7,7 +7,7 @@ PGID="${PGID:-1000}"
 APP_USER="homepage"
 APP_GROUP="homepage"
 
-mkdir -p /app/data /hp_config
+mkdir -p /app/data
 
 EXISTING_GROUP="$(getent group "$PGID" | cut -d: -f1 || true)"
 if [ -n "$EXISTING_GROUP" ]; then
@@ -32,15 +32,18 @@ chown_if_needed() {
 }
 
 chown_if_needed /app/data
-chown_if_needed /hp_config
 
-for base_name in services settings bookmarks widgets docker proxmox kubernetes; do
-    for extension in yaml yml; do
-        config_file="/hp_config/${base_name}.${extension}"
-        if [ -f "$config_file" ]; then
-            chown_if_needed "$config_file"
-        fi
+if [ -n "${HOMEPAGE_CONFIGS:-}" ]; then
+    chown_if_needed "$HOMEPAGE_CONFIGS"
+
+    for base_name in services settings bookmarks widgets docker proxmox kubernetes; do
+        for extension in yaml yml; do
+            config_file="$HOMEPAGE_CONFIGS/${base_name}.${extension}"
+            if [ -f "$config_file" ]; then
+                chown_if_needed "$config_file"
+            fi
+        done
     done
-done
+fi
 
 exec su-exec "$PUID:$PGID" node server/index.js

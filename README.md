@@ -47,7 +47,7 @@ docker compose up -d
 
 Open Homepage at `http://server-ip:3000` and the editor at `http://server-ip:8081`.
 
-Both containers must mount the same host directory. Homepage sees it at `/app/config`; the editor sees it at `/hp_config`:
+Both containers must mount the same host directory. Homepage sees it at `/app/config`; the editor sees it at whatever path `HOMEPAGE_CONFIGS` points to (here, `/hp_config`):
 
 ```yaml
 services:
@@ -57,7 +57,7 @@ services:
 
   homepage-editor:
     environment:
-      - AUTOLOAD_DIR=/hp_config
+      - HOMEPAGE_CONFIGS=/hp_config
     volumes:
       - /path/to/homepage/config:/hp_config
 ```
@@ -85,7 +85,7 @@ docker run -d \
   -p 127.0.0.1:8081:8081 \
   -e PUID=1000 \
   -e PGID=1000 \
-  -e AUTOLOAD_DIR=/hp_config \
+  -e HOMEPAGE_CONFIGS=/hp_config \
   -v /path/to/homepage/config:/hp_config \
   -v "$PWD/data:/app/data" \
   docker.io/mayoko185/homepage-yaml-editor:latest
@@ -100,15 +100,13 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The development server listens on <http://localhost:8081>. Set `DATA_DIR`, `AUTOLOAD_DIR`, or `ALLOWED_CONFIG_DIRS` to point it at your Homepage configuration directory.
+The development server listens on <http://localhost:8081>. Set `HOMEPAGE_CONFIGS` to point it at your Homepage configuration directory. When unset, bundled sample YAML files load in read-only mode.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATA_DIR` | `/hp_config` | Default directory for Homepage YAML files. |
-| `AUTOLOAD_DIR` | unset | Directory to load automatically at startup. |
-| `ALLOWED_CONFIG_DIRS` | unset | Comma-separated additional directories allowed for loading and saving. |
+| `HOMEPAGE_CONFIGS` | unset | Directory containing Homepage YAML files. When unset, bundled sample files load in read-only mode. |
 | `APP_DATA_DIR` | `/app/data` | Persistent editor settings and option definitions. |
 | `DEFAULT_THEME` | `dark` | Initial theme; `light` selects the light theme. Overrides the bundled theme default when set. |
 | `REQUIRE_LOGIN_USER` | unset | Optional login username; must be paired with `REQUIRE_LOGIN_PASSWORD`. |
@@ -123,7 +121,7 @@ The bundled `defaults/app-settings.default.json` seeds editor defaults such as t
 - If no configuration directory is available, the app opens bundled sample YAML files in read-only mode.
 - Saving validates YAML before writing and only allows the supported Homepage filenames.
 - Saves use atomic file replacement and reject stale writes when another process changed a loaded file.
-- Loaded directories must be `/hp_config`, `DATA_DIR`, `AUTOLOAD_DIR`, or a path listed in `ALLOWED_CONFIG_DIRS`.
+- Loaded directories must be inside the path set in `HOMEPAGE_CONFIGS`.
 - Raw YAML editing is available for every supported file. The Interactive Editor focuses on service, bookmark, and dashboard-layout editing.
 
 ## Testing and audits

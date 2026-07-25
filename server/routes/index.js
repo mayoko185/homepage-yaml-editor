@@ -44,9 +44,7 @@ function mountRoutes(app, deps) {
   });
 
   startup.init({
-    configFiles: deps.configFiles,
-    AUTOLOAD_DIR: deps.AUTOLOAD_DIR,
-    DEFAULT_DATA_DIR: deps.DEFAULT_DATA_DIR
+    configFiles: deps.configFiles
   });
 
   // Mount auth routes (login/logout) before auth middleware

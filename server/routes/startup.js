@@ -3,13 +3,9 @@ const express = require('express');
 const router = express.Router();
 
 let configFiles;
-let AUTOLOAD_DIR;
-let DEFAULT_DATA_DIR;
 
 function init(config) {
   configFiles = config.configFiles;
-  AUTOLOAD_DIR = config.AUTOLOAD_DIR;
-  DEFAULT_DATA_DIR = config.DEFAULT_DATA_DIR;
 }
 
 router.get('/api/startup-directory', async (req, res) => {

@@ -26,7 +26,8 @@ async function getFreePort() {
 function createServerEnv(overrides) {
   const env = { ...process.env };
   for (const name of Object.keys(env)) {
-    if (name.toUpperCase() === 'REQUIRE_LOGIN_USER' || name.toUpperCase() === 'REQUIRE_LOGIN_PASSWORD') {
+    const upperName = name.toUpperCase();
+    if (upperName === 'REQUIRE_LOGIN_USER' || upperName === 'REQUIRE_LOGIN_PASSWORD' || upperName === 'HOMEPAGE_CONFIGS') {
       delete env[name];
     }
   }
@@ -110,8 +111,7 @@ test('serves optimized assets and supports the active configuration APIs', async
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: appDataDir,
       DEFAULT_THEME: 'light'
     }),
@@ -525,6 +525,50 @@ layout:
   }
 });
 
+test('falls back to read-only samples when HOMEPAGE_CONFIGS is unset', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-no-config-test-'));
+  const appDataDir = path.join(tempRoot, 'app-data');
+  await fs.mkdir(appDataDir);
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server/index.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      APP_DATA_DIR: appDataDir
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+    const startupResponse = await fetch(`${baseUrl}/api/startup-directory`);
+    const startup = await startupResponse.json();
+    assert.equal(startupResponse.status, 200);
+    assert.deepEqual(startup, {
+      directory: null,
+      files: {},
+      revisions: {},
+      hasStartupDirectory: false
+    });
+
+    const loadResponse = await fetch(`${baseUrl}/api/directory/load`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dirPath: tempRoot })
+    });
+    assert.equal(loadResponse.status, 400);
+    assert.match((await loadResponse.json()).details, /not allowed/);
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
 test('keeps an empty startup directory in read-only sample mode', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-sample-test-'));
   const port = await getFreePort();
@@ -533,8 +577,7 @@ test('keeps an empty startup directory in read-only sample mode', async () => {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: path.join(tempRoot, 'app-data')
     }),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -577,8 +620,7 @@ test('rejects allowed-root symlink escapes', async () => {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: path.join(tempRoot, 'app-data')
     }),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -626,8 +668,7 @@ test('optional login protects the editor and APIs with a form-based session', as
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: path.join(tempRoot, 'app-data'),
       REQUIRE_LOGIN_USER: 'test-user',
       REQUIRE_LOGIN_PASSWORD: 'test-password',
@@ -741,8 +782,7 @@ test('backup permission hardening applies to existing directories and files', as
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: path.join(tempRoot, 'app-data')
     }),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -852,8 +892,7 @@ test('backup retention enforces maxBackups limit', async () => {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: appDataDir
     }),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -928,8 +967,7 @@ test('backup namespace isolates backups by source directory', async () => {
     cwd: path.resolve(__dirname, '..'),
     env: createServerEnv({
       PORT: String(port),
-      DATA_DIR: tempRoot,
-      AUTOLOAD_DIR: tempRoot,
+      HOMEPAGE_CONFIGS: tempRoot,
       APP_DATA_DIR: appDataDir
     }),
     stdio: ['ignore', 'pipe', 'pipe']

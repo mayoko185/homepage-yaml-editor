@@ -20,9 +20,7 @@ const EXAMPLES_DIR = path.join(__dirname, '..', 'examples');
 const APP_DATA_DIR = process.env.APP_DATA_DIR || path.join(__dirname, '..', 'data');
 const APP_SETTINGS_PATH = path.join(APP_DATA_DIR, 'settings.json');
 const OPTION_TYPES_PATH = path.join(APP_DATA_DIR, 'option-types.json');
-const DEFAULT_DATA_DIR = '/hp_config';
-const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
-const AUTOLOAD_DIR = process.env.AUTOLOAD_DIR;
+const HOMEPAGE_CONFIGS = process.env.HOMEPAGE_CONFIGS;
 const ENV_DEFAULT_THEME = process.env.DEFAULT_THEME ? String(process.env.DEFAULT_THEME).trim().toLowerCase() : '';
 const DEFAULT_THEME = ENV_DEFAULT_THEME
   ? (ENV_DEFAULT_THEME === 'light' ? 'light' : 'dark')
@@ -57,17 +55,8 @@ const ALLOWED_CONFIG_FILES = new Set(
 const OPTION_VALUE_TYPES = new Set(['text', 'textarea', 'boolean', 'tab', 'mapping', 'select']);
 const OPTION_TARGETS = Object.freeze(['service', 'group', 'bookmark', 'widget']);
 const OPTION_TARGET_SET = new Set(OPTION_TARGETS);
-const EXTRA_ALLOWED_CONFIG_DIRS = (process.env.ALLOWED_CONFIG_DIRS || '')
-  .split(',')
-  .map((dirPath) => dirPath.trim())
-  .filter(Boolean);
 const ALLOWED_CONFIG_DIRECTORIES = Object.freeze(
-  Array.from(new Set([
-    DEFAULT_DATA_DIR,
-    DATA_DIR,
-    AUTOLOAD_DIR,
-    ...EXTRA_ALLOWED_CONFIG_DIRS
-  ].filter(Boolean))).map((dirPath) => path.resolve(dirPath))
+  HOMEPAGE_CONFIGS ? [path.resolve(HOMEPAGE_CONFIGS)] : []
 );
 
 configFiles.init({
@@ -187,9 +176,7 @@ mountRoutes(app, {
   APP_DATA_DIR,
   APP_SETTINGS_PATH,
   OPTION_TYPES_PATH,
-  defaultOptionDefinitions,
-  AUTOLOAD_DIR,
-  DEFAULT_DATA_DIR
+  defaultOptionDefinitions
 });
 
 // Vendor assets (CodeMirror, js-yaml)
@@ -230,7 +217,10 @@ app.use(express.static(PUBLIC_DIR, {
 // createBackup, saveConfigFile moved to server/lib/config-files.js
 
 async function applyStartupDirectoryLoad() {
-  const startupDir = AUTOLOAD_DIR || DEFAULT_DATA_DIR;
+  if (!HOMEPAGE_CONFIGS) {
+    return;
+  }
+  const startupDir = HOMEPAGE_CONFIGS;
   try {
     const resolvedStartupDir = await configFiles.resolveRealAllowedConfigDirectory(startupDir);
     await configFiles.assertDirectory(resolvedStartupDir);
@@ -254,7 +244,9 @@ async function startServer() {
   if (LOGIN_PARTIALLY_CONFIGURED) {
     throw new Error('REQUIRE_LOGIN_USER and REQUIRE_LOGIN_PASSWORD must both be set together to enable login');
   }
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  if (HOMEPAGE_CONFIGS) {
+    await fs.mkdir(HOMEPAGE_CONFIGS, { recursive: true });
+  }
   await fs.mkdir(APP_DATA_DIR, { recursive: true });
   await optionTypes.ensureOptionDefinitions(OPTION_TYPES_PATH, app, defaultOptionDefinitions);
   await optionTypes.loadOptionDefinitions(OPTION_TYPES_PATH, app, defaultOptionDefinitions);

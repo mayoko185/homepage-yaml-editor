@@ -26,7 +26,7 @@ services:
       # Uncomment both values to require the matching login credentials.
       # - REQUIRE_LOGIN_USER=admin
       # - REQUIRE_LOGIN_PASSWORD=change-this-password
-      - AUTOLOAD_DIR=/hp_config
+      - HOMEPAGE_CONFIGS=/hp_config
     volumes:
       # This must use the same host directory mounted by the Homepage service above.
       - /opt/stacks/homepage/config:/hp_config

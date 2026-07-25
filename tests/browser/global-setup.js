@@ -24,8 +24,7 @@ module.exports = async function globalSetup() {
   )));
 
   process.env.PORT = '4173';
-  process.env.DATA_DIR = configDir;
-  process.env.AUTOLOAD_DIR = configDir;
+  process.env.HOMEPAGE_CONFIGS = configDir;
   process.env.APP_DATA_DIR = path.join(configDir, 'app-data');
   process.env.REQUIRE_LOGIN_USER = '';
   process.env.REQUIRE_LOGIN_PASSWORD = '';

@@ -17,7 +17,7 @@ COPY examples ./examples
 COPY --chmod=755 start.sh ./start.sh
 
 RUN sed -i 's/\r$//' ./start.sh && \
-    mkdir -p ./data /hp_config
+    mkdir -p ./data
 
 EXPOSE 8081
 
