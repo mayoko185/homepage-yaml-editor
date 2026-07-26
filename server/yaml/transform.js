@@ -365,7 +365,6 @@ function setMapFields(document, map, fields) {
   // Build a fresh map containing only the active (uncommented) fields so the yaml
   // library handles value quoting, block-style nested maps, and nulls correctly.
   const activeFields = fields.filter((field) => !field.commented);
-  const activeKeys = new Set(activeFields.map((field) => field.key));
   const activeMap = document.createNode({});
   for (const field of activeFields) {
     const { key, value, fields: nestedFields, textValue, blankValue } = field;
@@ -432,13 +431,25 @@ function setMapFields(document, map, fields) {
     }
   }
 
-  // Preserve any existing map-level comments that do not belong to active fields.
-  const existingComments = (map.comment || '').split(/\r?\n/).filter((line) => {
-    if (!line.trim()) return false;
-    const uncommented = line.replace(/^\s*#\s?/, '').trim();
-    const key = uncommented.split(':')[0];
-    return !activeKeys.has(key);
-  });
+  // Preserve any existing map-level comments that do not belong to submitted fields.
+  const submittedKeys = new Set(fields.map((field) => field.key));
+  const existingComments = [];
+  let skippedIndent = null;
+  for (const line of (map.comment || '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const uncommented = line.replace(/^\s*#\s?/, '');
+    const trimmed = uncommented.trim();
+    const indent = uncommented.search(/\S/);
+    const keyMatch = trimmed.match(/^([^:]+):(?:\s|$)/);
+    const key = keyMatch ? keyMatch[1].trim() : '';
+    if (skippedIndent !== null && indent > skippedIndent) continue;
+    skippedIndent = null;
+    if (key && submittedKeys.has(key)) {
+      skippedIndent = indent;
+      continue;
+    }
+    existingComments.push(line);
+  }
 
   // Determine which active keys will receive new commentBefore from commented
   // fields, so we know which keys are safe to preserve original commentBefore on.

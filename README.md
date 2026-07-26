@@ -6,19 +6,19 @@ Homepage YAML Editor is a browser-based editor for [Homepage](https://gethomepag
 
 ### YAML editor and live preview
 
-![YAML editor and live preview](screenshots/yaml-editor.jpg)
+![YAML editor and live preview](screenshots/yaml-editor2.jpg)
 
 Edit raw YAML with CodeMirror, with the ability to jump between the services and settings YAML while staying in the same service group.
 
 ### Live preview
 
-![YAML editor and live preview](screenshots/live-preview.jpg)
+![YAML editor and live preview](screenshots/live-preview2.jpg)
 
 Preview the resulting Homepage layout in the same workspace.
 
 ### Interactive Editor with nested groups
 
-![Interactive Editor with nested groups](screenshots/interactive-editor.jpg)
+![Interactive Editor with nested groups](screenshots/interactive-editor2.jpg)
 
 Add, edit, move, reorder, and remove supported dashboard items from the preview, including nested service groups.
 

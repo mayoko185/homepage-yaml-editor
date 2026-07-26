@@ -6,3 +6,6 @@ test-results/
 .atl/
 data/settings.json
 data/option-types.json
+.codegraph/
+.cursor/
+opencode.jsonc

@@ -647,7 +647,7 @@
         const yamlText = jsyaml.dump(newData, { indent: 2, noRefs: true, lineWidth: -1 });
         const dumpedLines = yamlText.split('\n').filter((l) => l.trim() !== '');
         dumpedLines.forEach((l) => {
-            lines.push(' '.repeat(fieldIndent) + l.trimStart());
+            lines.push(' '.repeat(fieldIndent) + l);
         });
 
         // Apply per-field commenting for active items

@@ -267,6 +267,38 @@ test('edits ordered service and group options from the Preview editor', () => {
   assert.equal(parsedSettings.layout['First Group'], undefined);
 });
 
+test('edits a service with a commented nested widget without duplicating or flattening it', () => {
+  const files = transform({
+    type: 'service.edit',
+    target: { groupName: 'First Group', groupIndex: 0, serviceName: 'First Service', serviceIndex: 0 },
+    values: {
+      name: 'First Service',
+      fields: [
+        { key: 'href', value: 'https://one.example' },
+        { key: 'description', value: 'Original' },
+        {
+          key: 'widget',
+          commented: true,
+          fields: [
+            { key: 'type', value: 'emby', commented: true },
+            { key: 'fields', value: '["movies","series","episodes"]', commented: true },
+            { key: 'url', value: 'https://emby.lan.mayoko.page', commented: true },
+            { key: 'key', value: '8476b1e2dfbe4e1f93976dea207c5c77', commented: true },
+            { key: 'enableBlocks', value: 'true', commented: true }
+          ]
+        }
+      ]
+    }
+  });
+  const widgetOccurrences = files.services.match(/widget:/g) || [];
+  assert.equal(widgetOccurrences.length, 1, 'the commented widget must not be duplicated');
+  assert.match(files.services, /widget:\s*\n\s+#\s+type: emby\s*\n\s+#\s+fields:/);
+  assert.match(files.services, /#\s+- movies\s*\n\s+#\s+- series\s*\n\s+#\s+- episodes/);
+  assert.doesNotMatch(files.services, /^ {8}# (?:type|fields|url|key|enableBlocks):/m);
+  const parsed = YAML.parse(files.services);
+  assert.equal(parsed[0]['First Group'][0]['First Service'].widget, undefined);
+});
+
 test('writes select choices as text and explicit blank choices without quoted markers', () => {
   const files = transform({
     type: 'service.add',

@@ -189,3 +189,14 @@ The work is not finished until every item is explicitly marked. An item marked
 - Update `README.md` when commands, environment variables, deployment behavior, or user-visible functionality changes.
 - When bumping the version in `package.json`, also update the footer version in `public/index.html`. A unit test in `tests/server.test.js` enforces this and will fail if the two drift apart.
 - Do not commit generated dependency directories such as `node_modules` or `.pnpm-store`.
+
+<!-- CODEGRAPH_START -->
+## CodeGraph
+
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+
+- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
+
+If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+<!-- CODEGRAPH_END -->

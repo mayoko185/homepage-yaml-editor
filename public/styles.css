@@ -140,7 +140,7 @@
             background-color: var(--container-bg);
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            padding: 18px 24px 8px;
+            padding: 18px 12px 8px;
         }
         .preview-container {
             background-color: var(--preview-bg);
@@ -673,7 +673,7 @@
         .preview-section {
             margin-top: 18px;
             padding: 0;
-            border: 1px solid var(--border-color);
+            border: none;
             border-radius: 10px;
             background-color: var(--config-item-bg);
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -904,9 +904,9 @@
             transform: translateY(0);
         }
         .preview-canvas {
-            margin: 12px;
-            padding: 14px;
-            border: 1px solid var(--border-color);
+            margin: 12px 6px;
+            padding: 4px 6px 14px;
+            border: none;
             border-radius: 8px;
             background: transparent;
         }
@@ -1108,7 +1108,7 @@
             align-items: flex-end;
             gap: 12px;
             padding: 8px 10px 0;
-            border: 1px solid var(--border-color);
+            border: none;
             border-radius: 8px;
             background: color-mix(in srgb, var(--config-item-bg) 78%, transparent);
         }
@@ -1126,11 +1126,25 @@
             display: flex;
             flex-wrap: wrap;
             align-items: flex-end;
-            flex: 1 1 auto;
+            flex: 0 1 auto;
+            width: fit-content;
+            max-width: 100%;
             min-width: 0;
             gap: 3px;
         }
+        .preview-tab-items {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            flex: 0 1 auto;
+            width: fit-content;
+            max-width: 100%;
+            min-width: 0;
+            gap: 3px;
+            border-bottom: 1px solid var(--border-color);
+        }
         .preview-tab-btn {
+            margin: 0;
             border: 1px solid var(--border-color);
             border-bottom: 3px solid transparent;
             background: var(--config-item-bg);
@@ -1186,7 +1200,7 @@
         .preview-tab > .preview-edit-actions {
             position: absolute;
             top: -32px;
-            left: 50%;
+            left: 0;
             right: auto;
             z-index: 6;
             justify-content: flex-end;
@@ -1197,7 +1211,7 @@
             background: transparent;
             opacity: 0;
             pointer-events: none;
-            transform: translate(-50%, -4px);
+            transform: translateY(-4px);
             transition: opacity 0.15s ease, transform 0.15s ease;
         }
         .preview-tab > .preview-edit-actions .preview-edit-action {
@@ -1215,7 +1229,7 @@
         .preview-tab > .preview-edit-actions:has(.preview-edit-action:focus-visible) {
             opacity: 1;
             pointer-events: auto;
-            transform: translate(-50%, 0);
+            transform: translateY(0);
         }
         .preview-tab-rename-input {
             align-self: center;
@@ -1360,10 +1374,11 @@
             padding: 8px 0;
         }
         .dashboard-bookmarks {
-            padding: 12px;
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            background: var(--config-item-bg);
+            margin-top: 8px;
+            padding: 0;
+            border: none;
+            border-radius: 0;
+            background: transparent;
         }
         .bookmark-panel-heading,
         .bookmark-group-heading {
@@ -1375,6 +1390,13 @@
         .bookmark-panel-heading {
             justify-content: space-between;
             margin-bottom: 11px;
+            margin-left: -12px;
+            padding-bottom: 9px;
+            padding-left: 12px;
+            padding-right: 12px;
+            border-bottom: 1px solid var(--border-color);
+            width: calc(100% + 24px);
+            box-sizing: border-box;
         }
         .bookmark-panel-title {
             display: flex;
@@ -1406,7 +1428,7 @@
         }
         .bookmark-group {
             position: relative;
-            background: var(--config-item-bg);
+            background: var(--preview-bg);
             border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 12px;
@@ -1414,7 +1436,7 @@
         }
         .bookmark-group:hover {
             border-color: color-mix(in srgb, var(--tab-active-bg) 25%, var(--border-color));
-            background: color-mix(in srgb, var(--tab-active-bg) 2%, var(--config-item-bg));
+            background: color-mix(in srgb, var(--tab-active-bg) 2%, var(--preview-bg));
         }
         .bookmark-group-heading {
             margin-bottom: 9px;
@@ -1537,7 +1559,7 @@
         }
         .dashboard-group {
             position: relative;
-            background: var(--config-item-bg);
+            background: var(--preview-bg);
             border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 12px;
@@ -1545,7 +1567,7 @@
         }
         .dashboard-group:hover {
             border-color: color-mix(in srgb, var(--tab-active-bg) 25%, var(--border-color));
-            background: color-mix(in srgb, var(--tab-active-bg) 2%, var(--config-item-bg));
+            background: color-mix(in srgb, var(--tab-active-bg) 2%, var(--preview-bg));
         }
         .dashboard-group-title {
             display: flex;
@@ -1608,11 +1630,12 @@
             padding: 10px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
+            background: var(--preview-bg);
             transition: border-color 0.15s ease, background-color 0.15s ease;
         }
         .dashboard-nested-group:hover {
             border-color: color-mix(in srgb, var(--tab-active-bg) 25%, var(--border-color));
-            background: color-mix(in srgb, var(--tab-active-bg) 2%, transparent);
+            background: color-mix(in srgb, var(--tab-active-bg) 2%, var(--preview-bg));
         }
         details.dashboard-nested-group > summary.dashboard-nested-group-title {
             cursor: pointer;
@@ -1642,7 +1665,7 @@
         details.dashboard-group-nested-root {
             padding: 12px;
             border: 1px solid var(--border-color);
-            background: var(--config-item-bg);
+            background: var(--preview-bg);
         }
         details.dashboard-group-nested-root > .dashboard-group-title {
             margin: 0 0 10px;
@@ -1684,12 +1707,12 @@
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 10px;
-            background: transparent;
+            background: var(--config-item-bg);
             transition: border-color 0.15s ease, background-color 0.15s ease;
         }
         .dashboard-card:hover {
             border-color: color-mix(in srgb, var(--tab-active-bg) 65%, var(--border-color));
-            background: color-mix(in srgb, var(--tab-active-bg) 10%, transparent);
+            background: color-mix(in srgb, var(--tab-active-bg) 10%, var(--config-item-bg));
         }
         .dashboard-card--commented {
             background: var(--commented-card-bg);
@@ -2106,6 +2129,9 @@
             color: var(--text-color);
             transform: none;
         }
+        .preview-add-tab {
+            margin-left: 8px;
+        }
         .preview-add-service {
             align-self: start;
             justify-self: start;
@@ -2120,6 +2146,9 @@
         }
         .preview-add-group {
             justify-self: start;
+            margin: 0;
+        }
+        details.dashboard-group-nested-root > .preview-add-group {
             margin-top: 10px;
         }
         .dashboard-empty {

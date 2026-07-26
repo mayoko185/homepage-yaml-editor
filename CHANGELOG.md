@@ -9,6 +9,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- Presented bookmarks as a dedicated subsection within the Dashboard preview instead of a peer service-group panel.
+- Refined Interactive Editor tab controls with left-aligned hover actions and a dedicated Add tab button at the end of the tab strip.
 - Reorganized server code into modular files under `server/`: entry point (`server/index.js`), route handlers (`server/routes/`), library helpers (`server/lib/`), YAML transform (`server/yaml/`), and auth state (`server/auth/`).
 - Cleaned API route paths to use consistent, predictable URL patterns.
 - Split the monolithic `public/app.js` into ESM modules: `constants.js`, `state.js`, `api.js`, `editor.js`, `ui.js`, `preview.js`, and a bootstrap/coordination entry point.

@@ -262,6 +262,88 @@ test('comment an option, save, reopen, and verify it remains commented and non-m
   await expect(reopenedRow.locator('.preview-edit-move-down')).toHaveCount(0);
 });
 
+test('commenting a widget option comments nested options visually', async ({ page }) => {
+  const yaml = `- Main:
+    - Alpha:
+        href: https://alpha.test
+        widget:
+          type: customapi
+          key: example
+ `;
+  await fs.writeFile(servicesPath, yaml, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).hover();
+  await page.locator('.dashboard-card', { hasText: 'Alpha' }).locator('.preview-edit-modify').click();
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  const widgetRow = page.locator('[data-preview-option-row]', { hasText: 'widget' }).first();
+  const widgetNested = widgetRow.locator('[data-preview-nested-options]');
+  await widgetRow.locator(':scope > .preview-edit-option-actions > .preview-edit-comment').click();
+
+  await expect(widgetRow).toHaveAttribute('data-preview-option-commented', 'true');
+  for (const optionName of ['type', 'key']) {
+    const optionRow = widgetNested.locator('[data-preview-option-row]', { hasText: optionName });
+    await expect(optionRow).toHaveAttribute('data-preview-option-commented', 'true');
+    await expect(optionRow).toHaveClass(/preview-edit-option-row--commented/);
+  }
+});
+
+test('service edit preserves a commented nested widget mapping', async ({ page }) => {
+  const yaml = `- Main:
+    - Emby:
+        icon: emby.png
+        href: https://emby.mayoko.page
+        siteMonitor: https://emby.mayoko.page
+        statusStyle: dot
+        description: Movie/TV Show Media Server
+        # widget:
+        #   type: emby
+        #   fields:
+        #     - movies
+        #     - series
+        #     - episodes
+        #   url: https://emby.lan.mayoko.page
+        #   key: 8476b1e2dfbe4e1f93976dea207c5c77
+        #   enableBlocks: true
+`;
+  await fs.writeFile(servicesPath, yaml, 'utf8');
+  await page.goto('/');
+  await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
+  await page.waitForTimeout(500);
+
+  const card = page.locator('.dashboard-card', { hasText: 'Emby' });
+  await card.hover();
+  await card.locator('.preview-edit-modify').click();
+  await expect(page.locator('#preview-edit-modal')).toBeVisible();
+
+  const widgetRow = page.locator('[data-preview-option-row]').filter({ hasText: 'widget' }).first();
+  const widgetNested = widgetRow.locator(':scope > [data-preview-nested-options]');
+  await expect(widgetRow.locator(':scope > [data-preview-option-key]')).toHaveText('widget');
+  await expect(widgetRow).toHaveAttribute('data-preview-option-commented', 'true');
+  await expect(widgetNested.locator(':scope > [data-preview-option-row]')).toHaveCount(5);
+  for (const optionName of ['type', 'fields', 'url', 'key', 'enableBlocks']) {
+    await expect(widgetNested.locator(':scope > [data-preview-option-row]').filter({ hasText: optionName })).toHaveCount(1);
+  }
+  await expect(widgetNested.locator(':scope > [data-preview-option-row]').filter({ hasText: 'fields' }).locator('.preview-edit-option-value')).toHaveValue('["movies","series","episodes"]');
+
+  await page.locator('#preview-edit-submit').click();
+  await expect(page.locator('#preview-edit-modal')).toBeHidden();
+
+  const edited = await getEditorValue(page);
+  expect(edited).toMatch(/^ {8}# widget:/m);
+  expect(edited).toMatch(/^ {8}#   type: emby$/m);
+  expect(edited).toMatch(/^ {8}#   fields:$/m);
+  expect(edited).toMatch(/^ {8}#     - movies$/m);
+  expect(edited).toMatch(/^ {8}#     - series$/m);
+  expect(edited).toMatch(/^ {8}#     - episodes$/m);
+  expect(edited).not.toMatch(/^ {8}# (?:type|fields|url|key|enableBlocks):/m);
+});
+
 test('adds a nested widget option, saves, reopens, and verifies it persists', async ({ page }) => {
   const yaml = `- Main:
     - Alpha:
@@ -415,6 +497,8 @@ layout:
 
   const nestedGroup = page.locator('.dashboard-nested-group', { hasText: 'SubGroup' });
   await expect(nestedGroup).toBeVisible();
+  const nestedRoot = page.locator('details.dashboard-group-nested-root').first();
+  await expect(nestedRoot.locator(':scope > .preview-add-group')).toHaveCSS('margin-top', '10px');
   await nestedGroup.locator('.dashboard-nested-group-title .preview-edit-modify').click({ force: true });
   await expect(page.locator('#preview-edit-modal')).toBeVisible();
 
@@ -492,6 +576,11 @@ test('opens Service Edit with populated select options and no page error', async
         description: First service
         statusStyle: dot
 `, 'utf8');
+  await fs.writeFile(settingsPath, `title: Browser Test
+layout:
+  Main:
+    tab: Home
+`, 'utf8');
   await page.goto('/');
   await expect(page.locator('#directory-info')).toContainText('Autoloaded');
   await page.locator('#preview-edit-toggle').check({ force: true });
@@ -501,6 +590,7 @@ test('opens Service Edit with populated select options and no page error', async
   await card.locator('[data-preview-action="service.edit"]').click();
 
   await expect(page.locator('#preview-edit-modal')).toBeVisible();
+  await expect(page.locator('#preview-edit-service-group option')).toHaveText(['Main — Home tab']);
   const statusStyleRow = page.locator('[data-preview-option-row]', { hasText: 'statusStyle' });
   const statusStyleSelect = statusStyleRow.locator('select');
   await expect(statusStyleSelect).toHaveValue('dot');
@@ -516,14 +606,97 @@ layout:
   Other:
     tab: Admin
 `, 'utf8');
+  await fs.writeFile(bookmarksPath, `- Links:
+    - Docs:
+        abbr: DOCS
+        href: https://docs.test
+`, 'utf8');
   await page.goto('/');
   await expect(page.locator('#directory-info')).toContainText('Autoloaded');
+  await page.locator('#preview-edit-toggle').check({ force: true });
 
   const homeTab = page.locator('.preview-tab:has(button[data-preview-tab="Home"])');
   const homeButton = homeTab.locator('.preview-tab-btn');
+  const addTabButton = page.locator('.preview-tab-strip > .preview-add-tab');
+  await expect(addTabButton).toHaveCount(1);
+  await expect(addTabButton).toHaveText('+ Add tab');
+  await expect(addTabButton).toHaveCSS('margin-left', '8px');
+  await expect(page.locator('.preview-tab-strip > *').last()).toHaveClass(/preview-add-tab/);
+  const tabItems = page.locator('.preview-tab-items');
+  await expect(tabItems).toHaveCSS('border-bottom-width', '1px');
+  const tabItemsBox = await tabItems.boundingBox();
+  const lastTabBox = await tabItems.locator(':scope > .preview-tab').last().boundingBox();
+  expect(tabItemsBox && lastTabBox).not.toBeNull();
+  expect(Math.abs((tabItemsBox.x + tabItemsBox.width) - (lastTabBox.x + lastTabBox.width))).toBeLessThanOrEqual(1);
+  const tabNavigation = page.locator('.preview-tab-navigation');
+  await expect(tabNavigation).toHaveCSS('border-top-width', '0px');
+  const pageContainer = page.locator('.container');
+  await expect(pageContainer).toHaveCSS('padding-left', '12px');
+  await expect(pageContainer).toHaveCSS('padding-right', '12px');
+  const previewSection = page.locator('.preview-section.homepage-preview');
+  await expect(previewSection).toHaveCSS('border-top-width', '0px');
+  const previewCanvas = page.locator('.preview-canvas');
+  await expect(previewCanvas).toHaveCSS('border-top-width', '0px');
+  await expect(previewCanvas).toHaveCSS('margin-left', '6px');
+  await expect(previewCanvas).toHaveCSS('margin-right', '6px');
+  await expect(previewCanvas).toHaveCSS('padding-top', '4px');
+  await expect(previewCanvas).toHaveCSS('padding-left', '6px');
+  await expect(previewCanvas).toHaveCSS('padding-right', '6px');
+  const serviceGroup = page.locator('.dashboard-group').first();
+  await expect(serviceGroup).toHaveCSS('border-top-width', '1px');
+  await expect(serviceGroup).toHaveCSS('padding-top', '12px');
+  await expect(serviceGroup).toHaveCSS('padding-right', '12px');
+  const serviceGroupTitle = serviceGroup.locator(':scope > .dashboard-group-title');
+  await expect(serviceGroupTitle).toHaveCSS('padding-top', '0px');
+  await expect(serviceGroupTitle).toHaveCSS('padding-left', '0px');
+  const serviceCard = serviceGroup.locator('.dashboard-card').first();
+  const groupBackground = await serviceGroup.evaluate((element) => getComputedStyle(element).backgroundColor);
+  const cardBackground = await serviceCard.evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(groupBackground).not.toBe(cardBackground);
+  for (const selector of ['.dashboard-nested-group', '.bookmark-group']) {
+    const group = page.locator(selector).first();
+    if (await group.count()) {
+      const background = await group.evaluate((element) => getComputedStyle(element).backgroundColor);
+      expect(background).toBe(groupBackground);
+    }
+  }
+  const bookmarkCard = page.locator('.bookmark-card').first();
+  if (await bookmarkCard.count()) {
+    const background = await bookmarkCard.evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(background).toBe(cardBackground);
+  }
+  const bookmarkSection = page.locator('.dashboard-bookmarks');
+  await expect(bookmarkSection).toHaveCount(1);
+  await expect(page.locator('.dashboard-shell > .dashboard-bookmarks')).toHaveCount(1);
+  const bookmarkHeading = bookmarkSection.locator(':scope > .bookmark-panel-heading');
+  await expect(bookmarkHeading.locator('.bookmark-panel-title')).toHaveText(/Bookmarks/);
+  await expect(bookmarkSection).toHaveCSS('border-top-width', '0px');
+  await expect(bookmarkSection).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(bookmarkSection).toHaveCSS('margin-top', '8px');
+  await expect(bookmarkHeading).toHaveCSS('border-bottom-width', '1px');
+  const previewSectionBox = await previewSection.boundingBox();
+  const bookmarkHeadingBox = await bookmarkHeading.boundingBox();
+  expect(previewSectionBox && bookmarkHeadingBox).not.toBeNull();
+  expect(Math.abs(bookmarkHeadingBox.x - previewSectionBox.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs((bookmarkHeadingBox.x + bookmarkHeadingBox.width) - (previewSectionBox.x + previewSectionBox.width))).toBeLessThanOrEqual(1);
+  await expect(bookmarkSection.locator(':scope > .bookmark-groups > .bookmark-group')).toHaveCSS('border-top-width', '1px');
+  const addGroupButton = page.locator('.preview-add-group').first();
+  if (await addGroupButton.count()) {
+    await expect(addGroupButton).toHaveCSS('margin-top', '0px');
+    await expect(addGroupButton).toHaveCSS('margin-bottom', '0px');
+  }
   await homeTab.hover();
+  const tabBox = await homeButton.boundingBox();
+  const toolbarBox = await homeTab.locator(':scope > .preview-edit-actions').boundingBox();
+  expect(tabBox && toolbarBox).not.toBeNull();
+  expect(Math.abs(toolbarBox.x - tabBox.x)).toBeLessThanOrEqual(1);
   await homeButton.focus();
   await expect(homeButton).toBeFocused();
+
+  await addTabButton.click();
+  await expect(page.locator('#preview-add-tab-modal')).toBeVisible();
+  await page.locator('#preview-add-tab-cancel').click();
+  await expect(page.locator('#preview-add-tab-modal')).toBeHidden();
 
   await homeTab.locator('[data-preview-action="tab.edit"]').click({ force: true });
   await expect(page.locator('[data-preview-tab-rename-input]')).toBeVisible();

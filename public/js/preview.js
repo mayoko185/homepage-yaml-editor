@@ -1354,16 +1354,26 @@ export function buildCommentedWidgetsData(yamlText) {
                 const newName = String(values.name || '').trim();
                 if (!newName) return null;
                 const fields = values.fields || [];
-                const buildDataFromFields = (fieldList) => {
+                const getFieldValue = (field, parentKey) => {
+                    if (parentKey === 'widget' && field.key === 'fields' && typeof field.value === 'string') {
+                        try {
+                            const parsed = JSON.parse(field.value);
+                            if (Array.isArray(parsed)) return parsed;
+                        } catch {
+                        }
+                    }
+                    return field.value;
+                };
+                const buildDataFromFields = (fieldList, parentKey = '') => {
                     const data = {};
                     for (const f of fieldList) {
                         if (Array.isArray(f.fields)) {
-                            const nested = buildDataFromFields(f.fields);
+                            const nested = buildDataFromFields(f.fields, f.key);
                             if (Object.keys(nested).length > 0) {
                                 data[f.key] = nested;
                             }
                         } else if (f.blankValue || String(f.value || '').trim() !== '') {
-                            data[f.key] = f.value;
+                            data[f.key] = getFieldValue(f, parentKey);
                         }
                     }
                     return data;
@@ -1834,7 +1844,7 @@ export function buildCommentedWidgetsData(yamlText) {
                 if (!found) return;
                 const foundName = Object.keys(found)[0];
                 if (depth === nestedPath.length - 1) {
-                    // Last step ΓÇö merge into this nested group's array in YAML order
+                    // Last step — merge into this nested group's array in YAML order
                     if (!Array.isArray(found[foundName])) {
                         found[foundName] = [];
                     }
@@ -1989,60 +1999,47 @@ export function buildCommentedWidgetsData(yamlText) {
         }
 
         function parseCommentedSubOptions(lines, startLine, endLine) {
-            const result = [];
-            if (startLine < 0 || endLine > lines.length || endLine < startLine) return result;
-            const startIndex = Math.max(0, startLine - 1);
-            const endIndex = Math.min(lines.length, endLine);
-            const baseIndent = getYamlIndent(lines[startIndex] || '');
-            const uncommentedLine = (line) => {
-                const match = String(line || '').match(/^(\s*)# ?(.*)$/);
-                return match ? `${match[1]}${match[2]}` : null;
-            };
-            const parseKeyValue = (line) => {
-                const normalized = uncommentedLine(line);
-                if (normalized === null) return null;
-                const match = normalized.match(/^\s*(?:-\s+)?(.+?):(?:\s*(.*))?$/);
-                if (!match) return null;
-                return {
-                    indent: getYamlIndent(normalized),
-                    key: match[1].trim(),
-                    value: (match[2] || '').trim()
-                };
-            };
-            let i = startIndex + 1;
-            while (i < endIndex) {
-                const line = lines[i];
-                if (line.trim() === '') { i++; continue; }
-                const parsedLine = parseKeyValue(line);
-                const indent = parsedLine ? parsedLine.indent : line.search(/\S/);
-                if (indent <= baseIndent) break;
-                if (!parsedLine) { i++; continue; }
-                const keyIndent = parsedLine.indent;
-                const key = parsedLine.key;
-                const valuePart = parsedLine.value;
-                if (valuePart) {
-                    result.push({ key, value: valuePart, commented: true, locked: true });
-                    i++;
-                } else {
-                    let j = i + 1;
-                    const childLines = [];
-                    while (j < endIndex) {
-                        const childLine = lines[j];
-                        if (childLine.trim() === '') { j++; continue; }
-                        const childParsed = parseKeyValue(childLine);
-                        const childIndent = childParsed ? childParsed.indent : childLine.search(/\S/);
-                        if (childIndent <= keyIndent + 2) break;
-                        if (childParsed) childLines.push(childParsed);
-                        j++;
-                    }
-                    const subFields = childLines.map((child) => child.value
-                        ? { key: child.key, value: child.value, commented: true, locked: true }
-                        : { key: child.key, fields: [], commented: true, locked: true });
-                    result.push({ key, fields: subFields, commented: true, locked: true });
-                    i = j;
-                }
+            if (!Array.isArray(lines) || startLine < 0 || endLine < startLine || endLine >= lines.length) return [];
+            const baseIndent = getYamlIndent(lines[startLine] || '');
+            const candidates = extractCommentedLines(lines.join('\n'))
+                .filter((block) => block.startLine > startLine
+                    && block.endLine <= endLine
+                    && block.indent > baseIndent)
+                .map((block) => {
+                    const parsed = Array.isArray(block.parsed) ? block.parsed[0] : block.parsed;
+                    return {
+                        line: block.startLine,
+                        fields: getPreviewOptionFields(parsed, { commented: true }),
+                        startLine: block.startLine,
+                        endLine: block.endLine
+                    };
+                });
+            const coveredLines = new Set(candidates.flatMap((candidate) => {
+                const covered = [];
+                for (let line = candidate.startLine; line <= candidate.endLine; line++) covered.push(line);
+                return covered;
+            }));
+            for (let line = startLine + 1; line <= endLine; line++) {
+                if (coveredLines.has(line)) continue;
+                const match = String(lines[line] || '').match(/^(\s*)# ?(.*)$/);
+                if (!match) continue;
+                const normalized = `${match[1]}${match[2]}`;
+                if (getYamlIndent(normalized) <= baseIndent) continue;
+                const keyValue = normalized.match(/^\s*(?:-\s+)?(.+?):(?:\s*(.*))?$/);
+                if (!keyValue) continue;
+                candidates.push({
+                    line,
+                    fields: [{
+                        key: keyValue[1].trim(),
+                        value: (keyValue[2] || '').trim(),
+                        commented: true,
+                        locked: true
+                    }]
+                });
             }
-            return result;
+            return candidates
+                .sort((first, second) => first.line - second.line)
+                .flatMap((candidate) => candidate.fields);
         }
 
         function appendCommentedSubOptions(source, fields) {
@@ -2427,7 +2424,7 @@ export function buildCommentedWidgetsData(yamlText) {
             }
             select.innerHTML = choices.map((choice, index) => {
                 const location = choice.tabName ? `${choice.tabName} tab` : 'All tabs';
-                return `<option value="${index}"${choice.current ? ' selected' : ''}>${escapeHtml(choice.groupName)} ΓÇö ${escapeHtml(location)}</option>`;
+                return `<option value="${index}"${choice.current ? ' selected' : ''}>${escapeHtml(choice.groupName)} — ${escapeHtml(location)}</option>`;
             }).join('');
         }
 
@@ -3585,7 +3582,8 @@ export function updateVisualPreview() {
     const previewTabsHtml = homepageTabs.length > 0 || previewEditMode
         ? `<div class="preview-tab-navigation">
                     <span class="preview-tab-label">Tabs</span>
-                    <div class="preview-tab-strip" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name, index) => {
+                    <div class="preview-tab-strip">
+                        <div class="preview-tab-items" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name, index) => {
                         const isActive = name === previewHomepageTab;
                         const tabSource = { tab: 'settings', kind: 'settings-tab', name };
                         const dragAttributes = previewEditMode ? getDragItemAttributes('tab', tabSource, index) : '';
@@ -3595,8 +3593,8 @@ export function updateVisualPreview() {
                             <button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes(tabSource)}>${escapeHtml(name)}</button>
                             ${editControls}
                         </span>`;
-                    }).join('')}</div>
-                </div>`
+                     }).join('')}</div>${previewEditMode ? '<button type="button" class="preview-add-button preview-add-tab" data-preview-action="tab.add"><span aria-hidden="true">+</span> Add tab</button>' : ''}</div>
+                 </div>`
         : '';
 
     const addGroupButton = previewEditMode

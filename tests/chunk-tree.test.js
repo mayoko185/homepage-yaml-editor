@@ -291,6 +291,27 @@ test('service edit renames and updates data', () => {
     assert.doesNotMatch(result, /^    - Active One:/m, 'old service name must be gone');
 });
 
+test('service edit preserves nested mapping indentation', () => {
+    const input = `- Group:
+    - Service:
+        href: /service
+`;
+    const chunks = parseServicesDocument(input);
+    const result = ChunkTree.editChunk(chunks, {
+        groupName: 'Group',
+        groupIndex: 0,
+        entryName: 'Service',
+        entryIndex: 0
+    }, 'Service', {
+        href: '/updated',
+        widget: { type: 'customapi', fields: ['movies'] }
+    });
+    assert.match(result, /^        widget:\r?\n          type: customapi/m);
+    assert.match(result, /^          fields:\r?\n            - movies/m);
+    assert.doesNotMatch(result, /^        type: customapi/m);
+    assert.deepEqual(jsyaml.load(result)[0].Group[0].Service.widget.fields, ['movies']);
+});
+
 test('group edit renames group', () => {
     const chunks = parseServicesDocument(servicesWithComments);
     const result = ChunkTree.editChunk(chunks, {
