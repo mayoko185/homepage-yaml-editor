@@ -7,15 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-07-26
+
 ### Changed
 
-- Presented bookmarks as a dedicated subsection within the Dashboard preview instead of a peer service-group panel.
-- Refined Interactive Editor tab controls with left-aligned hover actions and a dedicated Add tab button at the end of the tab strip.
-- Reorganized server code into modular files under `server/`: entry point (`server/index.js`), route handlers (`server/routes/`), library helpers (`server/lib/`), YAML transform (`server/yaml/`), and auth state (`server/auth/`).
-- Cleaned API route paths to use consistent, predictable URL patterns.
-- Split the monolithic `public/app.js` into ESM modules: `constants.js`, `state.js`, `api.js`, `editor.js`, `ui.js`, `preview.js`, and a bootstrap/coordination entry point.
-- Moved default configuration files (`option-types.default.json`, `app-settings.default.json`) into a `defaults/` directory.
-- Updated Dockerfile to use directory-level COPY instructions matching the new layout.
+- Reworked the Dashboard Preview hierarchy with bookmarks in a dedicated subsection and distinct surfaces for groups, nested groups, and cards.
+- Moved Dashboard tab navigation into the Preview header and refined Interactive Editor tab controls with left-aligned hover actions and an Add tab button at the end of the tab strip.
+- Split the monolithic `public/app.js` into ESM modules (`constants.js`, `state.js`, `api.js`, `editor.js`, `ui.js`, and `preview.js`) with a dedicated bootstrap and coordination entry point.
+- Consolidated Homepage configuration directory setup under `HOMEPAGE_CONFIGS`, replacing `DATA_DIR`, `AUTOLOAD_DIR`, and `ALLOWED_CONFIG_DIRS`; when unset, bundled sample YAML files load in read-only mode.
+
+### Fixed
+
+- Commenting a widget option now also comments its nested options in the Interactive Editor.
+- Preserved commented nested widget mappings during service edits without duplicating their child fields.
 
 ## [1.3.3] - 2026-07-23
 

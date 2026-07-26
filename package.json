@@ -1,6 +1,6 @@
 {
   "name": "homepage-yaml-editor",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "packageManager": "pnpm@11.7.0",
   "description": "Server-side YAML editor for homepage configurations",
   "main": "server/index.js",
