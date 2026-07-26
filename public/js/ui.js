@@ -577,11 +577,11 @@ export function closeInlineAddTabPanel({ restoreFocus } = {}) {
     if (restoreFocus !== false && anchor && document.body.contains(anchor) && anchor.offsetParent !== null && typeof anchor.focus === 'function') {
         anchor.focus();
     } else if (restoreFocus !== false) {
-        const visualPreview = document.getElementById('visual-preview');
-        if (visualPreview) {
-            visualPreview.tabIndex = -1;
-            visualPreview.focus();
-            visualPreview.removeAttribute('tabindex');
+        const tabHost = document.getElementById('preview-tab-host');
+        if (tabHost) {
+            tabHost.tabIndex = -1;
+            tabHost.focus();
+            tabHost.removeAttribute('tabindex');
         }
     }
 }

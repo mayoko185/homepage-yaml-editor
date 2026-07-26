@@ -622,8 +622,14 @@ layout:
   await expect(addTabButton).toHaveText('+ Add tab');
   await expect(addTabButton).toHaveCSS('margin-left', '8px');
   await expect(page.locator('.preview-tab-strip > *').last()).toHaveClass(/preview-add-tab/);
+  const tabHost = page.locator('#preview-tab-host');
+  await expect(tabHost).toHaveCount(1);
+  await expect(tabHost.locator(':scope > .preview-tab-navigation')).toHaveCount(1);
+  await expect(page.locator('.preview-header > .preview-tab-navigation')).toHaveCount(0);
+  await expect(page.locator('#visual-preview .preview-tab-navigation')).toHaveCount(0);
+  await expect(page.locator('.dashboard-shell > .preview-tab-navigation')).toHaveCount(0);
   const tabItems = page.locator('.preview-tab-items');
-  await expect(tabItems).toHaveCSS('border-bottom-width', '1px');
+  await expect(tabItems).toHaveCSS('border-bottom-width', '0px');
   const tabItemsBox = await tabItems.boundingBox();
   const lastTabBox = await tabItems.locator(':scope > .preview-tab').last().boundingBox();
   expect(tabItemsBox && lastTabBox).not.toBeNull();

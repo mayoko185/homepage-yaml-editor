@@ -3579,23 +3579,28 @@ export function updateVisualPreview() {
         return `<span class="widget-block preview-jump-target${isCommented ? ' widget-block--commented' : ''}" ${getSourceAttributes(widgetSource)} ${widgetTooltip}>${escapeHtml(name)}<span class="preview-edit-actions">${widgetEditButton}${widgetCommentButton}${widgetRemoveButton}</span></span>`;
     }).join('');
 
-    const previewTabsHtml = homepageTabs.length > 0 || previewEditMode
-        ? `<div class="preview-tab-navigation">
-                    <span class="preview-tab-label">Tabs</span>
-                    <div class="preview-tab-strip">
-                        <div class="preview-tab-items" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name, index) => {
-                        const isActive = name === previewHomepageTab;
-                        const tabSource = { tab: 'settings', kind: 'settings-tab', name };
-                        const dragAttributes = previewEditMode ? getDragItemAttributes('tab', tabSource, index) : '';
-                        const dropAttributes = previewEditMode ? ` data-preview-drop-kind="tab" data-preview-drop-index="${index}"` : '';
-                        const editControls = previewEditMode ? getTabEditControls(tabSource) : '';
-                        return `<span class="preview-tab" ${dragAttributes}${dropAttributes}>
-                            <button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes(tabSource)}>${escapeHtml(name)}</button>
-                            ${editControls}
-                        </span>`;
-                     }).join('')}</div>${previewEditMode ? '<button type="button" class="preview-add-button preview-add-tab" data-preview-action="tab.add"><span aria-hidden="true">+</span> Add tab</button>' : ''}</div>
-                 </div>`
-        : '';
+    const previewTabHost = document.getElementById('preview-tab-host');
+    if (previewTabHost) {
+        if (homepageTabs.length > 0 || previewEditMode) {
+            previewTabHost.innerHTML = `<div class="preview-tab-navigation">
+                        <span class="preview-tab-label">Tabs</span>
+                        <div class="preview-tab-strip">
+                            <div class="preview-tab-items" role="tablist" aria-label="Homepage dashboard pages">${homepageTabs.map((name, index) => {
+                            const isActive = name === previewHomepageTab;
+                            const tabSource = { tab: 'settings', kind: 'settings-tab', name };
+                            const dragAttributes = previewEditMode ? getDragItemAttributes('tab', tabSource, index) : '';
+                            const dropAttributes = previewEditMode ? ` data-preview-drop-kind="tab" data-preview-drop-index="${index}"` : '';
+                            const editControls = previewEditMode ? getTabEditControls(tabSource) : '';
+                            return `<span class="preview-tab" ${dragAttributes}${dropAttributes}>
+                                <button type="button" role="tab" aria-selected="${isActive}" tabindex="${isActive ? '0' : '-1'}" class="preview-tab-btn ${isActive ? 'active' : ''}" data-preview-tab="${escapeHtml(name)}" ${getSourceAttributes(tabSource)}>${escapeHtml(name)}</button>
+                                ${editControls}
+                            </span>`;
+                         }).join('')}</div>${previewEditMode ? '<button type="button" class="preview-add-button preview-add-tab" data-preview-action="tab.add"><span aria-hidden="true">+</span> Add tab</button>' : ''}</div>
+                     </div>`;
+        } else {
+            previewTabHost.innerHTML = '';
+        }
+    }
 
     const addGroupButton = previewEditMode
         ? '<button type="button" class="preview-add-button preview-add-group" data-preview-action="group.add"><span aria-hidden="true">+</span> Add service group</button>'
@@ -3603,7 +3608,6 @@ export function updateVisualPreview() {
     previewDiv.innerHTML = `
                 <div class="dashboard-shell ${previewEditMode ? 'preview-edit-enabled' : ''}">
                     ${errorItems ? `<div class="dashboard-errors">${errorItems}</div>` : ''}
-                    ${previewTabsHtml}
                     ${widgetsHtml ? `<div class="dashboard-widgets">${widgetsHtml}</div>` : ''}
                     ${groupsHtml || addGroupButton ? `<div class="dashboard-grid">${groupsHtml}${addGroupButton}</div>` : ''}
                     ${bookmarksHtml}

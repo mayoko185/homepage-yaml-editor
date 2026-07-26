@@ -78,7 +78,8 @@ document.addEventListener('DOMContentLoaded', async function() {
              }
          }
 
-            document.getElementById('visual-preview').addEventListener('click', function(event) {
+            const previewSection = document.getElementById('homepage-preview-section');
+            previewSection.addEventListener('click', function(event) {
                 const actionTarget = event.target.closest('[data-preview-action]');
                 if (actionTarget && this.contains(actionTarget)) {
                     event.preventDefault();
@@ -118,7 +119,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     console.warn('Could not parse preview source target', error);
                 }
             });
-            document.getElementById('visual-preview').addEventListener('keydown', function(event) {
+            previewSection.addEventListener('keydown', function(event) {
                 const jumpTarget = event.target.closest('[data-source]');
                 if (jumpTarget && !jumpTarget.classList.contains('preview-tab-btn') && ['Enter', ' '].includes(event.key)) {
                     event.preventDefault();
