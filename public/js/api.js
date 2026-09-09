@@ -60,12 +60,14 @@ export async function loadSampleConfigs() {
     if (!response.ok) {
         throw new Error(getApiErrorMessage(payload, response, 'Could not load example configurations'));
     }
+    const loadedSamples = {};
     for (const tabName of Object.keys(sampleConfigs)) {
         if (typeof payload.samples?.[tabName] !== 'string') {
             throw new Error(`The server did not return the ${tabName}.yaml example configuration`);
         }
-        sampleConfigs[tabName] = payload.samples[tabName];
+        loadedSamples[tabName] = payload.samples[tabName];
     }
+    Object.assign(sampleConfigs, loadedSamples);
 }
 
 export async function loadOptionDefinitions() {

@@ -148,7 +148,7 @@ function authMiddleware(req, res, next) {
     '/styles.css',
     '/favicon.ico',
     '/theme-bootstrap.js',
-    '/login.js'
+    '/js/login.js'
   ].includes(req.path)) {
     return next();
   }

@@ -1,13 +1,27 @@
 import { configTabNames, configTabLabels, sampleConfigs, createNewTabGroupValue, defaultPageTitle, fileToTabMapping, optionValueTypeChoices, optionAppliesToChoices } from './constants.js';
 import { getApiErrorMessage, formatYamlError, formatYamlErrorLocation, getSaveErrorSummary, addErrorGuidance, loadSampleConfigs, loadPersistentAppSettings, loadOptionDefinitions, requestDirectoryLoad, createZipBlob } from './api.js';
 import { ChunkTree } from './vendor/chunk-tree.js';
-import { getEditorValue, setEditorValue, getSelectedLineNumbers, toggleSelectedComments, toggleLineRangeComments, init as initEditor } from './editor.js';
-import { escapeHtml, updateUnsavedIndicators, setSaveStatus, clearSaveStatus, setPreviewStatus, setDirectoryStatus, setDirectoryModalStatus, handleLoadDirectory, openDirectoryModal, closeDirectoryModal, showConfirmationDialog, closeConfirmationDialog, openInlineAddTabPanel, initInlineAddTabModal, closeInlineAddTabPanel, exitTabRenameMode, applyPersistentAppSettings, setPreviewEditModalStatus, setOptionTypesStatus, readOptionTypesDraft, renderOptionTypesDraft, renderOptionDefaultsDraft, getOrderedOptionDefaultIndexes, setOptionDefaultOrder, openOptionTypesModal, closeOptionTypesModal, saveOptionTypes, setInlineAddTabStatus, updateAutoIndentLabel, updateEditorVisibility, syncPreviewEditModePresentation, updatePreviewEditMode, updatePreviewUndoButton, toggleTheme, setResetSampleVisible, setReloadDirectoryVisible, setSampleMode, scrollToTop, scrollToEditor, scrollToPreview, updateFloatingNavVisibility, updateSectionJumpButton, getFirstVisibleConfigTab, openSettingsModal, closeSettingsModal, submitSettingsModal, activateSettingsTab, handleSettingsTabKeydown, renderSettingsTabControls, moveSettingsTab, updateSettingsTabVisibilityDraft } from './ui.js';
+import { getEditorValue, setEditorValue, getSelectedLineNumbers, toggleSelectedComments, init as initEditor } from './editor.js';
+import { escapeHtml, updateUnsavedIndicators, setSaveStatus, clearSaveStatus, clearSaveStatusNotOwnedByDirectoryOperation, setPreviewStatus, setDirectoryStatus, setSampleDirectoryStatus, setDirectoryModalStatus, handleLoadDirectory, openDirectoryModal, closeDirectoryModal, showConfirmationDialog, closeConfirmationDialog, openInlineAddTabPanel, initInlineAddTabModal, closeInlineAddTabPanel, exitTabRenameMode, applyPersistentAppSettings, setPreviewEditModalStatus, setOptionTypesStatus, readOptionTypesDraft, renderOptionTypesDraft, renderOptionDefaultsDraft, getOrderedOptionDefaultIndexes, setOptionDefaultOrder, openOptionTypesModal, closeOptionTypesModal, saveOptionTypes, setInlineAddTabStatus, updateAutoIndentLabel, updateEditorVisibility, syncPreviewEditModePresentation, updatePreviewEditMode, updatePreviewUndoButton, toggleTheme, setResetSampleVisible, setReloadDirectoryVisible, setSampleMode, scrollToTop, scrollToEditor, scrollToPreview, updateFloatingNavVisibility, updateSectionJumpButton, getFirstVisibleConfigTab, openSettingsModal, closeSettingsModal, submitSettingsModal, activateSettingsTab, handleSettingsTabKeydown, renderSettingsTabControls, moveSettingsTab, updateSettingsTabVisibilityDraft } from './ui.js';
  import { getTabYamlText, parseTabConfig, getHomepageTabInfo, isInitiallyCollapsed, isNestedServiceGroup, getNestedGroupColumns, resolveIconUrl, renderIcon, getSafeLinkUrl, getYamlLines, getYamlKeyFromLine, getYamlIndent, findYamlKeyLine, findNthYamlListKeyLine, findGroupRangeFromLine, findYamlGroupRange, findNestedGroupPathRange, findServicesGroupAtLine, findSettingsLayoutGroupAtLine, findNestedYamlKeyLine, findLineContainingValue, findSourceLine, findBlockLineRange, getSourceAttributes, getDragItemAttributes, takeOccurrence, formatPreviewTooltipLabel, formatPreviewTooltipValue, getPreviewDetailLines, getPreviewTooltipAttributes, getBookmarkTooltipLines, getCurrentTabSource, getPreviewEditActionButton, getGroupEditControls, getServiceEditControls, getBookmarkGroupEditControls, getBookmarkEditControls, extractCommentedLines, buildCommentedServicesData, normalizeCommentedChunkLines, parseCommentedChunkEntry, buildServicesPreviewDataFromChunks, buildCommentedWidgetsData, setPreviewOptionDefinitions, getDefaultPreviewOptionFields, markFieldsCommented, renderPreviewEditOptions, syncPreviewEditOptionState, updatePreviewEditTabWarning, getPreviewEditFieldAtPath, renderPreviewEditGroupNested, closePreviewEditDialog, submitPreviewEditForm, applyPreviewEdit, handlePreviewEditAction, scheduleVisualPreview, updatePreview, refreshPreview, undoPreviewEdit, handlePreviewDragStart, handlePreviewDragOver, handlePreviewDrop, clearPreviewDragState } from './preview.js';
 import { yamlCodeEditor, previewAddTabModal, saveStatusElement, setYamlCodeEditor, setPreviewAddTabModal, setSaveStatusElement } from './shared.js';
-import { currentTab, loadedFiles, originalLoadedFiles, loadedFileRevisions, loadedFileNames, currentDirectoryPath, currentDirectoryWasAutoloaded, sampleModeEnabled, parsedConfigCache, previewHomepageTab, previewShowCommentsState, previewEditDialogState, previewUndoState, previewUpdateTimer, applyingPreviewFiles, sourceHighlightLine, sourceHighlightTimer, optionDefinitions, optionTypesDraft, optionTypesRemovedDefinitions, optionTypesPreviousFocus, directoryModalPreviousFocus, confirmationDialogResolver, confirmationDialogPreviousFocus, previewEditModalPreviousFocus, pendingInlineRenameTab, pendingInlineRenameBackup, previewTabAddAnchor, previewTabAddAfterTab, previewTabAddInFlight, activePreviewDrag, setCurrentTab, setLoadedFiles, setOriginalLoadedFiles, setLoadedFileRevisions, setLoadedFileNames, setCurrentDirectoryPath, setCurrentDirectoryWasAutoloaded, setSampleModeEnabled, setPreviewHomepageTab, setPreviewShowCommentsState, setPreviewUndoState, setApplyingPreviewFiles, setSourceHighlightLine, setSourceHighlightTimer, setOptionDefinitions, setOptionTypesRemovedDefinitions, setOptionTypesPreviousFocus, setDirectoryModalPreviousFocus, setConfirmationDialogResolver, setConfirmationDialogPreviousFocus, setPreviewEditModalPreviousFocus, setPendingInlineRenameTab, setPendingInlineRenameBackup, setPreviewTabAddAnchor, setPreviewTabAddAfterTab, setPreviewTabAddInFlight, setActivePreviewDrag, mutatePreviewEditDialogState, mutateOptionTypesDraft, setLoadedFileContent, setOriginalLoadedFileContent, setLoadedFileName, setLoadedFileRevision, clearParsedConfigCache, setParsedConfigCache, deleteParsedConfigCache, setOptionDefinition, deleteOptionDefinition, clearOptionDefinitions, getUnsavedTabNames, hasUnsavedChanges } from './state.js';
+import { currentTab, loadedFiles, originalLoadedFiles, loadedFileRevisions, loadedFileNames, currentDirectoryPath, currentDirectoryWasAutoloaded, sampleModeEnabled, parsedConfigCache, previewHomepageTab, previewShowCommentsState, previewEditDialogState, previewUndoState, previewUpdateTimer, applyingPreviewFiles, sourceHighlightLine, sourceHighlightTimer, optionDefinitions, optionTypesDraft, optionTypesRemovedDefinitions, optionTypesPreviousFocus, directoryModalPreviousFocus, confirmationDialogResolver, confirmationDialogPreviousFocus, previewEditModalPreviousFocus, pendingInlineRenameTab, pendingInlineRenameBackup, previewTabAddAnchor, previewTabAddAfterTab, previewTabAddInFlight, activePreviewDrag, setCurrentTab, setLoadedFiles, setOriginalLoadedFiles, setLoadedFileRevisions, setLoadedFileNames, setCurrentDirectoryPath, setCurrentDirectoryWasAutoloaded, setSampleModeEnabled, setPreviewHomepageTab, setPreviewShowCommentsState, setPreviewUndoState, setApplyingPreviewFiles, setSourceHighlightLine, setSourceHighlightTimer, setOptionDefinitions, setOptionTypesRemovedDefinitions, setOptionTypesPreviousFocus, setDirectoryModalPreviousFocus, setConfirmationDialogResolver, setConfirmationDialogPreviousFocus, setPreviewEditModalPreviousFocus, setPendingInlineRenameTab, setPendingInlineRenameBackup, setPreviewTabAddAnchor, setPreviewTabAddAfterTab, setPreviewTabAddInFlight, setActivePreviewDrag, mutatePreviewEditDialogState, mutateOptionTypesDraft, setLoadedFileContent, setOriginalLoadedFileContent, setLoadedFileName, setLoadedFileRevision, loadedFilePresent, setLoadedFilePresent, setLoadedFilePresence, getDirectorySessionGeneration, getDirectorySessionOperationToken, installDirectorySession, isDirectorySessionCurrent, beginDirectoryOperation, isLatestDirectoryOperation, finalizeDirectoryOperation, getContentVersion, beginSaveBatch, endSaveBatch, clearParsedConfigCache, setParsedConfigCache, deleteParsedConfigCache, setOptionDefinition, deleteOptionDefinition, clearOptionDefinitions, getUnsavedTabNames, hasUnsavedChanges } from './state.js';
 
 document.addEventListener('DOMContentLoaded', async function() {
+    // Claim the startup lifecycle before any awaited bootstrap work. A manual directory
+    // load that begins during initialization must supersede startup rather than be reset by
+    // late sample initialization or autoload completion.
+    const bootstrapSessionGeneration = getDirectorySessionGeneration();
+    const startupToken = beginDirectoryOperation();
+    let bootstrapComplete = false;
+    let latestLoadOperationToken = null;
+    let latestReloadOperationToken = null;
+    let saveStatusOwner = null;
+    // Start examples initialization once, before any other awaited bootstrap work. Directory
+    // results share this boundary so absent tabs never capture the initial empty sample values.
+    const sampleInitializationPromise = loadSampleConfigs()
+        .then(() => ({ available: true, error: null }))
+        .catch((error) => ({ available: false, error }));
     // --- Functions moved from preview.js (reference app.js-scoped variables) ---
 
             function jumpFromSaveStatus() {
@@ -319,37 +333,77 @@ document.addEventListener('DOMContentLoaded', async function() {
              setSaveStatus(`Could not load option types. Some editing controls may be unavailable. ${addErrorGuidance(error, 'You can try again by reloading the page')}`, 'error');
          }
 
-          // Initialize with sample configs
-        try {
-            await loadSampleConfigs();
-        } catch (error) {
-            console.error('Example configuration load failed:', error);
-            setSaveStatus(`Could not load example configurations: ${addErrorGuidance(error, 'Reload the page and try again')}`, 'error');
+        function applyGenerationZeroSampleFallback(sampleInitializationState) {
+            const fallbackFiles = sampleInitializationState.available
+                ? { ...sampleConfigs }
+                : Object.fromEntries(configTabNames.map((tabName) => [tabName, '']));
+            setLoadedFiles(fallbackFiles);
+            setOriginalLoadedFiles({ ...fallbackFiles });
+            setLoadedFileRevisions(Object.fromEntries(configTabNames.map((tabName) => [tabName, null])));
+            setLoadedFileNames(Object.fromEntries(configTabNames.map((tabName) => [tabName, `${tabName}.yaml`])));
+            setLoadedFilePresent(Object.fromEntries(configTabNames.map((tabName) => [tabName, false])));
+            setCurrentDirectoryPath(null);
+            setCurrentDirectoryWasAutoloaded(false);
+            setSampleMode(true);
+            setSampleDirectoryStatus(sampleInitializationState.available);
+            setResetSampleVisible(true);
+            setReloadDirectoryVisible(false);
+
+            switchTab(getFirstVisibleConfigTab(), null, { skipRemember: true });
+            updateUnsavedIndicators();
+            updatePreview();
         }
 
-        setLoadedFiles({ ...sampleConfigs });
-        setOriginalLoadedFiles({ ...sampleConfigs });
-        setLoadedFileRevisions(Object.fromEntries(configTabNames.map((tabName) => [tabName, null])));
-        setCurrentDirectoryPath(null);
+        async function recoverFailedBootstrapLoad(operationToken, wasBootstrapEra) {
+            if (!wasBootstrapEra) {
+                return false;
+            }
+
+            // This await is also the completion boundary for sample initialization. The
+            // operation must be revalidated after it so a newer Load/Reload cannot inherit
+            // recovery ownership while the examples request is pending.
+            const sampleInitializationState = await sampleInitializationPromise;
+            if (getDirectorySessionGeneration() !== bootstrapSessionGeneration
+                || !isLatestDirectoryOperation(operationToken)) {
+                console.warn('Discarding stale generation-zero fallback for directory operation', operationToken);
+                return false;
+            }
+
+            applyGenerationZeroSampleFallback(sampleInitializationState);
+            return true;
+        }
+
+        // Initialize with sample configs
+        const sampleInitializationState = await sampleInitializationPromise;
+        const startupOperationIsCurrent = isLatestDirectoryOperation(startupToken);
+        if (!sampleInitializationState.available && startupOperationIsCurrent) {
+            console.error('Example configuration load failed:', sampleInitializationState.error);
+            setSaveStatus('Could not load example configurations: ' + addErrorGuidance(sampleInitializationState.error, 'Reload the page and try again'), 'error');
+        }
+
+        // Do not reset a directory session that was installed while bootstrap was awaiting
+        // settings, option definitions, or examples. A newer manual operation also owns the
+        // generation-zero state, even when it has not installed a directory yet.
+        if (getDirectorySessionGeneration() === bootstrapSessionGeneration && startupOperationIsCurrent) {
+            applyGenerationZeroSampleFallback(sampleInitializationState);
+        }
         document.getElementById('security-status').hidden = Boolean(window.APP_CONFIG && window.APP_CONFIG.loginRequired);
-        setSampleMode(true);
-        const directoryInfo = document.getElementById('directory-info');
-        directoryInfo.textContent = 'Examples loaded (read-only).';
-        directoryInfo.dataset.state = 'idle';
-
-        switchTab(getFirstVisibleConfigTab(), null, { skipRemember: true });
-        updatePreview();
-
         try {
             const response = await fetch('/api/startup-directory');
             const startup = await response.json();
 
             if (startup.hasStartupDirectory && startup.directory && startup.files) {
-                applyLoadedDirectory(startup, 'services', { autoloaded: true });
+                await applyLoadedDirectory(startup, 'services', { autoloaded: true }, startupToken);
             }
         } catch (error) {
-            console.error('Startup directory load failed:', error);
-            setSaveStatus(`Could not check the startup directory. ${addErrorGuidance(error, 'Use Load to choose a directory manually')}`, 'error');
+            if (isLatestDirectoryOperation(startupToken)) {
+                console.error('Startup directory load failed:', error);
+                setSaveStatus(`Could not check the startup directory. ${addErrorGuidance(error, 'Use Load to choose a directory manually')}`, 'error');
+            } else {
+                console.warn('Discarding stale startup directory load error');
+            }
+        } finally {
+            bootstrapComplete = true;
         }
 
 
@@ -440,38 +494,96 @@ document.addEventListener('DOMContentLoaded', async function() {
             return { files: normalizedFiles, fileNames: normalizedFileNames, revisions: normalizedRevisions };
         }
 
-        function applyLoadedDirectory(data, tabName = currentTab, { autoloaded = false } = {}) {
+        // Installs a directory session only while the given operation token still owns the
+        // directory lifecycle (i.e. no newer load/reload started after this one). Returns true
+        // when the result was installed, false when it was discarded as stale.
+        async function applyLoadedDirectory(data, tabName = currentTab, { autoloaded = false } = {}, operationToken) {
+            const sampleInitializationState = await sampleInitializationPromise;
+            if (!isLatestDirectoryOperation(operationToken)) {
+                console.warn('Discarding stale directory load result for', data && data.directory);
+                return false;
+            }
+            installDirectorySession(operationToken);
+            supersedeSharedStatus(operationToken);
+
             setPreviewUndoState(null);
             updatePreviewUndoButton();
             const normalized = normalizeLoadedFiles(data.files, data.revisions);
-            const missingTabs = configTabNames.filter((tabName) => !Object.prototype.hasOwnProperty.call(normalized.files, tabName));
+            const presentTabs = new Set(Object.keys(normalized.files));
+            // Tabs whose files are absent from the directory keep their sample view but must
+            // start clean: initialize working and baseline text to the same sample content so
+            // absence alone is never reported as a pending change or submitted on Save.
+            for (const missingTab of configTabNames) {
+                if (!presentTabs.has(missingTab)) {
+                    normalized.files[missingTab] = String(sampleConfigs[missingTab] || '');
+                }
+            }
             setLoadedFiles(normalized.files);
             // Preserve the original (non-normalized) YAML as the baseline so that
             // normalization of commented groups is exposed as a pending change.
             const originalFilesByTab = {};
             Object.entries(data.files || {}).forEach(([filename, content]) => {
-                const tabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
-                if (tabName) originalFilesByTab[tabName] = content;
+                const mappedTabName = fileToTabMapping[filename] || fileToTabMapping[String(filename).toLowerCase()];
+                if (mappedTabName) originalFilesByTab[mappedTabName] = content;
             });
             setOriginalLoadedFiles(Object.fromEntries(configTabNames.map((tabName) => [
                 tabName,
-                Object.prototype.hasOwnProperty.call(originalFilesByTab, tabName)
+                presentTabs.has(tabName)
                     ? originalFilesByTab[tabName]
                     : String(sampleConfigs[tabName] || '')
             ])));
-            setLoadedFileNames(normalized.fileNames);
+            // Absence metadata: which tabs actually exist on disk in the loaded directory.
+            setLoadedFilePresent(Object.fromEntries(configTabNames.map((name) => [name, presentTabs.has(name)])));
+            // Destination filenames: real names for present files, default name for absent ones
+            // so an intentional edit can later create the file at its normal location.
+            const destinationFileNames = Object.fromEntries(configTabNames.map((name) => [name, `${name}.yaml`]));
+            Object.assign(destinationFileNames, normalized.fileNames);
+            setLoadedFileNames(destinationFileNames);
             setLoadedFileRevisions(normalized.revisions);
             setCurrentDirectoryPath(data.directory);
             setCurrentDirectoryWasAutoloaded(autoloaded);
 
             setDirectoryStatus(currentDirectoryPath, Object.keys(data.files || {}).length, {
                 autoloaded,
-                missingCount: missingTabs.length
+                missingCount: configTabNames.length - presentTabs.size,
+                examplesAvailable: sampleInitializationState.available
             });
             setSampleMode(false);
             setResetSampleVisible(false);
             setReloadDirectoryVisible(true);
             switchTab(tabName, null, { skipRemember: true });
+            return true;
+        }
+
+        // Save status is shared with load/reload and preview messages. Keep only a lightweight
+        // identity for the status last written by Save so stale cleanup cannot clear a newer
+        // operation's message after it has replaced the DOM text.
+        function supersedeSharedStatus(operationToken) {
+            clearSaveStatusNotOwnedByDirectoryOperation(operationToken);
+            if (saveStatusOwner && saveStatusOwner.directoryOperationToken !== operationToken) {
+                // Once a directory operation claims the shared surface, an older Save's finally
+                // block has no ownership left to release or clear.
+                saveStatusOwner = null;
+            }
+        }
+
+        function clearSaveStatusOwnedBySave(saveToken = null) {
+            if (!saveStatusOwner || (saveToken !== null && saveStatusOwner.token !== saveToken)) {
+                return;
+            }
+            const owner = saveStatusOwner;
+            saveStatusOwner = null;
+            if (owner.directoryOperationToken !== null
+                && owner.directoryOperationToken !== undefined
+                && saveStatusElement
+                && saveStatusElement.dataset.directoryOperationToken !== String(owner.directoryOperationToken)) {
+                return;
+            }
+            if (saveStatusElement
+                && !saveStatusElement.hidden
+                && saveStatusElement.textContent === owner.message) {
+                clearSaveStatus();
+            }
         }
 
 
@@ -481,53 +593,91 @@ document.addEventListener('DOMContentLoaded', async function() {
                 setSaveStatus('Examples are read-only. Load a directory before saving.', 'error');
                 return;
             }
-            rememberCurrentEditorValue();
-            const unsavedConfigs = getUnsavedTabNames().map((tabName) => ({
-                tabName,
-                filename: currentDirectoryPath
-                    ? (loadedFileNames[tabName] || `${tabName}.yaml`)
-                    : `${tabName}.yaml`,
-                yamlText: getTabYamlText(tabName)
-            }));
 
-            if (unsavedConfigs.length === 0) {
-                setSaveStatus('No unsaved changes.', 'info');
+            // Duplicate frontend save ownership: overlapping Save actions must not share or clear
+            // each other's state; correctness does not rely on the disabled button below.
+            const saveToken = beginSaveBatch();
+            if (saveToken === null) {
+                setSaveStatus('A save is already in progress. Wait for it to finish before saving again.', 'info');
                 return;
             }
+            const saveSessionGeneration = getDirectorySessionGeneration();
+            const saveDirectoryOperationToken = getDirectorySessionOperationToken();
 
-            for (const config of unsavedConfigs) {
-                try {
-                    jsyaml.load(config.yamlText);
-                } catch (error) {
-                    const yamlError = formatYamlError(error);
-                    setSaveStatus(
-                        `${config.filename} - ${formatYamlErrorLocation(yamlError)} - ${yamlError.summary}`,
-                        'error',
-                        { tab: config.tabName, line: yamlError.line || 1 }
-                    );
+            try {
+                rememberCurrentEditorValue();
+
+                // Freeze the complete save batch before the first awaited request. Every field that
+                // determines what will be written — originating session generation, directory path,
+                // destination filenames, submitted text, and expected revisions — is captured now,
+                // so switching directories or editing later cannot change this batch's requests.
+                const frozenBatch = {
+                    sessionGeneration: saveSessionGeneration,
+                    directoryOperationToken: saveDirectoryOperationToken,
+                    directoryPath: currentDirectoryPath,
+                    configs: getUnsavedTabNames().map((tabName) => ({
+                        tabName,
+                        filename: loadedFileNames[tabName] || `${tabName}.yaml`,
+                        yamlText: getTabYamlText(tabName),
+                        expectedRevision: loadedFileRevisions[tabName] ?? null
+                    }))
+                };
+
+                const isSaveUiCurrent = () => isDirectorySessionCurrent(frozenBatch.sessionGeneration)
+                    && isLatestDirectoryOperation(frozenBatch.directoryOperationToken);
+                const setSaveStatusIfCurrent = (message, state = 'info', source = null) => {
+                    if (!isSaveUiCurrent()) return false;
+                    setSaveStatus(message, state, source, {
+                        directoryOperationToken: frozenBatch.directoryOperationToken,
+                        directorySessionGeneration: frozenBatch.sessionGeneration
+                    });
+                    saveStatusOwner = {
+                        token: saveToken,
+                        message,
+                        directoryOperationToken: frozenBatch.directoryOperationToken,
+                        directorySessionGeneration: frozenBatch.sessionGeneration
+                    };
+                    return true;
+                };
+
+                if (frozenBatch.configs.length === 0) {
+                    setSaveStatusIfCurrent('No unsaved changes.', 'info');
                     return;
                 }
-            }
 
-            const savedConfigs = [];
-            const failedConfigs = [];
-            try {
+                for (const config of frozenBatch.configs) {
+                    try {
+                        jsyaml.load(config.yamlText);
+                    } catch (error) {
+                        const yamlError = formatYamlError(error);
+                        setSaveStatusIfCurrent(
+                            `${config.filename} - ${formatYamlErrorLocation(yamlError)} - ${yamlError.summary}`,
+                            'error',
+                            { tab: config.tabName, line: yamlError.line || 1 }
+                        );
+                        return;
+                    }
+                }
+
+                const savedConfigs = [];
+                const failedConfigs = [];
+
                 saveButton.disabled = true;
-                setSaveStatus(
-                    `Saving ${unsavedConfigs.length} changed configuration${unsavedConfigs.length === 1 ? '' : 's'}...`,
+                setSaveStatusIfCurrent(
+                    `Saving ${frozenBatch.configs.length} changed configuration${frozenBatch.configs.length === 1 ? '' : 's'}...`,
                     'pending'
                 );
 
-                for (const config of unsavedConfigs) {
+                for (const config of frozenBatch.configs) {
                     try {
                         const response = await fetch('/api/directory/file/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                dirPath: currentDirectoryPath,
+                                dirPath: frozenBatch.directoryPath,
                                 filename: config.filename,
                                 content: config.yamlText,
-                                expectedRevision: loadedFileRevisions[config.tabName] ?? null
+                                expectedRevision: config.expectedRevision
                             })
                         });
                         const data = await response.json().catch(() => ({}));
@@ -537,18 +687,35 @@ document.addEventListener('DOMContentLoaded', async function() {
                             throw error;
                         }
 
-                        setOriginalLoadedFileContent(config.tabName, config.yamlText);
-                        setLoadedFileRevision(config.tabName, data.revision);
                         savedConfigs.push(config);
+                        // Reconcile only while the originating Save still owns the UI. The baseline is set to
+                        // the submitted text (not whatever the editor holds now), so newer edits made during
+                        // the save remain dirty against it; a stale response must not touch the newer
+                        // session's baselines, revisions, or presence metadata.
+                        if (isSaveUiCurrent()) {
+                            setOriginalLoadedFileContent(config.tabName, config.yamlText);
+                            setLoadedFileRevision(config.tabName, data.revision);
+                            if (!loadedFilePresent[config.tabName]) {
+                                // The save created a file that was absent from the loaded directory.
+                                setLoadedFilePresence(config.tabName, true);
+                            }
+                        }
                     } catch (error) {
                         failedConfigs.push({ config, error });
                     }
                 }
 
+                if (!isSaveUiCurrent()) {
+                    // The batch's session was replaced while saving; its outcome must not write
+                    // notices or state into the newer directory-operation lifecycle.
+                    console.warn('Discarding stale save result for', frozenBatch.directoryPath);
+                    return;
+                }
+
                 if (failedConfigs.length > 0) {
                     const firstFailure = failedConfigs[0];
-                    setSaveStatus(
-                        `Saved ${savedConfigs.length} of ${unsavedConfigs.length}. Could not save ${firstFailure.config.filename}: ${addErrorGuidance(
+                    setSaveStatusIfCurrent(
+                        `Saved ${savedConfigs.length} of ${frozenBatch.configs.length}. Could not save ${firstFailure.config.filename}: ${addErrorGuidance(
                             firstFailure.error,
                             firstFailure.error.status === 409
                                 ? 'Your pending edit is still available. Reload the directory before saving again'
@@ -558,7 +725,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     );
                 } else {
                     const savedNames = savedConfigs.map(({ filename }) => filename).join(', ');
-                    setSaveStatus(
+                    setSaveStatusIfCurrent(
                         savedConfigs.length === 1
                             ? `Saved ${savedNames}.`
                             : `Saved ${savedConfigs.length} configurations: ${savedNames}.`,
@@ -566,8 +733,21 @@ document.addEventListener('DOMContentLoaded', async function() {
                     );
                 }
             } finally {
-                setSampleMode(!currentDirectoryPath);
-                updateUnsavedIndicators();
+                endSaveBatch(saveToken);
+                // The token must always be released, but stale saves must not rewrite the UI
+                // after a newer directory session or directory operation has taken ownership of it.
+                if (isDirectorySessionCurrent(saveSessionGeneration)) {
+                    if (!isLatestDirectoryOperation(saveDirectoryOperationToken)) {
+                        clearSaveStatusOwnedBySave(saveToken);
+                        // The pending Save still owns this control, but not the newer operation's
+                        // status. Restore only the control and indicators that belong to Save.
+                        saveButton.disabled = !currentDirectoryPath || sampleModeEnabled;
+                        updateUnsavedIndicators();
+                        return;
+                    }
+                    setSampleMode(!currentDirectoryPath);
+                    updateUnsavedIndicators();
+                }
             }
         }
 
@@ -612,15 +792,35 @@ document.addEventListener('DOMContentLoaded', async function() {
             const loadButton = document.getElementById('load-directory-submit');
             setDirectoryModalStatus();
             loadButton.disabled = true;
+            const operationToken = beginDirectoryOperation();
+            supersedeSharedStatus(operationToken);
+            latestLoadOperationToken = operationToken;
+            const requestedTab = currentTab;
+            const wasBootstrapEra = !bootstrapComplete
+                && getDirectorySessionGeneration() === bootstrapSessionGeneration;
             try {
+                // Start the operation and freeze the tab to display before awaiting, so a
+                // directory switch during the pending request cannot change this load's outcome.
                 const data = await requestDirectoryLoad(dirPath);
-                applyLoadedDirectory(data);
-                closeDirectoryModal();
+                if (await applyLoadedDirectory(data, requestedTab, {}, operationToken)) {
+                    closeDirectoryModal();
+                }
             } catch (error) {
-                console.error('Directory load error:', error);
-                setDirectoryModalStatus(`Could not load the directory. ${addErrorGuidance(error, 'Check the path and permissions, then try again')}`);
+                if (isLatestDirectoryOperation(operationToken)) {
+                    console.error('Directory load error:', error);
+                    setDirectoryModalStatus(`Could not load the directory. ${addErrorGuidance(error, 'Check the path and permissions, then try again')}`);
+                } else {
+                    console.warn('Discarding stale directory load error for', dirPath);
+                }
+                await recoverFailedBootstrapLoad(operationToken, wasBootstrapEra);
             } finally {
-                loadButton.disabled = false;
+                // The load button has independent ownership from reload; only a newer load
+                // may keep it disabled, while a different operation may not strand it.
+                if (latestLoadOperationToken === operationToken) {
+                    latestLoadOperationToken = null;
+                    loadButton.disabled = false;
+                }
+                finalizeDirectoryOperation(operationToken);
             }
         }
 
@@ -628,6 +828,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!currentDirectoryPath) {
                 return;
             }
+            const reloadSessionGeneration = getDirectorySessionGeneration();
+            const directoryPath = currentDirectoryPath;
+            const requestedTab = currentTab;
+            const wasAutoloaded = currentDirectoryWasAutoloaded;
             rememberCurrentEditorValue();
             if (hasUnsavedChanges()) {
                 const confirmed = await showConfirmationDialog({
@@ -640,19 +844,49 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             }
 
+            if (!isDirectorySessionCurrent(reloadSessionGeneration)) {
+                console.warn('Discarding reload continuation for a replaced directory session');
+                return;
+            }
+
+            // Freeze everything this reload needs before awaiting: a directory switch during the
+            // pending request must not change what it requests or how its result applies.
             const reloadButton = document.getElementById('reload-directory-button');
+            const operationToken = beginDirectoryOperation();
+            supersedeSharedStatus(operationToken);
+            latestReloadOperationToken = operationToken;
             reloadButton.disabled = true;
-            setSaveStatus('Reloading directory...', 'pending');
+            setSaveStatus('Reloading directory...', 'pending', null, {
+                directoryOperationToken: operationToken,
+                directorySessionGeneration: reloadSessionGeneration
+            });
 
             try {
-                const data = await requestDirectoryLoad(currentDirectoryPath);
-                applyLoadedDirectory(data, currentTab, { autoloaded: currentDirectoryWasAutoloaded });
-                setSaveStatus(`Reloaded ${Object.keys(data.files || {}).length} configurations.`, 'success');
+                const data = await requestDirectoryLoad(directoryPath);
+                if (await applyLoadedDirectory(data, requestedTab, { autoloaded: wasAutoloaded }, operationToken)) {
+                    setSaveStatus(`Reloaded ${Object.keys(data.files || {}).length} configurations.`, 'success', null, {
+                        directoryOperationToken: operationToken,
+                        directorySessionGeneration: getDirectorySessionGeneration()
+                    });
+                }
             } catch (error) {
-                console.error('Directory reload error:', error);
-                setSaveStatus(`Could not reload the directory. ${addErrorGuidance(error, 'Check the path and permissions, then try again')}`, 'error');
+                if (isLatestDirectoryOperation(operationToken)) {
+                    console.error('Directory reload error:', error);
+                    setSaveStatus(`Could not reload the directory. ${addErrorGuidance(error, 'Check the path and permissions, then try again')}`, 'error', null, {
+                        directoryOperationToken: operationToken,
+                        directorySessionGeneration: reloadSessionGeneration
+                    });
+                } else {
+                    console.warn('Discarding stale directory reload error for', directoryPath);
+                }
             } finally {
-                reloadButton.disabled = false;
+                // The reload button has independent ownership from manual load; only a newer
+                // reload may keep it disabled, while a different operation may not strand it.
+                if (latestReloadOperationToken === operationToken) {
+                    latestReloadOperationToken = null;
+                    reloadButton.disabled = false;
+                }
+                finalizeDirectoryOperation(operationToken);
             }
         }
 

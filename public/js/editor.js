@@ -55,30 +55,3 @@ export function toggleSelectedComments(editorInstance) {
     });
     ed.focus();
 }
-
-export function toggleLineRangeComments(editorInstance, startLine, endLine, forceUncomment) {
-    const ed = editorInstance || editor;
-    const lines = [];
-    for (let i = startLine; i <= endLine; i++) {
-        lines.push(ed.getLine(i) || '');
-    }
-    const nonBlankLines = lines.filter((line) => line.trim().length > 0);
-    const shouldUncomment = forceUncomment || (nonBlankLines.length > 0 && nonBlankLines.every((line) => /^\s*#/.test(line)));
-
-    ed.operation(() => {
-        lines.forEach((currentLine, offset) => {
-            const lineNumber = startLine + offset;
-            const nextLine = shouldUncomment
-                ? currentLine.replace(/^(\s*)# ?/, '$1')
-                : currentLine.replace(/^(\s*)/, '$1# ');
-            if (nextLine !== currentLine) {
-                ed.replaceRange(
-                    nextLine,
-                    { line: lineNumber, ch: 0 },
-                    { line: lineNumber, ch: currentLine.length },
-                    '+toggleCommentBlock'
-                );
-            }
-        });
-    });
-}

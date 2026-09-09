@@ -3,7 +3,7 @@ import { configTabNames, configTabLabels, createNewTabGroupValue, defaultPageTit
 import { yamlCodeEditor, previewAddTabModal } from './shared.js';
 import { addErrorGuidance, saveOptionTypes as persistOptionTypes, persistAppSettings as persistAppSettingsRequest } from './api.js';
 import { parseTabConfig, getHomepageTabInfo, getDragItemAttributes, getPreviewEditActionButton, updatePreview, applyPreviewEdit, renderPreviewEditOptions, setPreviewOptionDefinitions } from './preview.js';
-import { currentTab, loadedFiles, loadedFileNames, previewUndoState, previewEditDialogState, optionDefinitions, optionTypesDraft, optionTypesRemovedDefinitions, optionTypesPreviousFocus, savedAppSettings, sampleModeEnabled, previewHomepageTab, previewShowCommentsState, pendingInlineRenameTab, pendingInlineRenameBackup, previewTabAddAnchor, previewTabAddAfterTab, previewTabAddInFlight, directoryModalPreviousFocus, confirmationDialogResolver, confirmationDialogPreviousFocus, settingsActiveTab, settingsModalPreviousFocus, pendingAppSettingsSave, settingsTabOrderDraft, setSampleModeEnabled, setPreviewHomepageTab, setPreviewShowCommentsState, setOptionTypesDraft, setOptionTypesRemovedDefinitions, setOptionTypesPreviousFocus, setSavedAppSettings, setPendingInlineRenameTab, setPendingInlineRenameBackup, setPreviewTabAddAnchor, setPreviewTabAddAfterTab, setPreviewTabAddInFlight, setDirectoryModalPreviousFocus, setConfirmationDialogResolver, setConfirmationDialogPreviousFocus, setSettingsModalPreviousFocus, setSettingsActiveTab, setPendingAppSettingsSave, setSettingsTabOrderDraft, mutateOptionTypesDraft, getUnsavedTabNames } from './state.js';
+import { currentTab, loadedFiles, loadedFileNames, previewUndoState, previewEditDialogState, optionDefinitions, optionTypesDraft, optionTypesRemovedDefinitions, optionTypesPreviousFocus, savedAppSettings, sampleModeEnabled, previewHomepageTab, previewShowCommentsState, pendingInlineRenameTab, pendingInlineRenameBackup, previewTabAddAnchor, previewTabAddAfterTab, previewTabAddInFlight, directoryModalPreviousFocus, confirmationDialogResolver, confirmationDialogPreviousFocus, settingsActiveTab, settingsModalPreviousFocus, pendingAppSettingsSave, settingsTabOrderDraft, setSampleModeEnabled, setPreviewHomepageTab, setPreviewShowCommentsState, setOptionTypesDraft, setOptionTypesRemovedDefinitions, setOptionTypesPreviousFocus, setSavedAppSettings, setPendingInlineRenameTab, setPendingInlineRenameBackup, setPreviewTabAddAnchor, setPreviewTabAddAfterTab, setPreviewTabAddInFlight, setDirectoryModalPreviousFocus, setConfirmationDialogResolver, setConfirmationDialogPreviousFocus, setSettingsModalPreviousFocus, setSettingsActiveTab, setPendingAppSettingsSave, setSettingsTabOrderDraft, mutateOptionTypesDraft, getUnsavedTabNames, getDirectorySessionOperationToken, getDirectorySessionGeneration } from './state.js';
 
 const autoIndentToggle = document.getElementById('auto-indent-toggle');
 const autoIndentLabel = document.getElementById('auto-indent-label');
@@ -49,10 +49,23 @@ export function updateUnsavedIndicators() {
     statusElement.hidden = false;
 }
 
-export function setSaveStatus(message, state = 'info', source = null) {
+export function setSaveStatus(message, state = 'info', source = null, {
+    directoryOperationToken = getDirectorySessionOperationToken(),
+    directorySessionGeneration = getDirectorySessionGeneration()
+} = {}) {
     const statusElement = document.getElementById('save-status');
     statusElement.textContent = message;
     statusElement.dataset.state = state;
+    if (directoryOperationToken === null || directoryOperationToken === undefined) {
+        delete statusElement.dataset.directoryOperationToken;
+    } else {
+        statusElement.dataset.directoryOperationToken = String(directoryOperationToken);
+    }
+    if (directorySessionGeneration === null || directorySessionGeneration === undefined) {
+        delete statusElement.dataset.directorySessionGeneration;
+    } else {
+        statusElement.dataset.directorySessionGeneration = String(directorySessionGeneration);
+    }
     statusElement.hidden = false;
     statusElement.setAttribute('role', state === 'error' ? 'alert' : 'status');
     statusElement.setAttribute('aria-live', state === 'error' ? 'assertive' : 'polite');
@@ -73,10 +86,27 @@ export function clearSaveStatus() {
     statusElement.hidden = true;
     statusElement.textContent = '';
     delete statusElement.dataset.state;
+    delete statusElement.dataset.directoryOperationToken;
+    delete statusElement.dataset.directorySessionGeneration;
     delete statusElement.dataset.source;
     statusElement.classList.remove('save-status-jump');
     statusElement.removeAttribute('tabindex');
     statusElement.removeAttribute('title');
+}
+
+// A directory operation supersedes notices from the prior installed session or operation. The
+// caller supplies the newly claimed operation token so a notice explicitly written by that
+// pending operation is preserved rather than being cleared as a side effect of installation.
+export function clearSaveStatusNotOwnedByDirectoryOperation(operationToken) {
+    const statusElement = document.getElementById('save-status');
+    if (!statusElement || statusElement.hidden) return false;
+    const ownerToken = statusElement.dataset.directoryOperationToken;
+    const expectedToken = operationToken === null || operationToken === undefined
+        ? undefined
+        : String(operationToken);
+    if (ownerToken === expectedToken) return false;
+    clearSaveStatus();
+    return true;
 }
 
 export function setPreviewStatus(messages = []) {
@@ -87,16 +117,32 @@ export function setPreviewStatus(messages = []) {
     statusElement.dataset.state = 'info';
 }
 
-export function setDirectoryStatus(directory, fileCount, { autoloaded = false, missingCount = 0 } = {}) {
+function getMissingDirectoryMessage(examplesAvailable) {
+    return examplesAvailable
+        ? 'example content is shown and files are created only when edited and saved.'
+        : 'absent tabs are blank because example configurations could not be loaded; files are created only when edited and saved.';
+}
+
+export function setDirectoryStatus(directory, fileCount, { autoloaded = false, missingCount = 0, examplesAvailable = true } = {}) {
     const statusElement = document.getElementById('directory-info');
     const loadedMessage = autoloaded
         ? `Autoloaded ${fileCount}/${configTabNames.length}`
         : `Loaded ${fileCount}/${configTabNames.length} from ${directory}`;
+    const missingMessage = getMissingDirectoryMessage(examplesAvailable);
     statusElement.textContent = missingCount > 0
-        ? `${missingCount} YAML file${missingCount === 1 ? '' : 's'} missing; example content is shown and will be created if saved. ${loadedMessage}`
+        ? missingCount + ' YAML file' + (missingCount === 1 ? '' : 's') + ' missing; ' + missingMessage + ' ' + loadedMessage
         : loadedMessage;
     statusElement.title = statusElement.textContent;
     statusElement.dataset.state = missingCount > 0 ? 'warning' : 'loaded';
+}
+
+export function setSampleDirectoryStatus(examplesAvailable) {
+    const statusElement = document.getElementById('directory-info');
+    statusElement.textContent = examplesAvailable
+        ? 'Examples loaded (read-only).'
+        : `Example configurations unavailable; ${getMissingDirectoryMessage(false)}`;
+    statusElement.title = statusElement.textContent;
+    statusElement.dataset.state = examplesAvailable ? 'idle' : 'warning';
 }
 
 export function setDirectoryModalStatus(message = '') {
@@ -290,7 +336,8 @@ export async function saveOptionTypes(event) {
                 { type: 'option-types.remove', options: removedDefinitions, allOptionNames },
                 `Removed deleted option type${removedDefinitions.length === 1 ? '' : 's'} from the loaded YAML.`
             );
-            if (!removedFromYaml) throw new Error('Could not remove deleted option types from the loaded YAML');
+            if (removedFromYaml === null) return;
+            if (removedFromYaml === false) throw new Error('Could not remove deleted option types from the loaded YAML');
         }
         const data = await persistOptionTypes(optionTypesToSave);
         setPreviewOptionDefinitions(data.options);
@@ -615,7 +662,9 @@ export async function submitInlineAddTab() {
         setPreviewTabAddInFlight(false);
         submitButton.disabled = false;
         setPendingInlineRenameTab(null);
-        setInlineAddTabStatus('Could not add the tab. See the application notification for the reason.');
+        if (applied === false) {
+            setInlineAddTabStatus('Could not add the tab. See the application notification for the reason.');
+        }
     }
 }
 

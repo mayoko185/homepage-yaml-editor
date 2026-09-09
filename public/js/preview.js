@@ -1,8 +1,8 @@
 import { yamlCodeEditor, previewAddTabModal, saveStatusElement } from "./shared.js";
 // Preview helper functions — YAML parsing, icon resolution, tab info, source navigation
 import { configTabNames, sampleConfigs, blankSelectControlValue } from './constants.js';
-import { currentTab, loadedFiles, loadedFileNames, parsedConfigCache, previewHomepageTab, previewUpdateTimer, sampleModeEnabled, previewShowCommentsState, pendingInlineRenameTab, previewUndoState, previewEditDialogState, previewEditPreviousFocus, previewEditPreviousFocusVisible, optionDefinitions, optionTypesDraft, activePreviewDrag, setParsedConfigCache, setPreviewHomepageTab, setPendingInlineRenameTab, setPreviewUpdateTimer, setPreviewUndoState, setLoadedFileContent, setApplyingPreviewFiles, setPreviewEditDialogState, setPreviewEditPreviousFocus, setPreviewEditPreviousFocusVisible, setOptionDefinitions, setActivePreviewDrag, mutatePreviewEditDialogState, mutateOptionTypesDraft } from './state.js';
-import { getEditorValue, toggleLineRangeComments } from './editor.js';
+import { currentTab, loadedFiles, loadedFileNames, parsedConfigCache, previewHomepageTab, previewUpdateTimer, sampleModeEnabled, previewShowCommentsState, pendingInlineRenameTab, previewUndoState, previewEditDialogState, previewEditPreviousFocus, previewEditPreviousFocusVisible, optionDefinitions, optionTypesDraft, activePreviewDrag, setParsedConfigCache, setPreviewHomepageTab, setPendingInlineRenameTab, setPreviewUpdateTimer, setPreviewUndoState, setLoadedFileContent, setApplyingPreviewFiles, setPreviewEditDialogState, setPreviewEditPreviousFocus, setPreviewEditPreviousFocusVisible, setOptionDefinitions, setActivePreviewDrag, mutatePreviewEditDialogState, mutateOptionTypesDraft, getDirectorySessionGeneration, isDirectorySessionCurrent, getContentVersion, beginPreviewOperation, invalidatePreviewOperations, isLatestPreviewOperation } from './state.js';
+import { getEditorValue } from './editor.js';
 import { addErrorGuidance, formatYamlError, formatYamlErrorLocation, transformPreviewYaml } from './api.js';
 import { escapeHtml, setSaveStatus, setPreviewStatus, setPreviewEditModalStatus, syncPreviewEditModePresentation, findPreviewTabButton, enterTabRenameMode, getTabEditControls, showConfirmationDialog, updateUnsavedIndicators, readOptionTypesDraft, renderOptionTypesDraft, renderOptionDefaultsDraft, getOrderedOptionDefaultIndexes, setOptionDefaultOrder } from './ui.js';
 
@@ -899,41 +899,65 @@ export function buildCommentedWidgetsData(yamlText) {
     return result;
 }
 
+        function toggleLineRangeCommentText(sourceText, startLine, endLine, forceUncomment) {
+            const lines = String(sourceText ?? '').split('\n');
+            const selectedLines = lines.slice(startLine, endLine + 1).map((line) => line || '');
+            const nonBlankLines = selectedLines.filter((line) => line.trim().length > 0);
+            const shouldUncomment = forceUncomment
+                || (nonBlankLines.length > 0 && nonBlankLines.every((line) => /^\s*#/.test(line)));
+
+            selectedLines.forEach((currentLine, offset) => {
+                const nextLine = shouldUncomment
+                    ? currentLine.replace(/^(\s*)# ?/, '$1')
+                    : currentLine.replace(/^(\s*)/, '$1# ');
+                lines[startLine + offset] = nextLine;
+            });
+            return lines.join('\n');
+        }
+
+        function getPreviewCommentTarget(source) {
+            if (source && typeof source.tab === 'string') return source;
+            if (source?.servicesSource && typeof source.servicesSource.tab === 'string') {
+                return source.servicesSource;
+            }
+            if (source?.settingsSource && typeof source.settingsSource.tab === 'string') {
+                return source.settingsSource;
+            }
+            return null;
+        }
+
         function toggleCommentBlock(source) {
-            const resolvedSource = getCurrentTabSource(source);
-            const tabName = resolvedSource && resolvedSource.tab ? resolvedSource.tab : currentTab;
+            const resolvedSource = getPreviewCommentTarget(source);
+            const tabName = resolvedSource?.tab;
+            if (!configTabNames.includes(tabName)) {
+                setSaveStatus('Could not determine the YAML document to comment/uncomment.', 'error');
+                return null;
+            }
             const range = findBlockLineRange(resolvedSource);
             if (!range || range.startLine < 0 || range.endLine < range.startLine) {
                 setSaveStatus('Could not locate the YAML block to comment/uncomment.', 'error');
-                return;
+                return null;
             }
-            if (tabName !== currentTab) {
-                document.querySelector(`.tab[data-tab="${tabName}"]`)?.click();
-            }
-            const isCommented = resolvedSource && resolvedSource.commented === true;
-            toggleLineRangeComments(yamlCodeEditor, range.startLine, range.endLine, isCommented);
-            updateUnsavedIndicators();
-            updatePreview({ force: true });
-            setSaveStatus(isCommented ? 'Item uncommented.' : 'Item commented out.', 'success');
+            const transaction = createClientSidePreviewTransaction(tabName);
+            const isCommented = resolvedSource.commented === true;
+            const newText = toggleLineRangeCommentText(
+                transaction.beforeFiles[tabName],
+                range.startLine,
+                range.endLine,
+                isCommented
+            );
+            return commitClientSidePreviewEdit(
+                tabName,
+                newText,
+                transaction,
+                isCommented ? 'Item uncommented.' : 'Item commented out.'
+            );
         }
 
         // --- Commented-item text transforms for Preview edit operations ---
 
         function getTabYamlLines(tabName) {
             return getTabYamlText(tabName).split('\n');
-        }
-
-        function replaceTabYamlText(tabName, newText) {
-            setLoadedFileContent(tabName, newText);
-            if (tabName === currentTab) {
-                yamlCodeEditor.operation(() => {
-                    const lastLine = Math.max(0, yamlCodeEditor.lineCount() - 1);
-                    const lastCharacter = (yamlCodeEditor.getLine(lastLine) || '').length;
-                    yamlCodeEditor.replaceRange(newText, { line: 0, ch: 0 }, { line: lastLine, ch: lastCharacter }, '+commentedPreviewEdit');
-                });
-            }
-            updateUnsavedIndicators();
-            updatePreview({ force: true });
         }
 
         function parseCommentedBlockData(source) {
@@ -1399,14 +1423,10 @@ export function buildCommentedWidgetsData(yamlText) {
 
         async function applyCommentedPreviewEdit(operation, successMessage) {
             if (sampleModeEnabled) return false;
-            const beforeFiles = {
-                services: getTabYamlText('services'),
-                settings: getTabYamlText('settings'),
-                bookmarks: getTabYamlText('bookmarks')
-            };
             try {
                 const target = operation.target || {};
-                const tabName = target.tab || 'services';
+                const tabName = getPreviewEditTabName(operation);
+                const transaction = createClientSidePreviewTransaction(tabName);
                 let newText = applyChunkTreeOperation(tabName, operation);
                 if (newText === null) {
                     if (target.kind === 'service') {
@@ -1428,11 +1448,7 @@ export function buildCommentedWidgetsData(yamlText) {
                 } catch (yamlErr) {
                     throw new Error(`Transformed ${tabName}.yaml is invalid: ${yamlErr.message || yamlErr}`);
                 }
-                setPreviewUndoState({ files: beforeFiles, message: successMessage });
-                replaceTabYamlText(tabName, newText);
-                updatePreviewUndoButton();
-                setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
-                return true;
+                return commitClientSidePreviewEdit(tabName, newText, transaction, successMessage);
             } catch (error) {
                 setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
                 return false;
@@ -1626,14 +1642,10 @@ export function buildCommentedWidgetsData(yamlText) {
 
         async function applyClientSidePreviewEdit(operation, successMessage) {
             if (sampleModeEnabled) return false;
-            const beforeFiles = {
-                services: getTabYamlText('services'),
-                settings: getTabYamlText('settings'),
-                bookmarks: getTabYamlText('bookmarks')
-            };
             try {
                 const target = operation.target || {};
-                const tabName = target.tab || 'services';
+                const tabName = getPreviewEditTabName(operation);
+                const transaction = createClientSidePreviewTransaction(tabName);
                 let newText = applyChunkTreeOperation(tabName, operation);
                 if (newText === null) {
                     if (target.kind === 'service') {
@@ -1653,11 +1665,7 @@ export function buildCommentedWidgetsData(yamlText) {
                 } catch (yamlErr) {
                     throw new Error(`Transformed ${tabName}.yaml is invalid: ${yamlErr.message || yamlErr}`);
                 }
-                setPreviewUndoState({ files: beforeFiles, message: successMessage });
-                replaceTabYamlText(tabName, newText);
-                updatePreviewUndoButton();
-                setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
-                return true;
+                return commitClientSidePreviewEdit(tabName, newText, transaction, successMessage);
             } catch (error) {
                 console.error('[applyClientSidePreviewEdit] failed:', error);
                 setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
@@ -2682,9 +2690,59 @@ export function buildCommentedWidgetsData(yamlText) {
             setPreviewEditPreviousFocusVisible(false);
         }
 
-        function replacePreviewEditedFiles(files) {
+        function isCurrentPreviewOwnership(ownership) {
+            if (!ownership) return true;
+            if (!isDirectorySessionCurrent(ownership.sessionGeneration)) return false;
+            if (getContentVersion() !== ownership.contentVersion) return false;
+            if (!isLatestPreviewOperation(ownership.previewOperationToken)) return false;
+            return Object.entries(ownership.inputFiles).every(([tabName, content]) => (
+                getTabYamlText(tabName) === content
+            ));
+        }
+
+        function getPreviewEditTabName(operation) {
+            const tabName = operation?.target?.tab || 'services';
+            if (!configTabNames.includes(tabName)) {
+                throw new Error(`Unsupported preview configuration tab "${tabName}"`);
+            }
+            return tabName;
+        }
+
+        function createClientSidePreviewTransaction(tabName) {
+            const previewOperationToken = beginPreviewOperation();
+            const beforeFiles = { [tabName]: getTabYamlText(tabName) };
+            return {
+                beforeFiles,
+                ownership: {
+                    sessionGeneration: getDirectorySessionGeneration(),
+                    contentVersion: getContentVersion(),
+                    previewOperationToken,
+                    inputFiles: beforeFiles
+                }
+            };
+        }
+
+        function commitClientSidePreviewEdit(tabName, newText, transaction, successMessage) {
+            if (!replacePreviewEditedFiles(
+                { [tabName]: newText },
+                transaction.ownership,
+                { files: transaction.beforeFiles, message: successMessage }
+            )) {
+                return null;
+            }
+            updatePreviewUndoButton();
+            setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
+            return true;
+        }
+
+        function replacePreviewEditedFiles(files, ownership = null, undoState = null) {
+            if (!isCurrentPreviewOwnership(ownership)) return false;
             setApplyingPreviewFiles(true);
             try {
+                // Establish Undo only after ownership is verified and immediately before the
+                // guarded replacement. A stale result therefore cannot replace the current Undo
+                // snapshot or dirty/baseline state.
+                if (undoState) setPreviewUndoState(undoState);
                 for (const tabName of configTabNames) {
                     if (typeof files?.[tabName] === 'string') setLoadedFileContent(tabName, files[tabName]);
                 }
@@ -2706,6 +2764,7 @@ export function buildCommentedWidgetsData(yamlText) {
             }
             updateUnsavedIndicators();
             updatePreview({ force: true });
+            return true;
         }
 
         function updatePreviewUndoButton() {
@@ -2714,19 +2773,32 @@ export function buildCommentedWidgetsData(yamlText) {
 
         async function applyPreviewEdit(operation, successMessage) {
             if (sampleModeEnabled) return false;
+            // Freeze every ownership dimension and every document used by the server transform
+            // before the first await. `null` means expected supersession/staleness; `false` remains
+            // reserved for a genuine transform/network failure.
+            const previewOperationToken = beginPreviewOperation();
             const beforeFiles = {
                 services: getTabYamlText('services'),
                 settings: getTabYamlText('settings'),
                 bookmarks: getTabYamlText('bookmarks')
             };
+            const ownership = {
+                sessionGeneration: getDirectorySessionGeneration(),
+                contentVersion: getContentVersion(),
+                previewOperationToken,
+                inputFiles: beforeFiles
+            };
             try {
                 const data = await transformPreviewYaml(beforeFiles, operation);
-                setPreviewUndoState({ files: beforeFiles, message: successMessage });
-                replacePreviewEditedFiles(data.files);
+                if (!replacePreviewEditedFiles(data.files, ownership, { files: beforeFiles, message: successMessage })) {
+                    return null;
+                }
                 updatePreviewUndoButton();
                 setSaveStatus(`${successMessage} Save to write the pending YAML changes.`, 'info');
                 return true;
             } catch (error) {
+                // A stale failure must not replace a newer operation's status with an old error.
+                if (!isCurrentPreviewOwnership(ownership)) return null;
                 setSaveStatus(`Could not edit the dashboard: ${addErrorGuidance(error, 'Check the item name and YAML structure, then try again')}`, 'error');
                 return false;
             }
@@ -2843,13 +2915,16 @@ export function buildCommentedWidgetsData(yamlText) {
                 ? await applyCommentedPreviewEdit(operation, message)
                 : await applyPreviewEdit(operation, message);
             submitButton.disabled = false;
-            if (applied) closePreviewEditDialog();
-            else setPreviewEditModalStatus('Could not apply the edit. See the application notification for the reason.');
+            if (applied === true) closePreviewEditDialog();
+            else if (applied === false) setPreviewEditModalStatus('Could not apply the edit. See the application notification for the reason.');
         }
 
         function undoPreviewEdit() {
             if (!previewUndoState) return;
             const undoState = previewUndoState;
+            // Undo is a relevant preview operation even when its replacement happens to be a
+            // no-op, so invalidate every pending server transform before restoring the snapshot.
+            invalidatePreviewOperations();
             setPreviewUndoState(null);
             replacePreviewEditedFiles(undoState.files);
             updatePreviewUndoButton();
@@ -4025,7 +4100,6 @@ export function handlePreviewDrop(event) {
 export {
     toggleCommentBlock,
     getTabYamlLines,
-    replaceTabYamlText,
     parseCommentedBlockData,
     serializeCommentedBlock,
     commentBlockLines,

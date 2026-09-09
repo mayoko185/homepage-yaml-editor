@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Configuration files missing from the loaded directory no longer appear as phantom unsaved changes; Save now creates such a file only after it has actually been edited.
+- Delayed Save or Load responses from an older directory session are now discarded instead of overwriting the current session's content, baselines, and revisions; failed bootstrap-era Loads also restore the generation-zero examples fallback without reviving stale startup state, and shared operation status notices are superseded when a newer directory operation has begun.
+- Delayed Interactive Editor Preview transformations are now discarded instead of overwriting newer typing, reloads, Undo state, or preview operations.
+- Preview Undo now restores exact pre-action YAML for client-side duplicate, edit, delete, and comment/uncomment operations, including commented widgets on inactive tabs.
+
 ## [1.3.4] - 2026-07-26
 
 ### Changed

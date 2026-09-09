@@ -774,6 +774,70 @@ test('optional login protects the editor and APIs with a form-based session', as
   }
 });
 
+test('login page dependencies are public while application JavaScript stays protected', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-login-assets-test-'));
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['server/index.js'], {
+    cwd: path.resolve(__dirname, '..'),
+    env: createServerEnv({
+      PORT: String(port),
+      HOMEPAGE_CONFIGS: tempRoot,
+      APP_DATA_DIR: path.join(tempRoot, 'app-data'),
+      REQUIRE_LOGIN_USER: 'test-user',
+      REQUIRE_LOGIN_PASSWORD: 'test-password'
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    await waitForServer(baseUrl, child);
+
+    const loginPageResponse = await fetch(`${baseUrl}/login`, { redirect: 'manual' });
+    assert.equal(loginPageResponse.status, 200);
+    const loginPage = await loginPageResponse.text();
+
+    // Every asset the login page references must be directly reachable without a session.
+    const referencedAssets = [...new Set(
+      [...loginPage.matchAll(/<(?:script|link)[^>]*?(?:src|href)="([^"]+)"/g)].map((match) => match[1])
+    )];
+    assert.ok(referencedAssets.length >= 4, 'login page should reference its script and style dependencies');
+
+    for (const asset of referencedAssets) {
+      const assetPath = new URL(asset, `${baseUrl}/login`).pathname;
+      const assetResponse = await fetch(`${baseUrl}${assetPath}`, { redirect: 'manual' });
+      assert.equal(assetResponse.status, 200, `unauthenticated GET ${assetPath} should succeed`);
+    }
+
+    // The login script itself must be served as JavaScript, not redirected to /login.
+    const loginScriptResponse = await fetch(`${baseUrl}/js/login.js`, { redirect: 'manual' });
+    assert.equal(loginScriptResponse.status, 200);
+    assert.match(loginScriptResponse.headers.get('content-type') || '', /javascript/);
+    const loginScript = await loginScriptResponse.text();
+    assert.match(loginScript, /getElementById\('login-error'\)/);
+    assert.match(loginScript, /connection-warning/);
+
+    // Application JavaScript outside the login allowlist stays protected.
+    for (const protectedAsset of ['/js/app.js', '/js/preview.js']) {
+      const protectedResponse = await fetch(`${baseUrl}${protectedAsset}`, { redirect: 'manual' });
+      assert.equal(protectedResponse.status, 302);
+      assert.equal(protectedResponse.headers.get('location'), '/login');
+    }
+
+    // The obsolete /login.js path no longer bypasses authentication.
+    const staleLoginScript = await fetch(`${baseUrl}/login.js`, { redirect: 'manual' });
+    assert.equal(staleLoginScript.status, 302);
+    assert.equal(staleLoginScript.headers.get('location'), '/login');
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const resolvedTempRoot = path.resolve(tempRoot);
+    const resolvedSystemTemp = `${path.resolve(os.tmpdir())}${path.sep}`;
+    assert.ok(resolvedTempRoot.startsWith(resolvedSystemTemp), 'Refusing cleanup outside the system temp directory');
+    await fs.rm(resolvedTempRoot, { recursive: true, force: true });
+  }
+});
+
 test('backup permission hardening applies to existing directories and files', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'homepage-editor-backup-perm-test-'));
   const port = await getFreePort();

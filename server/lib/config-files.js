@@ -279,26 +279,63 @@ async function createBackup(backupDir, filename, content, maxBackups, sourceDir)
   }
 }
 
+// Process-local save serialization. Saves targeting the same resolved destination file are
+// queued so two concurrent saves cannot both validate the same expected revision and then
+// both publish. The key is the normalized resolved path; on case-insensitive platforms
+// (Windows) it is lowercased so different spellings of the same file share one queue slot.
+const CASE_INSENSITIVE_FILESYSTEM = process.platform === 'win32';
+const saveQueues = new Map(); // normalized destination path -> { gate, release }
+
+function createDestinationQueueKey(resolvedPath) {
+  return CASE_INSENSITIVE_FILESYSTEM ? resolvedPath.toLowerCase() : resolvedPath;
+}
+
+function enqueueDestinationSave(key, task) {
+  const previousGate = saveQueues.get(key)?.gate;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const entry = { gate };
+  saveQueues.set(key, entry);
+  return (previousGate ?? Promise.resolve())
+    .then(task)
+    .finally(() => {
+      // Always release ownership after success or failure so a failed save
+      // cannot permanently block later saves for the same destination.
+      release();
+      // Remove the settled entry only if no newer save has taken its place.
+      if (saveQueues.get(key) === entry) {
+        saveQueues.delete(key);
+      }
+    });
+}
+
 async function saveConfigFile(dirPath, filename, content, { expectedRevision, backupDir, backupCount }) {
   const filePath = resolveConfigFilePath(dirPath, filename);
   const yamlContent = typeof content === 'string' ? content : YAML.stringify(content);
   YAML.parse(yamlContent);
-  const currentState = await readConfigFileState(filePath);
-  const desiredRevision = createContentRevision(yamlContent);
-  if (currentState.revision === desiredRevision) {
-    return { filePath, changed: false, revision: desiredRevision };
-  }
-  if (currentState.revision !== expectedRevision) {
-    throw createConfigConflictError(currentState.revision);
-  }
-  if (backupDir && currentState.content !== null) {
-    await createBackup(backupDir, filename, currentState.content, backupCount, dirPath);
-  }
-  const result = await replaceConfigFileAtomically(filePath, yamlContent, {
-    mode: currentState.mode,
-    expectedDiskRevision: currentState.revision
+  // Serialize the read-validate-backup-publish sequence per destination file. The
+  // external-writer recheck inside replaceConfigFileAtomically is unchanged; this only
+  // prevents concurrent saves in this process from both passing revision validation.
+  return enqueueDestinationSave(createDestinationQueueKey(filePath), async () => {
+    const currentState = await readConfigFileState(filePath);
+    const desiredRevision = createContentRevision(yamlContent);
+    if (currentState.revision === desiredRevision) {
+      return { filePath, changed: false, revision: desiredRevision };
+    }
+    if (currentState.revision !== expectedRevision) {
+      throw createConfigConflictError(currentState.revision);
+    }
+    if (backupDir && currentState.content !== null) {
+      await createBackup(backupDir, filename, currentState.content, backupCount, dirPath);
+    }
+    const result = await replaceConfigFileAtomically(filePath, yamlContent, {
+      mode: currentState.mode,
+      expectedDiskRevision: currentState.revision
+    });
+    return { filePath, ...result };
   });
-  return { filePath, ...result };
 }
 
 async function writeJsonAtomically(filePath, value) {

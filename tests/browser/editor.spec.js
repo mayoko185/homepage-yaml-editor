@@ -2,6 +2,11 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const jsyaml = require('js-yaml');
 const { test, expect } = require('@playwright/test');
+const {
+  accountBrowserErrors,
+  registerExpectedError,
+  watchConsoleErrors
+} = require('./browser-error-accounting');
 
 const configDir = process.env.HOMEPAGE_BROWSER_TEST_DIR;
 const servicesPath = path.join(configDir, 'services.yaml');
@@ -9,16 +14,10 @@ const settingsPath = path.join(configDir, 'settings.yaml');
 const bookmarksPath = path.join(configDir, 'bookmarks.yaml');
 const widgetsPath = path.join(configDir, 'widgets.yaml');
 const baseServices = '- Main:\n    - Alpha:\n        href: https://example.test\n        description: First service\n';
+const saveConflictMessage = 'Failed to load resource: the server responded with a status of 409 (Conflict)';
+const saveConflictUrl = 'http://127.0.0.1:4173/api/directory/file/save';
 const consoleErrorsByPage = new WeakMap();
-
-function watchConsoleErrors(page) {
-  const errors = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error' && !/status of 409 \(Conflict\)/.test(message.text())) errors.push(message.text());
-  });
-  page.on('pageerror', (error) => errors.push(error.message));
-  return errors;
-}
+const expectedErrorsByPage = new WeakMap();
 
 async function setEditorValue(page, value) {
   await page.locator('.CodeMirror').evaluate((element, nextValue) => {
@@ -40,13 +39,50 @@ async function getEditorPosition(page) {
 
 test.beforeEach(async ({ page }) => {
   consoleErrorsByPage.set(page, watchConsoleErrors(page));
+  expectedErrorsByPage.set(page, []);
   await fs.writeFile(servicesPath, baseServices, 'utf8');
   await page.goto('/');
   await expect(page.locator('#directory-info')).toContainText('Autoloaded');
 });
 
 test.afterEach(async ({ page }) => {
-  expect(consoleErrorsByPage.get(page)).toEqual([]);
+  const { missingExpected, unexpected } = accountBrowserErrors(
+    consoleErrorsByPage.get(page),
+    expectedErrorsByPage.get(page)
+  );
+  expect(missingExpected, 'Every registered browser error must occur').toEqual([]);
+  expect(unexpected, 'Unexpected browser errors must fail normal teardown').toEqual([]);
+});
+
+test('browser error accounting preserves one expected save conflict and rejects a duplicate', () => {
+  const conflict = {
+    type: 'console',
+    text: saveConflictMessage,
+    url: saveConflictUrl
+  };
+  const duplicateConflict = { ...conflict };
+  const expectedErrors = [];
+
+  registerExpectedError(
+    expectedErrors,
+    (entry) => entry.type === 'console'
+      && entry.text === saveConflictMessage
+      && entry.url === saveConflictUrl,
+    'the expected configuration-file save conflict'
+  );
+
+  const result = accountBrowserErrors([conflict, duplicateConflict], expectedErrors);
+  expect(result.missingExpected).toEqual([]);
+  expect(result.unexpected).toEqual([duplicateConflict]);
+
+  expect(() => {
+    const { missingExpected, unexpected } = accountBrowserErrors(
+      [conflict, duplicateConflict],
+      expectedErrors
+    );
+    expect(missingExpected, 'Every registered browser error must occur').toEqual([]);
+    expect(unexpected, 'Unexpected browser errors must fail normal teardown').toEqual([]);
+  }).toThrow();
 });
 
 test('shows the persistent no-login warning without console errors', async ({ page }) => {
@@ -73,6 +109,13 @@ test('rejects stale saves while preserving disk and editor content', async ({ pa
   const externalContent = '- Main:\n    - External edit: {}\n';
   await setEditorValue(page, browserContent);
   await fs.writeFile(servicesPath, externalContent, 'utf8');
+  registerExpectedError(
+    expectedErrorsByPage.get(page),
+    (entry) => entry.type === 'console'
+      && entry.text === saveConflictMessage
+      && entry.url === saveConflictUrl,
+    'the expected stale configuration-file save conflict'
+  );
   await page.locator('#save-config-button').click();
 
   await expect(page.locator('#save-status')).toContainText('changed on disk');
